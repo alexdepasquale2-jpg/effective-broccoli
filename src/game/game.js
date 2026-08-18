@@ -1,3 +1,11 @@
+import {
+  createFourDAngles,
+  hypersphereSliceRadius,
+  projectCell16,
+  projectTesseract,
+  sliceWFromAngles,
+  stepFourDAngles,
+} from "./hypercube.js";
 import { AudioBus } from "./audio.js";
 import { loadBestScore, saveBestScore } from "./storage.js";
 import {
@@ -39,7 +47,8 @@ export class Game {
     this.orbTimer = 0;
     this.shardTimer = 0;
     this.deathTimer = 0;
-    this.player = { x: 0, y: 0, r: 22 };
+    this.player = { x: 0, y: 0, r: 22, angles: createFourDAngles() };
+    this.fourD = { tesseract: null, cell16: null, slice: 1 };
     this.pointer = { x: 0, y: 0, active: false };
     this.orbs = [];
     this.shards = [];
@@ -155,6 +164,7 @@ export class Game {
   resetField() {
     this.player.x = this.width * 0.5;
     this.player.y = this.height * 0.68;
+    this.player.angles = createFourDAngles();
     this.pointer.x = this.player.x;
     this.pointer.y = this.player.y;
     this.orbs = [];
@@ -198,6 +208,10 @@ export class Game {
   }
 
   update(dt) {
+    const speed = this.state === STATES.playing ? 1 + this.combo * 0.08 : 0.7;
+    stepFourDAngles(this.player.angles, dt, speed);
+    this.projectPlayer();
+
     if (this.state === STATES.playing) {
       this.elapsed += dt;
       this.updatePlayer(dt);
@@ -222,29 +236,41 @@ export class Game {
   updatePlayer(dt) {
     this.player.x = damp(this.player.x, this.pointer.x, 14, dt);
     this.player.y = damp(this.player.y, this.pointer.y, 14, dt);
-    const pad = this.player.r + 8;
+    const pad = this.player.r + 10;
     this.player.x = clamp(this.player.x, pad, this.width - pad);
     this.player.y = clamp(this.player.y, pad + 48, this.height - pad - 24);
 
     this.trail.push({
       x: this.player.x,
       y: this.player.y,
-      life: 0.35,
+      r: this.player.r,
+      life: 0.38,
     });
-    if (this.trail.length > 18) this.trail.shift();
+    if (this.trail.length > 16) this.trail.shift();
 
-    if (Math.random() < dt * 28) {
+    if (this.fourD.tesseract && Math.random() < dt * 18) {
+      const vertex = this.fourD.tesseract.vertices[Math.floor(Math.random() * 16)];
       this.particles.push({
-        x: this.player.x + rand(-8, 8),
-        y: this.player.y + rand(6, 16),
-        vx: rand(-20, 20),
-        vy: rand(20, 70),
-        life: rand(0.25, 0.5),
-        max: 0.5,
-        size: rand(1.5, 3.5),
-        color: "rgba(120, 230, 255, 0.8)",
+        x: this.player.x + vertex.x,
+        y: this.player.y + vertex.y,
+        vx: vertex.x * 12 + rand(-18, 18),
+        vy: vertex.y * 12 + rand(8, 40),
+        life: rand(0.22, 0.45),
+        max: 0.45,
+        size: rand(1.2, 2.8),
+        color: vertex.w > 0 ? "rgba(190, 245, 255, 0.85)" : "rgba(168, 120, 255, 0.8)",
       });
     }
+  }
+
+  projectPlayer() {
+    const w = sliceWFromAngles(this.player.angles);
+    const slice = hypersphereSliceRadius(w, 1);
+    this.player.r = 20 + slice * 7;
+    const scale = 15 + slice * 4;
+    this.fourD.slice = slice;
+    this.fourD.tesseract = projectTesseract(this.player.angles, scale);
+    this.fourD.cell16 = projectCell16(this.player.angles, scale * 1.15);
   }
 
   updateSpawns(dt) {
@@ -357,8 +383,22 @@ export class Game {
     this.shake = 1.2;
     this.flash = 0.55;
     this.audio.hit();
-    this.burst(this.player.x, this.player.y, "#5ce1ff", 28);
-    this.burst(this.player.x, this.player.y, "#ff5d7a", 16);
+    this.burst(this.player.x, this.player.y, "#5ce1ff", 18);
+    this.burst(this.player.x, this.player.y, "#a878ff", 14);
+    if (this.fourD.tesseract) {
+      for (const vertex of this.fourD.tesseract.vertices) {
+        this.particles.push({
+          x: this.player.x + vertex.x,
+          y: this.player.y + vertex.y,
+          vx: vertex.x * 18 + rand(-40, 40),
+          vy: vertex.y * 18 + rand(-40, 40),
+          life: rand(0.4, 0.8),
+          max: 0.8,
+          size: rand(1.8, 4),
+          color: vertex.w >= 0 ? "#e8ffff" : "#b08cff",
+        });
+      }
+    }
     this.syncHud();
   }
 
@@ -539,31 +579,78 @@ export class Game {
   drawTrail() {
     const { ctx } = this;
     for (const t of this.trail) {
-      const a = t.life / 0.35;
-      ctx.fillStyle = `rgba(92, 225, 255, ${a * 0.25})`;
+      const a = t.life / 0.38;
+      ctx.fillStyle = `rgba(92, 225, 255, ${a * 0.12})`;
       ctx.beginPath();
-      ctx.arc(t.x, t.y, this.player.r * (0.4 + a * 0.4), 0, Math.PI * 2);
+      ctx.arc(t.x, t.y, (t.r || this.player.r) * (0.55 + a * 0.5), 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
   drawPlayer() {
-    const { ctx, player } = this;
+    const { ctx, player, fourD } = this;
+    if (!fourD.tesseract || !fourD.cell16) this.projectPlayer();
+    const { tesseract, cell16, slice } = fourD;
     ctx.save();
-    ctx.shadowColor = "#5ce1ff";
-    ctx.shadowBlur = 24;
-    const glow = ctx.createRadialGradient(player.x, player.y, 4, player.x, player.y, player.r * 1.6);
-    glow.addColorStop(0, "#ffffff");
-    glow.addColorStop(0.35, "#8af0ff");
-    glow.addColorStop(1, "rgba(92, 225, 255, 0.05)");
-    ctx.fillStyle = glow;
+    ctx.translate(player.x, player.y);
+
+    const core = ctx.createRadialGradient(0, 0, 2, 0, 0, player.r * 1.35);
+    core.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+    core.addColorStop(0.22, "rgba(170, 240, 255, 0.55)");
+    core.addColorStop(0.55, "rgba(120, 90, 255, 0.16)");
+    core.addColorStop(1, "rgba(92, 225, 255, 0)");
+    ctx.fillStyle = core;
     ctx.beginPath();
-    ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+    ctx.arc(0, 0, player.r * 1.15, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
+
+    ctx.strokeStyle = `rgba(186, 160, 255, ${0.18 + slice * 0.2})`;
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.arc(player.x - 6, player.y - 7, 5, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.arc(0, 0, 8 + slice * 16, 0, Math.PI * 2);
+    ctx.stroke();
+
+    for (const face of tesseract.faces) {
+      const ana = (face.w + 1.6) / 3.2;
+      ctx.fillStyle = `rgba(${Math.round(90 + ana * 80)}, ${Math.round(140 + ana * 90)}, 255, 0.07)`;
+      ctx.beginPath();
+      ctx.moveTo(face.points[0].x, face.points[0].y);
+      for (let i = 1; i < face.points.length; i += 1) {
+        ctx.lineTo(face.points[i].x, face.points[i].y);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.lineCap = "round";
+    for (const edge of tesseract.edges) {
+      const ana = (edge.a.w + edge.b.w + 3.2) / 6.4;
+      ctx.strokeStyle = `rgba(${Math.round(120 + ana * 110)}, ${Math.round(210 + ana * 30)}, 255, ${0.28 + ana * 0.45})`;
+      ctx.lineWidth = 1.1 + ana * 1.6;
+      ctx.beginPath();
+      ctx.moveTo(edge.a.x, edge.a.y);
+      ctx.lineTo(edge.b.x, edge.b.y);
+      ctx.stroke();
+    }
+
+    for (const edge of cell16.edges) {
+      const ana = (edge.a.w + edge.b.w + 3.2) / 6.4;
+      ctx.strokeStyle = `rgba(255, 230, ${Math.round(160 + ana * 70)}, ${0.22 + ana * 0.4})`;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(edge.a.x, edge.a.y);
+      ctx.lineTo(edge.b.x, edge.b.y);
+      ctx.stroke();
+    }
+
+    for (const vertex of tesseract.vertices) {
+      const ana = (vertex.w + 1.6) / 3.2;
+      ctx.fillStyle = vertex.w >= 0 ? `rgba(255, 255, 255, ${0.45 + ana * 0.5})` : `rgba(170, 110, 255, ${0.4 + (1 - ana) * 0.4})`;
+      ctx.beginPath();
+      ctx.arc(vertex.x, vertex.y, 1.6 + ana * 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.restore();
   }
 

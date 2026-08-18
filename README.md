@@ -1,6 +1,6 @@
 # Aether
 
-A 2D mobile arcade game we can iterate on. Drag a glowing spark, collect light orbs, and dodge dark shards.
+A 2D mobile arcade game we can iterate on. You are a 4D entity (a tesseract and its 16-cell dual) projected into this plane. Drag to move, collect light orbs, and dodge dark shards.
 
 The genre and name are placeholders — this is a playable foundation with touch-first controls, scoring, and a full game loop.
 
@@ -33,7 +33,7 @@ Add it to the home screen from a mobile browser for a fullscreen, app-like feel.
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Start the Vite dev server |
-| `npm test` | Run unit tests for scoring, collision, and difficulty |
+| `npm test` | Run unit tests for 4D math, scoring, collision, and difficulty |
 | `npm run build` | Production build |
 | `npm run preview` | Serve the production build |
 
@@ -41,6 +41,7 @@ Add it to the home screen from a mobile browser for a fullscreen, app-like feel.
 
 - `src/main.js` — boots the canvas and UI
 - `src/game/game.js` — loop, spawning, drawing, input
+- `src/game/hypercube.js` — 4D rotations, tesseract / 16-cell, projection (tested)
 - `src/game/utils.js` — collision, scoring, difficulty (tested)
 - `src/game/audio.js` — tiny synthesized sound effects
 - `src/game/storage.js` — local high score
