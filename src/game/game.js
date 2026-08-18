@@ -1,4 +1,11 @@
 import {
+  applyBoon,
+  createMods,
+  createRun,
+  pickDraft,
+  relicChips,
+} from "./boons.js";
+import {
   createFourDAngles,
   hypersphereSliceRadius,
   projectCell16,
@@ -6,6 +13,7 @@ import {
   sliceWFromAngles,
   stepFourDAngles,
 } from "./hypercube.js";
+import { orbMultiplier, pickSlice, shardCollides, sliceName } from "./slice.js";
 import { AudioBus } from "./audio.js";
 import { loadBestScore, saveBestScore } from "./storage.js";
 import {
@@ -22,8 +30,15 @@ import {
 const STATES = {
   menu: "menu",
   playing: "playing",
+  draft: "draft",
   dying: "dying",
   over: "over",
+};
+
+const SLICE_COLORS = {
+  "-1": { fill: "#3a1048", stroke: "#e56bff", glow: "#c84dff", orb: "#e9b4ff" },
+  0: { fill: "#3a1020", stroke: "#ff6d86", glow: "#ff5d7a", orb: "#ffd56a" },
+  1: { fill: "#10283a", stroke: "#5ce1ff", glow: "#5ce1ff", orb: "#9ef2ff" },
 };
 
 export class Game {
@@ -49,7 +64,9 @@ export class Game {
     this.deathTimer = 0;
     this.player = { x: 0, y: 0, r: 22, angles: createFourDAngles() };
     this.fourD = { tesseract: null, cell16: null, slice: 1 };
-    this.pointer = { x: 0, y: 0, active: false };
+    this.run = createRun();
+    this.mods = createMods({});
+    this.pointer = { x: 0, y: 0, active: false, startX: 0, startY: 0, startAt: 0 };
     this.orbs = [];
     this.shards = [];
     this.particles = [];
@@ -70,6 +87,10 @@ export class Game {
     this.running = true;
     this.lastTime = performance.now();
     requestAnimationFrame(this.boundFrame);
+  }
+
+  uiTarget(event) {
+    return event.target?.closest?.("#play, #fold, #draft, .boon-card, .overlay");
   }
 
   resize() {
@@ -107,8 +128,12 @@ export class Game {
 
     const onDown = (event) => {
       this.audio.unlock();
+      if (this.uiTarget(event)) return;
       this.pointer.active = true;
       toLocal(event);
+      this.pointer.startX = this.pointer.x;
+      this.pointer.startY = this.pointer.y;
+      this.pointer.startAt = performance.now();
       if (this.state === STATES.playing) {
         try {
           event.target?.setPointerCapture?.(event.pointerId);
@@ -119,11 +144,17 @@ export class Game {
     };
 
     const onMove = (event) => {
+      if (this.uiTarget(event)) return;
       if (!this.pointer.active && this.state !== STATES.playing) return;
       toLocal(event);
     };
 
-    const onUp = () => {
+    const onUp = (event) => {
+      if (this.pointer.active && this.state === STATES.playing && !this.uiTarget(event)) {
+        const moved = distance(this.pointer.x, this.pointer.y, this.pointer.startX, this.pointer.startY);
+        const elapsed = performance.now() - this.pointer.startAt;
+        if (moved < 18 && elapsed < 280) this.tryFold();
+      }
       this.pointer.active = false;
     };
 
@@ -134,6 +165,7 @@ export class Game {
     window.addEventListener(
       "touchmove",
       (event) => {
+        if (event.target.closest("button, #draft, .overlay")) return;
         event.preventDefault();
       },
       { passive: false },
@@ -142,6 +174,10 @@ export class Game {
     window.visualViewport?.addEventListener("resize", () => this.resize());
     document.addEventListener("visibilitychange", () => {
       this.lastTime = performance.now();
+    });
+    this.ui.fold.addEventListener("click", (event) => {
+      event.preventDefault();
+      this.tryFold();
     });
   }
 
@@ -158,6 +194,8 @@ export class Game {
     this.shardTimer = 1.1;
     this.ui.overlay.hidden = true;
     this.ui.hud.hidden = false;
+    this.ui.fold.hidden = false;
+    this.ui.draft.hidden = true;
     this.syncHud();
   }
 
@@ -174,6 +212,8 @@ export class Game {
     this.shake = 0;
     this.flash = 0;
     this.deathTimer = 0;
+    this.run = createRun();
+    this.mods = createMods({});
   }
 
   gameOver() {
@@ -182,21 +222,42 @@ export class Game {
     this.ui.title.textContent = "Aether";
     this.ui.subtitle.hidden = true;
     this.ui.result.hidden = false;
-    this.ui.result.textContent = `Score ${this.score}  ·  Best ${this.best}`;
+    const chips = relicChips(this.run.stacks)
+      .map((chip) => `${chip.name}${chip.level > 1 ? ` x${chip.level}` : ""}`)
+      .join(" · ");
+    this.ui.result.textContent = chips
+      ? `Score ${this.score}  ·  Best ${this.best}\n${chips}`
+      : `Score ${this.score}  ·  Best ${this.best}`;
     this.ui.play.textContent = "Play again";
     this.ui.overlay.hidden = false;
+    this.ui.fold.hidden = true;
+    this.ui.draft.hidden = true;
     this.syncHud();
   }
 
   syncHud() {
     this.ui.score.textContent = String(this.score);
     this.ui.best.textContent = String(this.best);
-    if (this.combo >= 2 && this.state === STATES.playing) {
+    this.ui.sliceChip.textContent = sliceName(this.run.polarity);
+    this.ui.sliceChip.classList.toggle("kata", this.run.polarity < 0);
+    this.ui.sliceChip.classList.toggle("folding", this.run.foldTimer > 0);
+    if (this.combo >= 2 && (this.state === STATES.playing || this.state === STATES.draft)) {
       this.ui.combo.hidden = false;
       this.ui.combo.textContent = `x${this.combo}`;
     } else {
       this.ui.combo.hidden = true;
     }
+
+    const folding = this.run.foldTimer > 0;
+    const ready = this.run.foldCooldown <= 0 && this.state === STATES.playing;
+    this.ui.foldLabel.textContent = folding ? "FOLDING" : this.run.foldCooldown > 0 ? this.run.foldCooldown.toFixed(1) : "FOLD";
+    this.ui.fold.classList.toggle("ready", ready);
+    this.ui.fold.classList.toggle("busy", !ready);
+
+    const chips = relicChips(this.run.stacks)
+      .map((chip) => `<span class="relic${chip.cursed ? " cursed" : ""}">${chip.tag}${chip.level > 1 ? ` ${chip.level}` : ""}</span>`)
+      .join("");
+    this.ui.relics.innerHTML = chips;
   }
 
   frame(time) {
@@ -208,22 +269,26 @@ export class Game {
   }
 
   update(dt) {
-    const speed = this.state === STATES.playing ? 1 + this.combo * 0.08 : 0.7;
+    const folding = this.run.foldTimer > 0;
+    const speed =
+      this.state === STATES.playing || this.state === STATES.draft
+        ? (1 + this.combo * 0.08) * (folding ? 2.4 : 1)
+        : 0.7;
     stepFourDAngles(this.player.angles, dt, speed);
     this.projectPlayer();
 
     if (this.state === STATES.playing) {
       this.elapsed += dt;
+      this.updateFold(dt);
       this.updatePlayer(dt);
+      this.updateEchoes(dt);
       this.updateSpawns(dt);
       this.updateOrbs(dt);
       this.updateShards(dt);
       this.updateCombo(dt);
     } else if (this.state === STATES.dying) {
       this.deathTimer -= dt;
-      if (this.deathTimer <= 0) {
-        this.gameOver();
-      }
+      if (this.deathTimer <= 0) this.gameOver();
     }
 
     this.updateParticles(dt);
@@ -233,17 +298,99 @@ export class Game {
     this.driftStars(dt);
   }
 
+  updateFold(dt) {
+    if (this.run.foldTimer > 0) this.run.foldTimer = Math.max(0, this.run.foldTimer - dt);
+    const recharge = this.mods.frenzy && this.combo >= 4 ? dt * 1.85 : dt;
+    if (this.run.foldCooldown > 0) this.run.foldCooldown = Math.max(0, this.run.foldCooldown - recharge);
+    const foldingNow = this.run.foldTimer > 0;
+    const ready = this.run.foldCooldown <= 0;
+    this.ui.foldLabel.textContent = foldingNow ? "FOLDING" : this.run.foldCooldown > 0 ? this.run.foldCooldown.toFixed(1) : "FOLD";
+    this.ui.fold.classList.toggle("ready", ready);
+    this.ui.fold.classList.toggle("busy", !ready);
+    this.ui.sliceChip.classList.toggle("folding", foldingNow);
+  }
+
+  tryFold(force = false) {
+    if (this.state !== STATES.playing) return false;
+    if (!force && this.run.foldCooldown > 0) return false;
+    this.run.polarity *= -1;
+    this.run.foldTimer = this.mods.foldDuration;
+    this.run.foldCooldown = this.mods.foldCooldown;
+    this.flash = 0.28;
+    this.shake = Math.max(this.shake, 0.35);
+    this.audio.fold();
+    if (this.mods.echo > 0) {
+      this.run.echoes.push({
+        x: this.player.x,
+        y: this.player.y,
+        r: this.player.r,
+        polarity: -this.run.polarity,
+        life: this.mods.echoLife,
+      });
+    }
+    if (this.mods.burst > 0) this.unfoldBurst();
+    this.syncHud();
+    return true;
+  }
+
+  unfoldBurst() {
+    const radius = this.mods.burstRadius;
+    for (let i = this.shards.length - 1; i >= 0; i -= 1) {
+      const shard = this.shards[i];
+      if (shard.slice === this.run.polarity || shard.slice === 0) continue;
+      if (distance(shard.x, shard.y, this.player.x, this.player.y) > radius) continue;
+      this.orbs.push({
+        x: shard.x,
+        y: shard.y,
+        r: 11,
+        phase: 0,
+        life: this.mods.orbLife,
+        slice: shard.slice,
+      });
+      this.burst(shard.x, shard.y, SLICE_COLORS[String(shard.slice)].glow, 10);
+      this.shards.splice(i, 1);
+    }
+  }
+
+  showDraft() {
+    this.state = STATES.draft;
+    this.pointer.active = false;
+    this.audio.draft();
+    const choices = pickDraft(this.run.stacks);
+    this.ui.boonRow.innerHTML = "";
+    for (const boon of choices) {
+      const level = (this.run.stacks[boon.id] || 0) + 1;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `boon-card${boon.cursed ? " cursed" : ""}`;
+      button.innerHTML = `<span class="tag">${boon.tag}</span><strong>${boon.name}</strong><span>${boon.text}</span><em>Lv ${level}</em>`;
+      button.addEventListener("click", () => this.takeBoon(boon.id));
+      this.ui.boonRow.appendChild(button);
+    }
+    this.ui.draft.hidden = false;
+  }
+
+  takeBoon(id) {
+    this.mods = applyBoon(this.run, id);
+    this.audio.boon();
+    this.ui.draft.hidden = true;
+    this.state = STATES.playing;
+    this.lastTime = performance.now();
+    this.syncHud();
+  }
+
   updatePlayer(dt) {
     this.player.x = damp(this.player.x, this.pointer.x, 14, dt);
     this.player.y = damp(this.player.y, this.pointer.y, 14, dt);
     const pad = this.player.r + 10;
     this.player.x = clamp(this.player.x, pad, this.width - pad);
-    this.player.y = clamp(this.player.y, pad + 48, this.height - pad - 24);
+    this.player.y = clamp(this.player.y, pad + 48, this.height - pad - 88);
 
     this.trail.push({
       x: this.player.x,
       y: this.player.y,
       r: this.player.r,
+      polarity: this.run.polarity,
       life: 0.38,
     });
     if (this.trail.length > 16) this.trail.shift();
@@ -258,7 +405,7 @@ export class Game {
         life: rand(0.22, 0.45),
         max: 0.45,
         size: rand(1.2, 2.8),
-        color: vertex.w > 0 ? "rgba(190, 245, 255, 0.85)" : "rgba(168, 120, 255, 0.8)",
+        color: this.run.polarity > 0 ? "rgba(190, 245, 255, 0.85)" : "rgba(168, 120, 255, 0.8)",
       });
     }
   }
@@ -266,15 +413,40 @@ export class Game {
   projectPlayer() {
     const w = sliceWFromAngles(this.player.angles);
     const slice = hypersphereSliceRadius(w, 1);
-    this.player.r = 20 + slice * 7;
-    const scale = 15 + slice * 4;
+    this.player.r = (20 + slice * 7) * this.mods.hitScale;
+    const scale = (15 + slice * 4) * this.mods.hitScale;
     this.fourD.slice = slice;
     this.fourD.tesseract = projectTesseract(this.player.angles, scale);
     this.fourD.cell16 = projectCell16(this.player.angles, scale * 1.15);
   }
 
+  collectors() {
+    const points = [
+      { x: this.player.x, y: this.player.y, r: this.player.r },
+      ...this.run.echoes.map((echo) => ({ x: echo.x, y: echo.y, r: echo.r })),
+    ];
+    if (this.mods.orbit && this.fourD.cell16) {
+      const count = Math.min(this.fourD.cell16.vertices.length, 2 + this.mods.orbit * 2);
+      for (let i = 0; i < count; i += 1) {
+        const vertex = this.fourD.cell16.vertices[i];
+        points.push({
+          x: this.player.x + vertex.x * 1.35,
+          y: this.player.y + vertex.y * 1.35,
+          r: 9 + this.mods.orbit * 3,
+        });
+      }
+    }
+    return points;
+  }
+
+  updateEchoes(dt) {
+    for (const echo of this.run.echoes) echo.life -= dt;
+    this.run.echoes = this.run.echoes.filter((echo) => echo.life > 0);
+  }
+
   updateSpawns(dt) {
     const rates = spawnIntervals(this.elapsed);
+    const shardInterval = rates.shard / (1 + this.mods.shardExtra * 0.28);
     this.orbTimer -= dt;
     this.shardTimer -= dt;
 
@@ -283,8 +455,9 @@ export class Game {
       this.orbTimer = rates.orb;
     }
     if (this.shardTimer <= 0) {
-      this.spawnShard(rates.shardSpeed);
-      this.shardTimer = rates.shard;
+      const extras = 1 + this.mods.shardExtra;
+      for (let i = 0; i < extras; i += 1) this.spawnShard(rates.shardSpeed * this.mods.shardSpeed);
+      this.shardTimer = shardInterval;
     }
   }
 
@@ -302,72 +475,98 @@ export class Game {
       y: pos.y,
       r,
       phase: rand(0, Math.PI * 2),
-      life: 7,
+      life: this.mods.orbLife,
+      slice: pickSlice(Math.random, 0.28),
     });
   }
 
   spawnShard(speed) {
     const r = rand(16, 32);
     const fromTop = Math.random() < 0.7;
-    let x = rand(r + 8, this.width - r - 8);
-    let y = fromTop ? -r - 10 : rand(-20, this.height * 0.2);
+    const x = rand(r + 8, this.width - r - 8);
+    const y = fromTop ? -r - 10 : rand(-20, this.height * 0.2);
     const pos = keepAwayFrom(x, y, this.player.x, this.player.y, 140);
-    const vx = rand(-40, 40);
-    const vy = speed + rand(-20, 40);
     this.shards.push({
       x: pos.x,
       y: pos.y,
       r,
-      vx,
-      vy,
+      vx: rand(-40, 40),
+      vy: speed + rand(-20, 40),
       rot: rand(0, Math.PI * 2),
       spin: rand(-2.4, 2.4),
       sides: 5 + Math.floor(Math.random() * 3),
+      slice: pickSlice(Math.random, this.mods.bulkChance),
     });
   }
 
   updateOrbs(dt) {
+    const magnets = this.collectors();
     for (let i = this.orbs.length - 1; i >= 0; i -= 1) {
       const orb = this.orbs[i];
       orb.life -= dt;
       orb.phase += dt * 3;
       orb.y += Math.sin(orb.phase) * 8 * dt;
 
-      const magnet = 150;
-      const d = distance(orb.x, orb.y, this.player.x, this.player.y);
-      if (d < magnet && d > 1) {
-        const pull = (1 - d / magnet) * 120 * dt;
-        orb.x += ((this.player.x - orb.x) / d) * pull;
-        orb.y += ((this.player.y - orb.y) / d) * pull;
+      let eaten = false;
+      for (const magnet of magnets) {
+        const d = distance(orb.x, orb.y, magnet.x, magnet.y);
+        if (d < this.mods.magnet && d > 1) {
+          const pull = (1 - d / this.mods.magnet) * 120 * dt;
+          orb.x += ((magnet.x - orb.x) / d) * pull;
+          orb.y += ((magnet.y - orb.y) / d) * pull;
+        }
+        if (circleHit(orb.x, orb.y, orb.r, magnet.x, magnet.y, magnet.r)) {
+          this.collectOrb(orb);
+          this.orbs.splice(i, 1);
+          eaten = true;
+          break;
+        }
       }
-
-      if (circleHit(orb.x, orb.y, orb.r, this.player.x, this.player.y, this.player.r)) {
-        this.collectOrb(orb);
-        this.orbs.splice(i, 1);
-        continue;
-      }
-      if (orb.life <= 0) this.orbs.splice(i, 1);
+      if (!eaten && orb.life <= 0) this.orbs.splice(i, 1);
     }
   }
 
   collectOrb(orb) {
     this.combo += 1;
-    this.comboTimer = 1.25;
-    this.score += orbPoints(this.combo);
+    this.comboTimer = this.mods.comboHold;
+    this.run.orbs += 1;
+    const mult =
+      orbMultiplier({
+        orbSlice: orb.slice,
+        polarity: this.run.polarity,
+        alignedStacks: this.mods.aligned,
+      }) * this.mods.scoreMult;
+    this.score += Math.round(orbPoints(this.combo) * mult);
     this.flash = Math.min(0.35, 0.12 + this.combo * 0.01);
     this.audio.collect(this.combo);
-    this.burst(orb.x, orb.y, "#ffd56a", 14);
+    this.burst(orb.x, orb.y, SLICE_COLORS[String(orb.slice)].orb, 14);
     this.syncHud();
+    if (this.state === STATES.playing && this.run.orbs >= this.run.nextDraft) {
+      this.showDraft();
+    }
   }
 
   updateShards(dt) {
+    const folding = this.run.foldTimer > 0;
+    const bulkPhased = folding && this.run.foldTimer > this.mods.foldDuration - this.mods.bulkPhase;
+    const slow = folding ? 0.55 : 1;
     for (let i = this.shards.length - 1; i >= 0; i -= 1) {
       const shard = this.shards[i];
-      shard.x += shard.vx * dt;
-      shard.y += shard.vy * dt;
+      const ghost = !shardCollides({
+        shardSlice: shard.slice,
+        polarity: this.run.polarity,
+        folding,
+        bulkPhased,
+      });
+      shard.x += shard.vx * dt * slow;
+      shard.y += shard.vy * dt * slow;
       shard.rot += shard.spin * dt;
+      shard.ghost = ghost;
 
-      if (circleHit(shard.x, shard.y, shard.r * 0.82, this.player.x, this.player.y, this.player.r * 0.82)) {
+      if (
+        !ghost &&
+        circleHit(shard.x, shard.y, shard.r * 0.82, this.player.x, this.player.y, this.player.r * 0.82)
+      ) {
         this.hitPlayer();
         return;
       }
@@ -378,6 +577,14 @@ export class Game {
   }
 
   hitPlayer() {
+    if (this.run.glassCharges > 0) {
+      this.run.glassCharges -= 1;
+      this.tryFold(true);
+      this.flash = 0.6;
+      this.shake = 1;
+      this.burst(this.player.x, this.player.y, "#ffffff", 20);
+      return;
+    }
     this.state = STATES.dying;
     this.deathTimer = 0.85;
     this.shake = 1.2;
@@ -406,7 +613,12 @@ export class Game {
     if (this.combo <= 0) return;
     this.comboTimer -= dt;
     if (this.comboTimer <= 0) {
-      this.combo = 0;
+      if (this.mods.comboHold > 2) {
+        this.combo = Math.min(this.combo, 2);
+        this.comboTimer = this.mods.comboHold;
+      } else {
+        this.combo = 0;
+      }
       this.syncHud();
     }
   }
@@ -429,8 +641,9 @@ export class Game {
   }
 
   driftStars(dt) {
+    const rush = 18 * (1 + this.mods.frenzy * 0.35);
     for (const star of this.stars) {
-      star.y += star.z * 18 * dt;
+      star.y += star.z * rush * dt;
       star.tw += dt * star.z;
       if (star.y > this.height + 4) {
         star.y = -4;
@@ -470,6 +683,7 @@ export class Game {
     this.drawOrbs();
     this.drawShards();
     this.drawTrail();
+    this.drawEchoes();
     if (this.state !== STATES.dying && this.state !== STATES.over) {
       this.drawPlayer();
     }
@@ -478,7 +692,8 @@ export class Game {
     ctx.restore();
 
     if (this.flash > 0) {
-      ctx.fillStyle = `rgba(255, 230, 180, ${this.flash * 0.35})`;
+      const tint = this.run.polarity > 0 ? `rgba(160, 230, 255, ${this.flash * 0.28})` : `rgba(210, 140, 255, ${this.flash * 0.28})`;
+      ctx.fillStyle = tint;
       ctx.fillRect(0, 0, width, height);
     }
   }
@@ -486,7 +701,7 @@ export class Game {
   drawBackdrop() {
     const { ctx, width, height } = this;
     const sky = ctx.createLinearGradient(0, 0, 0, height);
-    sky.addColorStop(0, "#14082c");
+    sky.addColorStop(0, this.run.polarity > 0 ? "#10203c" : "#1a082c");
     sky.addColorStop(0.45, "#0b0618");
     sky.addColorStop(1, "#05030c");
     ctx.fillStyle = sky;
@@ -500,22 +715,9 @@ export class Game {
       height * 0.18,
       width * 0.7,
     );
-    nebula.addColorStop(0, "rgba(118, 62, 196, 0.35)");
+    nebula.addColorStop(0, this.run.polarity > 0 ? "rgba(32, 120, 196, 0.32)" : "rgba(118, 62, 196, 0.35)");
     nebula.addColorStop(1, "rgba(118, 62, 196, 0)");
     ctx.fillStyle = nebula;
-    ctx.fillRect(0, 0, width, height);
-
-    const nebula2 = ctx.createRadialGradient(
-      width * 0.2,
-      height * 0.75,
-      10,
-      width * 0.2,
-      height * 0.75,
-      width * 0.55,
-    );
-    nebula2.addColorStop(0, "rgba(32, 120, 180, 0.22)");
-    nebula2.addColorStop(1, "rgba(32, 120, 180, 0)");
-    ctx.fillStyle = nebula2;
     ctx.fillRect(0, 0, width, height);
   }
 
@@ -534,10 +736,11 @@ export class Game {
     const { ctx } = this;
     for (const orb of this.orbs) {
       const pulse = 1 + Math.sin(orb.phase) * 0.08;
+      const color = SLICE_COLORS[String(orb.slice)];
       ctx.save();
-      ctx.shadowColor = "#ffd56a";
-      ctx.shadowBlur = 18;
-      ctx.fillStyle = "#ffe7a3";
+      ctx.shadowColor = color.glow;
+      ctx.shadowBlur = 16;
+      ctx.fillStyle = color.orb;
       ctx.beginPath();
       ctx.arc(orb.x, orb.y, orb.r * pulse, 0, Math.PI * 2);
       ctx.fill();
@@ -552,11 +755,13 @@ export class Game {
   drawShards() {
     const { ctx } = this;
     for (const shard of this.shards) {
+      const color = SLICE_COLORS[String(shard.slice)];
       ctx.save();
       ctx.translate(shard.x, shard.y);
       ctx.rotate(shard.rot);
-      ctx.shadowColor = "#ff5d7a";
-      ctx.shadowBlur = 16;
+      ctx.globalAlpha = shard.ghost ? 0.28 : 1;
+      ctx.shadowColor = color.glow;
+      ctx.shadowBlur = shard.ghost ? 6 : 16;
       ctx.beginPath();
       for (let i = 0; i < shard.sides; i += 1) {
         const angle = (i / shard.sides) * Math.PI * 2;
@@ -567,10 +772,11 @@ export class Game {
         else ctx.lineTo(x, y);
       }
       ctx.closePath();
-      ctx.fillStyle = "#3a1020";
+      ctx.fillStyle = color.fill;
       ctx.fill();
-      ctx.strokeStyle = "#ff6d86";
+      ctx.strokeStyle = color.stroke;
       ctx.lineWidth = 2;
+      ctx.setLineDash(shard.slice === 0 ? [] : shard.ghost ? [5, 4] : []);
       ctx.stroke();
       ctx.restore();
     }
@@ -580,10 +786,22 @@ export class Game {
     const { ctx } = this;
     for (const t of this.trail) {
       const a = t.life / 0.38;
-      ctx.fillStyle = `rgba(92, 225, 255, ${a * 0.12})`;
+      ctx.fillStyle = t.polarity > 0 ? `rgba(92, 225, 255, ${a * 0.12})` : `rgba(180, 110, 255, ${a * 0.12})`;
       ctx.beginPath();
       ctx.arc(t.x, t.y, (t.r || this.player.r) * (0.55 + a * 0.5), 0, Math.PI * 2);
       ctx.fill();
+    }
+  }
+
+  drawEchoes() {
+    const { ctx } = this;
+    for (const echo of this.run.echoes) {
+      const a = clamp(echo.life / this.mods.echoLife, 0, 1);
+      ctx.strokeStyle = echo.polarity > 0 ? `rgba(92, 225, 255, ${a * 0.7})` : `rgba(200, 120, 255, ${a * 0.7})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(echo.x, echo.y, echo.r, 0, Math.PI * 2);
+      ctx.stroke();
     }
   }
 
@@ -593,10 +811,13 @@ export class Game {
     const { tesseract, cell16, slice } = fourD;
     ctx.save();
     ctx.translate(player.x, player.y);
+    if (this.run.foldTimer > 0) {
+      ctx.translate(rand(-3, 3), rand(-3, 3));
+    }
 
     const core = ctx.createRadialGradient(0, 0, 2, 0, 0, player.r * 1.35);
     core.addColorStop(0, "rgba(255, 255, 255, 0.95)");
-    core.addColorStop(0.22, "rgba(170, 240, 255, 0.55)");
+    core.addColorStop(0.22, this.run.polarity > 0 ? "rgba(170, 240, 255, 0.55)" : "rgba(210, 160, 255, 0.55)");
     core.addColorStop(0.55, "rgba(120, 90, 255, 0.16)");
     core.addColorStop(1, "rgba(92, 225, 255, 0)");
     ctx.fillStyle = core;
@@ -604,8 +825,8 @@ export class Game {
     ctx.arc(0, 0, player.r * 1.15, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = `rgba(186, 160, 255, ${0.18 + slice * 0.2})`;
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = this.run.polarity > 0 ? `rgba(92, 225, 255, ${0.35 + slice * 0.2})` : `rgba(210, 130, 255, ${0.35 + slice * 0.2})`;
+    ctx.lineWidth = this.run.foldTimer > 0 ? 2.4 : 1.2;
     ctx.beginPath();
     ctx.arc(0, 0, 8 + slice * 16, 0, Math.PI * 2);
     ctx.stroke();

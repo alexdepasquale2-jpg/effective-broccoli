@@ -12,7 +12,7 @@
     <meta name="theme-color" content="#0b0618" />
     <meta
       name="description"
-      content="Aether — you are a 4D entity projected into a 2D plane. Collect orbs, dodge shards."
+      content="Aether — a 4D arcade roguelite. Fold between slices, stack boons, dodge thick space."
     />
     <title>Aether</title>
     <link rel="manifest" href="./manifest.webmanifest" />
@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap"
       rel="stylesheet"
     />
-    <script type="module" crossorigin src="./assets/index-Bv_JlA3U.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-COeYGz64.css">
+    <script type="module" crossorigin src="./assets/index-B8wDF6Wd.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DrwJW-3J.css">
   </head>
   <body>
     <div id="app">
@@ -40,17 +40,31 @@
           <span class="hud-label">Best</span>
           <span id="best">0</span>
         </div>
+        <div id="slice-chip">ANA</div>
         <div id="combo" hidden>x2</div>
+        <div id="relics"></div>
+      </div>
+
+      <button id="fold" type="button" hidden>
+        <span id="fold-label">FOLD</span>
+        <span class="fold-hint">tap</span>
+      </button>
+
+      <div id="draft" class="draft" hidden>
+        <p class="eyebrow">A new axis opens</p>
+        <h2>Take a boon</h2>
+        <p class="hint">Stacks if you already have it. Curses pay in chaos.</p>
+        <div id="boon-row"></div>
       </div>
 
       <div id="overlay" class="overlay">
         <div class="panel">
-          <p class="eyebrow">4D entity · 2D plane</p>
+          <p class="eyebrow">4D roguelite · 2D plane</p>
           <h1 id="title">Aether</h1>
-          <p id="subtitle" class="subtitle">A tesseract and its dual, rotating through ana and kata.</p>
+          <p id="subtitle" class="subtitle">Fold through slices. Stack cursed boons. Do not get thick.</p>
           <p id="result" class="result" hidden></p>
           <button id="play" type="button">Play</button>
-          <p class="hint">Drag to move · Collect orbs · Avoid shards</p>
+          <p class="hint">Drag to move · Tap FOLD to swap ANA/KATA · Pick a boon every few orbs</p>
         </div>
       </div>
     </div>

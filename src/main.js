@@ -12,6 +12,12 @@ const ui = {
   subtitle: document.querySelector("#subtitle"),
   result: document.querySelector("#result"),
   play: document.querySelector("#play"),
+  fold: document.querySelector("#fold"),
+  foldLabel: document.querySelector("#fold-label"),
+  draft: document.querySelector("#draft"),
+  boonRow: document.querySelector("#boon-row"),
+  relics: document.querySelector("#relics"),
+  sliceChip: document.querySelector("#slice-chip"),
 };
 
 const game = new Game(canvas, ui);
@@ -22,8 +28,15 @@ ui.play.addEventListener("click", () => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (event.code === "Space") {
+    event.preventDefault();
+    if (game.state === "playing") {
+      game.tryFold();
+      return;
+    }
+  }
   if (event.code === "Space" || event.code === "Enter") {
-    if (game.state !== "playing" && game.state !== "dying") {
+    if (game.state !== "playing" && game.state !== "dying" && game.state !== "draft") {
       event.preventDefault();
       game.play();
     }

@@ -55,4 +55,22 @@ export class AudioBus {
     tone(this.ctx, { frequency: 180, duration: 0.28, type: "sawtooth", gain: 0.05, slide: -120 });
     tone(this.ctx, { frequency: 90, duration: 0.4, type: "triangle", gain: 0.07 });
   }
+
+  fold() {
+    if (this.muted || !this.ctx) return;
+    tone(this.ctx, { frequency: 140, duration: 0.22, type: "sine", gain: 0.05, slide: 420 });
+    tone(this.ctx, { frequency: 880, duration: 0.12, type: "triangle", gain: 0.03, delay: 0.04 });
+  }
+
+  draft() {
+    if (this.muted || !this.ctx) return;
+    tone(this.ctx, { frequency: 330, duration: 0.16, type: "square", gain: 0.03 });
+    tone(this.ctx, { frequency: 495, duration: 0.2, type: "sine", gain: 0.04, delay: 0.05 });
+  }
+
+  boon() {
+    if (this.muted || !this.ctx) return;
+    tone(this.ctx, { frequency: 523, duration: 0.12, type: "triangle", gain: 0.05 });
+    tone(this.ctx, { frequency: 784, duration: 0.18, type: "sine", gain: 0.04, delay: 0.06 });
+  }
 }

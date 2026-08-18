@@ -1,6 +1,6 @@
 # Aether
 
-A 2D mobile arcade game we can iterate on. You are a 4D entity (a tesseract and its 16-cell dual) projected into this plane. Drag to move, collect light orbs, and dodge dark shards.
+A 2D mobile arcade roguelite. You are a 4D entity projected into this plane. Drag to move, **Fold** to swap ANA/KATA slices, collect orbs, and stack boons until the run goes feral.
 
 The genre and name are placeholders — this is a playable foundation with touch-first controls, scoring, and a full game loop.
 
@@ -22,8 +22,9 @@ Then open `http://localhost:5173`.
 A static build also lives in `docs/` if you later host it (GitHub Pages, Netlify, and similar).
 
 - **Drag** to move
-- **Collect gold orbs** for points and combos
-- **Avoid red shards**
+- **Fold** (tap the button, tap the screen, or press Space) to swap ANA/KATA. Opposite-color shards pass through you; red bulk shards are 4D-thick and still hit
+- **Collect orbs** for points, combos, and a boon draft every few pickups
+- Cyan = ANA, magenta = KATA, gold/red = bulk
 - High score is saved on the device
 
 Add it to the home screen from a mobile browser for a fullscreen, app-like feel.
@@ -42,6 +43,8 @@ Add it to the home screen from a mobile browser for a fullscreen, app-like feel.
 - `src/main.js` — boots the canvas and UI
 - `src/game/game.js` — loop, spawning, drawing, input
 - `src/game/hypercube.js` — 4D rotations, tesseract / 16-cell, projection (tested)
+- `src/game/boons.js` — roguelite drafts, stacking cursed mods (tested)
+- `src/game/slice.js` — ANA/KATA collision and scoring (tested)
 - `src/game/utils.js` — collision, scoring, difficulty (tested)
 - `src/game/audio.js` — tiny synthesized sound effects
 - `src/game/storage.js` — local high score
