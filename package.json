@@ -1,0 +1,19 @@
+{
+  "name": "next-beat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A 12-minute writing protocol for game developer's block.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  }
+}
