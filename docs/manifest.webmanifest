@@ -1,12 +1,12 @@
 {
-  "name": "Stick RPG",
-  "short_name": "Stick RPG",
-  "description": "Walk Paper Thin Blvd, get a job, raise stats, and don't die broke.",
+  "name": "Stick Ancestors",
+  "short_name": "Ancestors",
+  "description": "Explore the savanna, conquer fear, grow neurons, and evolve your stick clan.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#7ec8e8",
-  "theme_color": "#7ec8e8",
+  "background_color": "#2f5f25",
+  "theme_color": "#2f5f25",
   "icons": [
     {
       "src": "/icon.svg",

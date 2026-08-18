@@ -9,7 +9,7 @@ import {
   pickDraft,
   relicChips,
 } from "./boons.js";
-import { STARTER_IDS } from "./meta.js";
+const STARTER_IDS = ["anaFold", "echo", "appetite", "hypercombo"];
 import { orbMultiplier, pickSlice, shardCollides, sliceName } from "./slice.js";
 
 describe("draft cadence", () => {

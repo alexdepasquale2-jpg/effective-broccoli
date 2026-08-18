@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadBestScore, saveBestScore } from "./storage.js";
+import { loadMeta, saveMeta } from "./storage.js";
+import { emptyMeta } from "./meta.js";
 
-const KEY = "aether-best-score";
+const KEY = "aether-meta-v1";
 const memory = new Map();
 
 beforeEach(() => {
@@ -19,27 +20,19 @@ afterEach(() => {
   memory.clear();
 });
 
-describe("life save", () => {
-  it("keeps a stick hero when loading old arcade saves", async () => {
-    const { loadMeta } = await import("./storage.js");
-    const { emptyMeta } = await import("./meta.js");
-    localStorage.setItem("aether-meta-v1", JSON.stringify({ xp: 40, best: 12 }));
+describe("clan save", () => {
+  it("migrates old town saves into a fresh clan", () => {
+    localStorage.setItem(KEY, JSON.stringify({ xp: 40, hero: { cash: 99 } }));
     const meta = loadMeta(emptyMeta);
-    expect(meta.hero.cash).toBe(20);
-    expect(meta.hero.items.hat).toBe(false);
+    expect(meta.clan.energy).toBeGreaterThan(0);
     expect(meta.xp).toBe(40);
   });
-});
 
-describe("high score storage", () => {
-  it("starts at zero when nothing is saved", () => {
-    expect(loadBestScore()).toBe(0);
-  });
-
-  it("keeps the highest score", () => {
-    expect(saveBestScore(40)).toBe(40);
-    expect(saveBestScore(15)).toBe(40);
-    expect(loadBestScore()).toBe(40);
-    expect(localStorage.getItem(KEY)).toBe("40");
+  it("persists clan state", () => {
+    const meta = loadMeta(emptyMeta);
+    meta.clan.energy = 12;
+    saveMeta(meta);
+    const loaded = loadMeta(emptyMeta);
+    expect(loaded.clan.energy).toBe(12);
   });
 });

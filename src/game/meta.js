@@ -1,83 +1,38 @@
-import { createHero } from "./rpg.js";
-
-export const STARTER_IDS = ["anaFold", "echo", "appetite", "hypercombo"];
-
-export const UNLOCK_LADDER = [
-  { xp: 40, id: "thin" },
-  { xp: 90, id: "burst" },
-  { xp: 150, id: "glass" },
-  { xp: 220, id: "orbit" },
-  { xp: 300, id: "aligned" },
-  { xp: 390, id: "tessellate" },
-  { xp: 490, id: "bulkCurse" },
-  { xp: 600, id: "frenzy" },
-  { xp: 730, id: "cascade" },
-  { xp: 880, id: "twinSlice" },
-  { xp: 1050, id: "jackpot" },
-  { xp: 1240, id: "hungryGhosts" },
-  { xp: 1460, id: "splitRank" },
-];
-
-export const TITLES = [
-  { xp: 0, name: "Nobody" },
-  { xp: 40, name: "Burger Flipper" },
-  { xp: 150, name: "Gym Bro" },
-  { xp: 390, name: "Campus Legend" },
-  { xp: 600, name: "Local Celebrity" },
-  { xp: 1050, name: "Paper Thin Boss" },
-  { xp: 1460, name: "4D Problem" },
+export const MILESTONES = [
+  { leaps: 1, name: "Night Watcher" },
+  { leaps: 2, name: "Tool Knapper" },
+  { leaps: 3, name: "Savanna Walker" },
 ];
 
 export function emptyMeta() {
   return {
+    leaps: 0,
     xp: 0,
-    best: 0,
-    totalRuns: 0,
-    totalScore: 0,
-    unlocked: STARTER_IDS.slice(),
-    seen: [],
-    hero: createHero(),
+    clan: null,
   };
 }
 
-export function runXp({ score, orbs, drafts }) {
-  return Math.max(0, Math.floor(Number(score) || 0) + (orbs || 0) * 10 + (drafts || 0) * 30);
-}
-
-export function titleForXp(xp) {
-  let name = TITLES[0].name;
-  for (const title of TITLES) {
-    if (xp >= title.xp) name = title.name;
+export function titleForLeaps(leaps) {
+  let name = "Lost Infant";
+  for (const row of MILESTONES) {
+    if (leaps >= row.leaps) name = row.name;
   }
   return name;
 }
 
-export function nextUnlock(meta, ladder = UNLOCK_LADDER) {
-  const owned = new Set(meta.unlocked);
-  const next = ladder.find((row) => !owned.has(row.id));
+export function nextMilestone(meta) {
+  const next = MILESTONES.find((row) => (meta.leaps || 0) < row.leaps);
   if (!next) return null;
   return {
-    id: next.id,
-    xp: next.xp,
-    have: meta.xp,
-    need: Math.max(0, next.xp - meta.xp),
-    progress: Math.min(1, meta.xp / next.xp),
+    name: next.name,
+    leaps: next.leaps,
+    need: next.leaps - (meta.leaps || 0),
   };
 }
 
-export function applyRunToMeta(meta, stats, ladder = UNLOCK_LADDER) {
-  const gained = runXp(stats);
-  const before = meta.xp;
-  meta.xp += gained;
-  meta.totalRuns += 1;
-  meta.totalScore += Math.max(0, Math.floor(stats.score || 0));
-  meta.best = Math.max(meta.best || 0, Math.floor(stats.score || 0));
-  const unlocks = ladder.filter((row) => before < row.xp && meta.xp >= row.xp && !meta.unlocked.includes(row.id));
-  for (const row of unlocks) meta.unlocked.push(row.id);
-  return {
-    gained,
-    unlocks: unlocks.map((row) => row.id),
-    next: nextUnlock(meta, ladder),
-    title: titleForXp(meta.xp),
-  };
+export function applyLeapToMeta(meta, clan) {
+  const gained = 120 + clan.reinforced.length * 40;
+  meta.leaps = (meta.leaps || 0) + 1;
+  meta.xp = (meta.xp || 0) + gained;
+  return { gained, title: titleForLeaps(meta.leaps), next: nextMilestone(meta) };
 }

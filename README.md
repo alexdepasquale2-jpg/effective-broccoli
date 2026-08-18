@@ -1,14 +1,12 @@
-# Stick RPG
+# Stick Ancestors
 
-A 2D mobile life sim in the spirit of classic Flash-era Stick RPG, with a 4D well at the end of the street.
-
-Walk **Paper Thin Blvd**. Tap buildings. Get a job. Raise STR / INT / CHA / Karma. Sleep or pass out. Spend your greasy cash. When you are ready, dive **The Well** — the old arcade Fold run, now a dungeon that pays out in dollars.
+A mobile stick-figure take on **Ancestors: The Humankind Odyssey** — explore a savanna, conquer fear, discover neurons, reinforce them at camp, and leap generations.
 
 ## Play
 
-**On a phone:** localhost will not work. Open the live HTTPS play link the agent gives you (a `trycloudflare.com` URL while this session is running).
+**On a phone:** open the live HTTPS play link the agent gives you (`trycloudflare.com` while the session runs).
 
-Tap **Start Life**, then tap the street to walk and tap a building to enter.
+Tap **Begin Clan**, then tap the ground to walk and tap glowing **?** markers to investigate fear.
 
 **On a computer:**
 
@@ -17,37 +15,31 @@ npm install
 npm run dev
 ```
 
-Then open `http://localhost:5173`.
+Open `http://localhost:5173`.
 
-A static build also lives in `docs/` if you later host it (GitHub Pages, Netlify, and similar).
+## Loop
 
-- **Town:** tap to walk, enter McStick's, U of S, the gym, Sky's Bar, the pawn shop, the clinic, church, or your pad
-- **Time** passes. Sleep at home. Don't work yourself into a zombie.
-- **The Well:** drag to move, **Fold** between ANA/KATA, draft boons, crawl out with cash
-- Stats, cash, day, and unlock XP persist in `localStorage`
+- **Explore** the side-scrolling wilds: camp, berries, river, dark grove, rocks, tall grass, cave
+- **Investigate** unknown places to map them and grow fear neurons (Ancestors-style dread → knowledge)
+- **Survive** energy, thirst, and fear; groom clanmates at camp
+- **Discover neurons** by interacting (olfactory from food, striking from rocks, predator sense from grass, etc.)
+- **Rest** at camp to gain neuronal energy (NE)
+- **Reinforce** discovered neurons from the Neurons panel
+- **Evolution Leap** once Generational Memory is reinforced and you have 5+ neurons
 
-Add it to the home screen from a mobile browser for a fullscreen, app-like feel.
+Progress persists in `localStorage`.
 
 ## Scripts
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Start the Vite dev server |
-| `npm test` | Run unit tests |
-| `npm run build` | Production build |
-| `npm run preview` | Serve the production build |
+| `npm run dev` | Dev server |
+| `npm test` | Unit tests |
+| `npm run build` | Production build to `docs/` |
 
-## Project layout
+## Layout
 
-- `src/main.js` — boots the canvas and UI
-- `src/game/game.js` — town / well modes, loop, input
-- `src/game/rpg.js` — hero, buildings, jobs, clock (tested)
-- `src/game/town.js` — street, NPCs, stick-figure city
-- `src/game/stick.js` — stick people
-- `src/game/hypercube.js` — 4D rotations, tesseract / 16-cell, projection (tested)
-- `src/game/meta.js` — XP, ranks, unlock ladder (tested)
-- `src/game/boons.js` — drafts, stacking, evolutions (tested)
-- `src/game/slice.js` — ANA/KATA collision and scoring (tested)
-- `src/game/utils.js` — collision, scoring, difficulty (tested)
-- `src/game/audio.js` — tiny synthesized sound effects
-- `src/game/storage.js` — local save
+- `src/game/ancestors.js` — clan sim, neurons, fear, evolution (tested)
+- `src/game/wilds.js` — jungle map rendering
+- `src/game/game.js` — loop, UI, input
+- `src/game/stick.js` — hominid stick figures

@@ -9,12 +9,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#7ec8e8" />
+    <meta name="theme-color" content="#2f5f25" />
     <meta
       name="description"
-      content="Stick RPG — walk Paper Thin Blvd, get a job, raise stats, and don't die broke. The well at the end of the street is a 4D hole."
+      content="Stick Ancestors — explore the savanna, conquer fear, grow neurons, and evolve your stick clan."
     />
-    <title>Stick RPG</title>
+    <title>Stick Ancestors</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <link rel="apple-touch-icon" href="./icon.svg" />
@@ -24,72 +24,69 @@
       href="https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@400;700&family=Outfit:wght@400;600;800&display=swap"
       rel="stylesheet"
     />
-    <script type="module" crossorigin src="./assets/index-BKU31aOl.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-Ba0qC0kL.css">
+    <script type="module" crossorigin src="./assets/index-CerHjmkZ.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index--au0xTBq.css">
   </head>
   <body>
     <div id="app">
-      <canvas id="game" aria-label="Stick RPG game canvas"></canvas>
+      <canvas id="game" aria-label="Stick Ancestors game canvas"></canvas>
 
-      <div id="town-hud" hidden>
-        <div class="town-top">
-          <span id="town-cash">$20</span>
-          <span id="town-clock">Day 1  8:00 AM</span>
-          <span id="town-hp">HP 100</span>
+      <div id="clan-hud" hidden>
+        <div class="clan-top">
+          <span id="species">Sahelanthropus Stick</span>
+          <span id="clan-line">10.0M BC</span>
         </div>
-        <div id="town-stats">STR 1   INT 1   CHA 1   KARMA 0</div>
-        <p class="town-hint">Tap a building to enter · tap the street to walk</p>
+        <div class="needs">
+          <span>⚡ <b id="energy">88</b></span>
+          <span>💧 <b id="thirst">72</b></span>
+          <span>☠ <b id="fear">18</b></span>
+          <span>♥ <b id="bond">24</b></span>
+          <span>🧠 <b id="ne">0</b> NE</span>
+        </div>
+        <p id="hud-line" class="hud-line"></p>
+        <p id="discovered" class="hud-line"></p>
       </div>
 
-      <div id="hud" hidden>
-        <div class="hud-block">
-          <span class="hud-label">Score</span>
-          <span id="score">0</span>
-        </div>
-        <div class="hud-block hud-block-right">
-          <span class="hud-label">Best</span>
-          <span id="best">0</span>
-        </div>
-        <div id="slice-chip">ANA</div>
-        <div id="combo" hidden>x2</div>
-        <div id="hunger" hidden>4 TO BOON</div>
-        <div id="relics"></div>
+      <div id="action-bar" hidden>
+        <button id="sense-btn" type="button" class="act-btn">Senses</button>
+        <button id="rest-btn" type="button" class="act-btn">Rest</button>
+        <button id="neuron-btn" type="button" class="act-btn">Neurons</button>
+        <button id="leap-btn" type="button" class="act-btn leap">Leap</button>
       </div>
 
-      <button id="fold" type="button" hidden>
-        <span id="fold-label">FOLD</span>
-        <span class="fold-hint">tap</span>
-      </button>
-
-      <div id="draft" class="draft" hidden>
-        <p class="eyebrow">A new axis opens</p>
-        <h2 id="draft-title">Take a boon</h2>
-        <p class="hint">Stacks if you already have it. Curses pay in chaos.</p>
-        <div id="boon-row"></div>
+      <div id="neurons" class="panel-modal" hidden>
+        <div class="panel-sheet">
+          <p class="eyebrow">Neuronal tree</p>
+          <h2>Reinforce discoveries</h2>
+          <p class="hint">Explore and interact to discover neurons. Rest at camp for NE.</p>
+          <div id="neuron-row"></div>
+          <button id="neuron-close" type="button" class="act-btn wide">Close</button>
+        </div>
       </div>
 
-      <div id="room" class="room" hidden>
-        <div class="room-panel">
-          <h2 id="room-title">Building</h2>
-          <p id="room-flavor"></p>
-          <p id="room-stats"></p>
-          <div id="room-actions"></div>
-          <p id="room-log" hidden></p>
-          <button id="room-leave" type="button">Leave</button>
+      <div id="interact" class="panel-modal" hidden>
+        <div class="panel-sheet">
+          <h2 id="interact-title">Place</h2>
+          <p id="interact-flavor"></p>
+          <button id="interact-investigate" type="button" class="act-btn wide">Investigate fear</button>
+          <button id="interact-use" type="button" class="act-btn wide">Interact</button>
+          <button id="interact-close" type="button" class="act-btn wide ghost">Leave</button>
         </div>
       </div>
 
       <div id="overlay" class="overlay">
         <div class="panel">
-          <p class="eyebrow">XGen vibes · Paper Thin City</p>
-          <h1 id="title">Stick RPG</h1>
-          <p id="rank" class="rank">Nobody</p>
+          <p class="eyebrow">Stick hominids · savanna odyssey</p>
+          <h1 id="title">Stick Ancestors</h1>
+          <p id="rank" class="rank">Lost Infant</p>
           <div id="xp-wrap" class="xp-wrap"><div id="xp-bar" class="xp-bar"></div></div>
-          <p id="next-unlock" class="next-unlock">Next unlock in 40 XP</p>
-          <p id="subtitle" class="subtitle">Get a job. Get stats. Don't die broke. The well at the end of the street eats dimensions.</p>
+          <p id="next-unlock" class="next-unlock">First evolution leap awaits</p>
+          <p id="subtitle" class="subtitle">
+            Explore. Investigate fear. Eat, drink, groom. Discover neurons, reinforce them at camp, and leap generations.
+          </p>
           <p id="result" class="result" hidden></p>
-          <button id="play" type="button">Start Life</button>
-          <p class="hint">Tap to walk · enter buildings · sleep or pass out · dive the well</p>
+          <button id="play" type="button">Begin Clan</button>
+          <p class="hint">Tap to walk · tap ? to investigate · Rest & Neurons at camp</p>
         </div>
       </div>
     </div>
