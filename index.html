@@ -9,25 +9,35 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#0b0618" />
+    <meta name="theme-color" content="#7ec8e8" />
     <meta
       name="description"
-      content="Aether — a 4D arcade roguelite. Fold between slices, stack boons, dodge thick space."
+      content="Stick RPG — walk Paper Thin Blvd, get a job, raise stats, and don't die broke. The well at the end of the street is a 4D hole."
     />
-    <title>Aether</title>
+    <title>Stick RPG</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@400;700&family=Outfit:wght@400;600;800&display=swap"
       rel="stylesheet"
     />
   </head>
   <body>
     <div id="app">
-      <canvas id="game" aria-label="Aether game canvas"></canvas>
+      <canvas id="game" aria-label="Stick RPG game canvas"></canvas>
+
+      <div id="town-hud" hidden>
+        <div class="town-top">
+          <span id="town-cash">$20</span>
+          <span id="town-clock">Day 1  8:00 AM</span>
+          <span id="town-hp">HP 100</span>
+        </div>
+        <div id="town-stats">STR 1   INT 1   CHA 1   KARMA 0</div>
+        <p class="town-hint">Tap a building to enter · tap the street to walk</p>
+      </div>
 
       <div id="hud" hidden>
         <div class="hud-block">
@@ -56,17 +66,28 @@
         <div id="boon-row"></div>
       </div>
 
+      <div id="room" class="room" hidden>
+        <div class="room-panel">
+          <h2 id="room-title">Building</h2>
+          <p id="room-flavor"></p>
+          <p id="room-stats"></p>
+          <div id="room-actions"></div>
+          <p id="room-log" hidden></p>
+          <button id="room-leave" type="button">Leave</button>
+        </div>
+      </div>
+
       <div id="overlay" class="overlay">
         <div class="panel">
-          <p class="eyebrow">Arcade greed · 4D cabinet</p>
-          <h1 id="title">Aether</h1>
-          <p id="rank" class="rank">Slice Whelp</p>
+          <p class="eyebrow">XGen vibes · Paper Thin City</p>
+          <h1 id="title">Stick RPG</h1>
+          <p id="rank" class="rank">Nobody</p>
           <div id="xp-wrap" class="xp-wrap"><div id="xp-bar" class="xp-bar"></div></div>
           <p id="next-unlock" class="next-unlock">Next unlock in 40 XP</p>
-          <p id="subtitle" class="subtitle">Worm’s-eye up the W-well. Fold shears the vanishing point.</p>
+          <p id="subtitle" class="subtitle">Get a job. Get stats. Don't die broke. The well at the end of the street eats dimensions.</p>
           <p id="result" class="result" hidden></p>
-          <button id="play" type="button">Play</button>
-          <p class="hint">Drag · FOLD · Draft every 4 orbs · Stack 3 to evolve</p>
+          <button id="play" type="button">Start Life</button>
+          <p class="hint">Tap to walk · enter buildings · sleep or pass out · dive the well</p>
         </div>
       </div>
     </div>

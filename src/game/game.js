@@ -9,6 +9,21 @@ import {
 } from "./boons.js";
 import { applyRunToMeta, emptyMeta, nextUnlock, titleForXp } from "./meta.js";
 import {
+  ACTIONS,
+  BUILDINGS,
+  FLAVOR,
+  actionLabel,
+  applyAction,
+  canAffordTime,
+  clockLabel,
+  createHero,
+  heroLine,
+  missingNeed,
+  wellPayout,
+} from "./rpg.js";
+import { Town } from "./town.js";
+import { drawStick } from "./stick.js";
+import {
   createFourDAngles,
   hypersphereSliceRadius,
   projectCell16,
@@ -33,6 +48,7 @@ import {
 
 const STATES = {
   menu: "menu",
+  town: "town",
   playing: "playing",
   draft: "draft",
   dying: "dying",
@@ -81,11 +97,18 @@ export class Game {
     this.camera = createCamera();
     this.running = false;
     this.boundFrame = (time) => this.frame(time);
+    this.scene = "town";
+    this.hero = this.meta.hero || createHero();
+    this.town = new Town(this);
+    this.walkCycle = 0;
+    this.roomId = null;
 
     this.resize();
     this.resetField();
     this.bindInput();
+    this.bindRoom();
     this.syncHud();
+    this.syncTownHud();
     this.renderMeta();
     this.draw(0);
   }
@@ -98,7 +121,24 @@ export class Game {
   }
 
   uiTarget(event) {
-    return event.target?.closest?.("#play, #fold, #draft, .boon-card, .overlay");
+    return event.target?.closest?.("#play, #fold, #draft, .boon-card, .overlay, #room, #town-hud");
+  }
+
+  clock() {
+    return clockLabel(this.hero.hour);
+  }
+
+  saveLife() {
+    this.meta.hero = this.hero;
+    this.meta.best = this.best;
+    saveMeta(this.meta);
+  }
+
+  bindRoom() {
+    this.ui.roomLeave?.addEventListener("click", (event) => {
+      event.preventDefault();
+      this.closeRoom();
+    });
   }
 
   resize() {
@@ -178,10 +218,14 @@ export class Game {
     };
 
     const onUp = (event) => {
-      if (this.pointer.active && this.state === STATES.playing && !this.uiTarget(event)) {
-        const moved = distance(this.pointer.sx, this.pointer.sy, this.pointer.startX, this.pointer.startY);
-        const elapsed = performance.now() - this.pointer.startAt;
-        if (moved < 18 && elapsed < 280) this.tryFold();
+      if (this.pointer.active && !this.uiTarget(event)) {
+        if (this.scene === "well" && this.state === STATES.playing) {
+          const moved = distance(this.pointer.sx, this.pointer.sy, this.pointer.startX, this.pointer.startY);
+          const elapsed = performance.now() - this.pointer.startAt;
+          if (moved < 18 && elapsed < 280) this.tryFold();
+        } else if (this.state === STATES.town && this.scene === "town" && this.ui.room?.hidden !== false) {
+          this.town.tap(this.pointer.sx);
+        }
       }
       this.pointer.active = false;
     };
@@ -193,7 +237,7 @@ export class Game {
     window.addEventListener(
       "touchmove",
       (event) => {
-        if (event.target.closest("button, #draft, .overlay")) return;
+        if (event.target.closest("button, #draft, .overlay, #room")) return;
         event.preventDefault();
       },
       { passive: false },
@@ -212,6 +256,41 @@ export class Game {
   play() {
     this.audio.unlock();
     this.audio.start();
+    this.enterTown({ fromMenu: true });
+  }
+
+  wellHud(show) {
+    this.ui.hud.hidden = !show;
+    this.ui.fold.hidden = !show;
+    if (this.ui.hunger) this.ui.hunger.hidden = !show;
+    if (this.ui.townHud) this.ui.townHud.hidden = show;
+    if (!show) this.ui.draft.hidden = true;
+  }
+
+  enterTown({ fromMenu = false, atWell = false } = {}) {
+    this.scene = "town";
+    this.state = STATES.town;
+    this.ui.overlay.hidden = true;
+    this.ui.draft.hidden = true;
+    this.closeRoom();
+    this.wellHud(false);
+    if (fromMenu) {
+      this.town.playerX = 220;
+      this.town.targetX = 220;
+      this.town.say("Tap a building. Get a job. Don't die broke.");
+    }
+    if (atWell) {
+      const well = BUILDINGS.find((b) => b.id === "well");
+      this.town.playerX = well.x + well.w * 0.5;
+      this.town.targetX = this.town.playerX;
+      this.town.cameraX = Math.max(0, this.town.playerX - this.width * 0.42);
+    }
+    this.syncTownHud();
+  }
+
+  enterWell() {
+    this.audio.start();
+    this.scene = "well";
     this.state = STATES.playing;
     this.resetField();
     this.elapsed = 0;
@@ -220,12 +299,70 @@ export class Game {
     this.comboTimer = 0;
     this.orbTimer = 0.15;
     this.shardTimer = 1.1;
-    this.ui.overlay.hidden = true;
-    this.ui.hud.hidden = false;
-    this.ui.fold.hidden = false;
-    this.ui.draft.hidden = true;
-    if (this.ui.hunger) this.ui.hunger.hidden = false;
+    this.closeRoom();
+    this.wellHud(true);
     this.syncHud();
+  }
+
+  openRoom(building) {
+    if (this.state !== STATES.town || !this.ui.room) return;
+    this.roomId = building.id;
+    this.ui.room.hidden = false;
+    this.ui.roomTitle.textContent = building.name;
+    this.ui.roomFlavor.textContent = FLAVOR[building.id] || "";
+    this.ui.roomLog.hidden = true;
+    this.ui.roomLog.textContent = "";
+    this.ui.room.style.setProperty("--room-color", building.color);
+    this.renderRoom();
+  }
+
+  closeRoom() {
+    this.roomId = null;
+    if (this.ui.room) this.ui.room.hidden = true;
+  }
+
+  renderRoom() {
+    if (!this.ui.roomActions || !this.roomId) return;
+    this.ui.roomStats.textContent = heroLine(this.hero);
+    this.ui.roomActions.innerHTML = "";
+    const actions = ACTIONS[this.roomId] || [];
+    for (const action of actions) {
+      const blocked = missingNeed(this.hero, action) || (!canAffordTime(this.hero, action) ? "Too late. Sleep." : null);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `room-act${action.special === "well" ? " well" : ""}`;
+      button.disabled = Boolean(blocked);
+      button.textContent = blocked ? `${action.name} — ${blocked}` : actionLabel(action);
+      button.addEventListener("click", () => this.doAction(action));
+      this.ui.roomActions.appendChild(button);
+    }
+  }
+
+  doAction(action) {
+    const result = applyAction(this.hero, action);
+    if (!result.ok) {
+      if (this.ui.roomLog) {
+        this.ui.roomLog.hidden = false;
+        this.ui.roomLog.textContent = result.reason;
+      }
+      this.town.say(result.reason);
+      return;
+    }
+    this.hero = result.hero;
+    this.saveLife();
+    this.syncTownHud();
+    if (result.special === "well") {
+      this.town.say(result.text);
+      this.enterWell();
+      return;
+    }
+    if (this.ui.roomLog) {
+      this.ui.roomLog.hidden = false;
+      this.ui.roomLog.textContent = result.text;
+    }
+    this.town.say(result.text);
+    this.renderRoom();
+    this.audio.collect(2);
   }
 
   resetField() {
@@ -252,28 +389,21 @@ export class Game {
       orbs: this.run.orbs,
       drafts: this.run.drafts,
     });
+    const payout = wellPayout(this.score);
+    this.hero = {
+      ...this.hero,
+      cash: this.hero.cash + payout,
+      hp: Math.max(1, this.hero.hp - 18),
+    };
+    this.meta.hero = this.hero;
     this.meta.best = this.best;
     saveMeta(this.meta);
-    this.state = STATES.over;
-    this.ui.title.textContent = titleForXp(this.meta.xp);
-    this.ui.subtitle.hidden = true;
-    this.ui.result.hidden = false;
-    const chips = relicChips(this.run.stacks)
-      .map((chip) => `${chip.name}${chip.level > 1 ? ` x${chip.level}` : ""}`)
-      .join(" · ");
     const unlockNames = reward.unlocks.map((id) => boonById(id)?.name ?? id);
-    const lines = [`Score ${this.score}  ·  Best ${this.best}`, `+${reward.gained} XP`];
-    if (unlockNames.length) {
-      lines.push(`NEW UNLOCK: ${unlockNames.join(", ")}`);
-      this.audio.jackpot();
-    }
-    if (chips) lines.push(chips);
-    this.ui.result.textContent = lines.join("\n");
-    this.ui.play.textContent = "One more run";
-    this.ui.overlay.hidden = false;
-    this.ui.fold.hidden = true;
-    this.ui.draft.hidden = true;
-    this.ui.hunger.hidden = true;
+    if (unlockNames.length) this.audio.jackpot();
+    const bits = [`Crawled out with $${payout}.`, `Score ${this.score}.`, `+${reward.gained} XP.`];
+    if (unlockNames.length) bits.push(`Unlocked ${unlockNames.join(", ")}.`);
+    this.enterTown({ atWell: true });
+    this.town.say(bits.join(" "));
     this.renderMeta();
     this.syncHud();
   }
@@ -287,9 +417,17 @@ export class Game {
       this.ui.nextUnlock.textContent = `NEXT ${boon?.name ?? next.id} · ${next.need} XP`;
       this.ui.xpBar.style.width = `${Math.round((1 - next.need / Math.max(next.xp, 1)) * 100)}%`;
     } else {
-      this.ui.nextUnlock.textContent = "FULL CABINET. KEEP GREEDING.";
+      this.ui.nextUnlock.textContent = "YOU'VE DONE IT ALL. STILL BROKE THOUGH.";
       this.ui.xpBar.style.width = "100%";
     }
+  }
+
+  syncTownHud() {
+    if (!this.ui.townCash) return;
+    this.ui.townCash.textContent = `$${this.hero.cash}`;
+    this.ui.townClock.textContent = `Day ${this.hero.day}  ${this.clock()}`;
+    this.ui.townHp.textContent = `HP ${this.hero.hp}`;
+    this.ui.townStats.textContent = heroLine(this.hero);
   }
 
   syncHud() {
@@ -330,6 +468,13 @@ export class Game {
   }
 
   update(dt) {
+    if (this.scene !== "well") {
+      this.town.update(dt);
+      this.shake = Math.max(0, this.shake - dt * 8);
+      this.flash = Math.max(0, this.flash - dt * 3);
+      return;
+    }
+
     const folding = this.run.foldTimer > 0;
     const speed =
       this.state === STATES.playing || this.state === STATES.draft
@@ -786,6 +931,11 @@ export class Game {
     const { ctx, width, height } = this;
     ctx.clearRect(0, 0, width, height);
 
+    if (this.scene !== "well") {
+      this.town.draw(ctx);
+      return;
+    }
+
     const shakeX = this.shake ? rand(-8, 8) * this.shake : 0;
     const shakeY = this.shake ? rand(-8, 8) * this.shake : 0;
     ctx.save();
@@ -1110,6 +1260,17 @@ export class Game {
     }
 
     ctx.restore();
+
+    const moving = distance(this.player.x, this.player.y, this.pointer.x, this.pointer.y) > 6;
+    if (moving && this.state === STATES.playing) this.walkCycle += 0.35;
+    drawStick(ctx, v.x, v.y + 12 * v.s, {
+      scale: Math.max(0.85, 1.05 * v.s),
+      facing: this.pointer.x >= this.player.x ? 1 : -1,
+      walk: this.walkCycle,
+      hat: Boolean(this.hero.items?.hat) || this.hero.cha >= 6,
+      bat: Boolean(this.hero.items?.bat),
+      color: "#111",
+    });
   }
 
   drawParticles() {

@@ -1,3 +1,5 @@
+import { createHero } from "./rpg.js";
+
 export const STARTER_IDS = ["anaFold", "echo", "appetite", "hypercombo"];
 
 export const UNLOCK_LADDER = [
@@ -17,12 +19,12 @@ export const UNLOCK_LADDER = [
 ];
 
 export const TITLES = [
-  { xp: 0, name: "Slice Whelp" },
-  { xp: 40, name: "Fold Beggar" },
-  { xp: 150, name: "Boon Addict" },
-  { xp: 390, name: "Tessellate Fiend" },
-  { xp: 600, name: "Dimension Whale" },
-  { xp: 1050, name: "Arcade God" },
+  { xp: 0, name: "Nobody" },
+  { xp: 40, name: "Burger Flipper" },
+  { xp: 150, name: "Gym Bro" },
+  { xp: 390, name: "Campus Legend" },
+  { xp: 600, name: "Local Celebrity" },
+  { xp: 1050, name: "Paper Thin Boss" },
   { xp: 1460, name: "4D Problem" },
 ];
 
@@ -34,6 +36,7 @@ export function emptyMeta() {
     totalScore: 0,
     unlocked: STARTER_IDS.slice(),
     seen: [],
+    hero: createHero(),
   };
 }
 

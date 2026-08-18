@@ -1,12 +1,12 @@
 {
-  "name": "Aether",
-  "short_name": "Aether",
-  "description": "A 2D mobile arcade game. Catch the light. Dodge the dark.",
+  "name": "Stick RPG",
+  "short_name": "Stick RPG",
+  "description": "Walk Paper Thin Blvd, get a job, raise stats, and don't die broke.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0b0618",
-  "theme_color": "#0b0618",
+  "background_color": "#7ec8e8",
+  "theme_color": "#7ec8e8",
   "icons": [
     {
       "src": "/icon.svg",

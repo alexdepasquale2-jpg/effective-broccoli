@@ -22,7 +22,15 @@ describe("unlock ladder", () => {
   });
 
   it("names ranks from XP", () => {
-    expect(titleForXp(0)).toBe("Slice Whelp");
-    expect(titleForXp(400)).toBe("Tessellate Fiend");
+    expect(titleForXp(0)).toBe("Nobody");
+    expect(titleForXp(400)).toBe("Campus Legend");
+  });
+});
+
+describe("empty life", () => {
+  it("starts a broke stick with no hat", () => {
+    const meta = emptyMeta();
+    expect(meta.hero.cash).toBe(20);
+    expect(meta.hero.items.hat).toBe(false);
   });
 });

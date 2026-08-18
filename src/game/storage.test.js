@@ -19,6 +19,18 @@ afterEach(() => {
   memory.clear();
 });
 
+describe("life save", () => {
+  it("keeps a stick hero when loading old arcade saves", async () => {
+    const { loadMeta } = await import("./storage.js");
+    const { emptyMeta } = await import("./meta.js");
+    localStorage.setItem("aether-meta-v1", JSON.stringify({ xp: 40, best: 12 }));
+    const meta = loadMeta(emptyMeta);
+    expect(meta.hero.cash).toBe(20);
+    expect(meta.hero.items.hat).toBe(false);
+    expect(meta.xp).toBe(40);
+  });
+});
+
 describe("high score storage", () => {
   it("starts at zero when nothing is saved", () => {
     expect(loadBestScore()).toBe(0);

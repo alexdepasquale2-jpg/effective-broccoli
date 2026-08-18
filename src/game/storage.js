@@ -33,6 +33,11 @@ export function loadMeta(emptyMeta) {
       ...parsed,
       unlocked: Array.isArray(parsed.unlocked) && parsed.unlocked.length ? parsed.unlocked : fallback.unlocked,
       seen: Array.isArray(parsed.seen) ? parsed.seen : [],
+      hero: {
+        ...fallback.hero,
+        ...(parsed.hero || {}),
+        items: { ...fallback.hero.items, ...((parsed.hero && parsed.hero.items) || {}) },
+      },
     };
   } catch {
     return fallback;
