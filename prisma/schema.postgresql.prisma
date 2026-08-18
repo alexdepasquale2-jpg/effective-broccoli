@@ -1,0 +1,264 @@
+// PostgreSQL schema for production (Neon, Supabase, RDS)
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  POSTER
+  AGENT_OPERATOR
+  BOTH
+}
+
+enum BountyStatus {
+  OPEN
+  CLAIMED
+  SUBMITTED
+  VERIFYING
+  VERIFIED_PAID
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+enum TaskType {
+  CODE_FIX
+}
+
+enum SubmissionStatus {
+  PENDING
+  PASSED
+  FAILED
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum LedgerEntryType {
+  ESCROW_DEPOSIT
+  ESCROW_PAYOUT
+  PLATFORM_FEE
+  ESCROW_REFUND
+}
+
+enum LedgerEntryStatus {
+  PENDING
+  SETTLED
+  REVERSED
+}
+
+model User {
+  id                            String        @id @default(cuid())
+  name                          String?
+  email                         String?       @unique
+  emailVerified                 DateTime?
+  image                         String?
+  passwordHash                  String?
+  role                          UserRole      @default(BOTH)
+  
+  stripeCustomerId              String?       @unique
+  stripeConnectAccountId         String?       @unique
+  stripeConnectDetailsSubmitted Boolean       @default(false)
+  stripePayoutsEnabled          Boolean       @default(false)
+
+  createdAt                     DateTime      @default(now())
+  updatedAt                     DateTime      @updatedAt
+
+  accounts                      Account[]
+  sessions                      Session[]
+  agents                        Agent[]
+  postedBounties                Bounty[]      @relation("PosterBounties")
+  ledgerEntries                 LedgerEntry[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Agent {
+  id                  String        @id @default(cuid())
+  ownerId             String
+  name                String
+  description         String?
+  apiKeyHash          String        @unique
+  apiKeyPrefix        String
+  taskTypesSupported  String[]      @default(["CODE_FIX"])
+  isActive            Boolean       @default(true)
+  lastUsedAt          DateTime?
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  owner               User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  claims              BountyClaim[]
+  submissions         Submission[]
+  payouts             Payout[]
+
+  @@map("agents")
+}
+
+model Bounty {
+  id                    String        @id @default(cuid())
+  posterId              String
+  title                 String
+  description           String
+  taskType              TaskType      @default(CODE_FIX)
+  
+  amountCents           Int
+  currency              String        @default("usd")
+  status                BountyStatus  @default(OPEN)
+  deadlineAt            DateTime
+  
+  escrowPaymentIntentId String?       @unique
+  escrowCapturedAt      DateTime?
+  refundPaymentIntentId String?       @unique
+  refundedAt            DateTime?
+
+  verificationConfig    Json
+
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  poster                User          @relation("PosterBounties", fields: [posterId], references: [id], onDelete: Restrict)
+  claims                BountyClaim[]
+  submissions           Submission[]
+  payout                Payout?
+  ledgerEntries         LedgerEntry[]
+
+  @@map("bounties")
+}
+
+model BountyClaim {
+  id          String    @id @default(cuid())
+  bountyId    String
+  agentId     String
+  claimedAt   DateTime  @default(now())
+  expiresAt   DateTime
+  releasedAt  DateTime?
+  isCompleted Boolean   @default(false)
+
+  bounty      Bounty    @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  agent       Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([bountyId, agentId])
+  @@map("bounty_claims")
+}
+
+model Submission {
+  id                 String              @id @default(cuid())
+  bountyId           String
+  agentId            String
+  
+  payload            Json
+  payloadUrl         String?
+  
+  status             SubmissionStatus    @default(PENDING)
+  submittedAt        DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  bounty             Bounty              @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  agent              Agent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  verificationResult VerificationResult?
+
+  @@map("submissions")
+}
+
+model VerificationResult {
+  id           String     @id @default(cuid())
+  submissionId String     @unique
+  verifierType String
+  rawResult    Json
+  passed       Boolean
+  verifiedAt   DateTime   @default(now())
+  details      String?
+
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@map("verification_results")
+}
+
+model Payout {
+  id               String       @id @default(cuid())
+  bountyId         String       @unique
+  agentId          String
+  amountCents      Int
+  currency         String       @default("usd")
+  platformFeeCents Int          @default(0)
+  netAmountCents   Int
+  
+  stripeTransferId String?      @unique
+  status           PayoutStatus @default(PENDING)
+  failureReason    String?
+
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  bounty           Bounty       @relation(fields: [bountyId], references: [id], onDelete: Restrict)
+  agent            Agent        @relation(fields: [agentId], references: [id], onDelete: Restrict)
+
+  @@map("payouts")
+}
+
+model LedgerEntry {
+  id          String            @id @default(cuid())
+  bountyId    String?
+  userId      String?
+  type        LedgerEntryType
+  amountCents Int
+  currency    String            @default("usd")
+  status      LedgerEntryStatus @default(SETTLED)
+  description String?
+  referenceId String?
+  metadata    Json?
+
+  createdAt   DateTime          @default(now())
+
+  bounty      Bounty?           @relation(fields: [bountyId], references: [id], onDelete: SetNull)
+  user        User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("ledger_entries")
+}

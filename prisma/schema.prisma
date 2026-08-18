@@ -1,0 +1,234 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// User model supporting posters, agent operators, and NextAuth
+model User {
+  id                            String        @id @default(cuid())
+  name                          String?
+  email                         String?       @unique
+  emailVerified                 DateTime?
+  image                         String?
+  passwordHash                  String?
+  role                          String        @default("BOTH") // POSTER, AGENT_OPERATOR, BOTH
+  
+  // Stripe integration
+  stripeCustomerId              String?       @unique
+  stripeConnectAccountId         String?       @unique
+  stripeConnectDetailsSubmitted Boolean       @default(false)
+  stripePayoutsEnabled          Boolean       @default(false)
+
+  // Timestamps
+  createdAt                     DateTime      @default(now())
+  updatedAt                     DateTime      @updatedAt
+
+  // Relations
+  accounts                      Account[]
+  sessions                      Session[]
+  agents                        Agent[]
+  postedBounties                Bounty[]      @relation("PosterBounties")
+  ledgerEntries                 LedgerEntry[]
+
+  @@map("users")
+}
+
+// NextAuth standard models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// Agent registered by an operator with API key authentication
+model Agent {
+  id                  String        @id @default(cuid())
+  ownerId             String
+  name                String
+  description         String?
+  apiKeyHash          String        @unique
+  apiKeyPrefix        String        // e.g. bnt_live_... for identification
+  taskTypesSupported  String        @default("[\"CODE_FIX\"]") // JSON array string for sqlite / text
+  isActive            Boolean       @default(true)
+  lastUsedAt          DateTime?
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  owner               User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  claims              BountyClaim[]
+  submissions         Submission[]
+  payouts             Payout[]
+
+  @@map("agents")
+}
+
+// Bounty posted with escrow backing and verification config
+model Bounty {
+  id                    String        @id @default(cuid())
+  posterId              String
+  title                 String
+  description           String
+  taskType              String        @default("CODE_FIX") // CODE_FIX (extensible enum/string)
+  
+  amountCents           Int
+  currency              String        @default("usd")
+  status                String        @default("OPEN") // OPEN, CLAIMED, SUBMITTED, VERIFYING, VERIFIED_PAID, FAILED, EXPIRED, CANCELLED
+  deadlineAt            DateTime
+  
+  // Escrow & Payment info
+  escrowPaymentIntentId String?       @unique
+  escrowCapturedAt      DateTime?
+  refundPaymentIntentId String?       @unique
+  refundedAt            DateTime?
+
+  // Verification configuration JSON
+  // For CODE_FIX: { "repoUrl": "...", "baseBranch": "main", "failingTestCommand": "npm test", "testFilePaths": ["..."] }
+  verificationConfig    String        // JSON string for universal SQL compatibility
+
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  poster                User          @relation("PosterBounties", fields: [posterId], references: [id], onDelete: Restrict)
+  claims                BountyClaim[]
+  submissions           Submission[]
+  payout                Payout?
+  ledgerEntries         LedgerEntry[]
+
+  @@map("bounties")
+}
+
+// Claim on a bounty by an agent to prevent duplicate simultaneous attempts
+model BountyClaim {
+  id          String    @id @default(cuid())
+  bountyId    String
+  agentId     String
+  claimedAt   DateTime  @default(now())
+  expiresAt   DateTime  // TTL for claim e.g. 2 hours
+  releasedAt  DateTime?
+  isCompleted Boolean   @default(false)
+
+  bounty      Bounty    @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  agent       Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([bountyId, agentId])
+  @@map("bounty_claims")
+}
+
+// Submission by an agent with solution payload
+model Submission {
+  id                 String              @id @default(cuid())
+  bountyId           String
+  agentId            String
+  
+  // Solution payload JSON string
+  // For CODE_FIX: { "prUrl": "...", "prNumber": 42, "branch": "fix/test", "commitSha": "..." }
+  payload            String
+  payloadUrl         String?
+  
+  status             String              @default("PENDING") // PENDING, PASSED, FAILED
+  submittedAt        DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  bounty             Bounty              @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  agent              Agent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  verificationResult VerificationResult?
+
+  @@map("submissions")
+}
+
+// Verification result produced by the pluggable Verifier
+model VerificationResult {
+  id           String     @id @default(cuid())
+  submissionId String     @unique
+  verifierType String     // e.g. "CODE_FIX"
+  rawResult    String     // JSON string of CI check run status, logs, GitHub check suite details
+  passed       Boolean
+  verifiedAt   DateTime   @default(now())
+  details      String?
+
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@map("verification_results")
+}
+
+// Payout record triggered on verified outcome
+model Payout {
+  id               String   @id @default(cuid())
+  bountyId         String   @unique
+  agentId          String
+  amountCents      Int
+  currency         String   @default("usd")
+  platformFeeCents Int      @default(0)
+  netAmountCents   Int
+  
+  stripeTransferId String?  @unique
+  status           String   @default("PENDING") // PENDING, PAID, FAILED
+  failureReason    String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  bounty           Bounty   @relation(fields: [bountyId], references: [id], onDelete: Restrict)
+  agent            Agent    @relation(fields: [agentId], references: [id], onDelete: Restrict)
+
+  @@map("payouts")
+}
+
+// Double-entry accounting ledger to track all platform liabilities and escrow movements
+model LedgerEntry {
+  id          String   @id @default(cuid())
+  bountyId    String?
+  userId      String?
+  type        String   // ESCROW_DEPOSIT, ESCROW_PAYOUT, PLATFORM_FEE, ESCROW_REFUND
+  amountCents Int
+  currency    String   @default("usd")
+  status      String   @default("SETTLED") // PENDING, SETTLED, REVERSED
+  description String?
+  referenceId String?  // Stripe charge ID, Transfer ID, or Refund ID
+  metadata    String?  // JSON string
+
+  createdAt   DateTime @default(now())
+
+  bounty      Bounty?  @relation(fields: [bountyId], references: [id], onDelete: SetNull)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("ledger_entries")
+}
