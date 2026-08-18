@@ -6,11 +6,11 @@ The genre and name are placeholders — this is a playable foundation with touch
 
 ## Play
 
-On a phone, open the deployed game from this branch (no install):
+**On a phone:** localhost will not work. Open the live HTTPS play link the agent gives you (a `trycloudflare.com` URL while this session is running).
 
-https://raw.githack.com/alexdepasquale2-jpg/effective-broccoli/cursor/2d-mobile-game-a595/docs/index.html
+Tap **Play**, then drag to move. Collect gold orbs and avoid red shards.
 
-On a computer:
+**On a computer:**
 
 ```bash
 npm install
@@ -18,6 +18,8 @@ npm run dev
 ```
 
 Then open `http://localhost:5173`.
+
+A static build also lives in `docs/` if you later host it (GitHub Pages, Netlify, and similar).
 
 - **Drag** to move
 - **Collect gold orbs** for points and combos
