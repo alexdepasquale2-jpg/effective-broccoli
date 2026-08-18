@@ -313,6 +313,7 @@ export class Game {
     this.ui.roomLog.hidden = true;
     this.ui.roomLog.textContent = "";
     this.ui.room.style.setProperty("--room-color", building.color);
+    this.town.say(FLAVOR[building.id] || building.name);
     this.renderRoom();
   }
 

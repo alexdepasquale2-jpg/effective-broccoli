@@ -381,10 +381,11 @@ h1 {
   left: 0;
   right: 0;
   top: 0;
-  padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 8px;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 18px;
   pointer-events: none;
   color: #fff;
   text-shadow: 1px 1px 0 #111;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.58), rgba(0, 0, 0, 0));
 }
 
 .town-top {
