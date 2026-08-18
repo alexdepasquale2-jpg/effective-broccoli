@@ -1,10 +1,13 @@
 import {
   applyBoon,
+  boonById,
   createMods,
   createRun,
+  hungerText,
   pickDraft,
   relicChips,
 } from "./boons.js";
+import { applyRunToMeta, emptyMeta, nextUnlock, titleForXp } from "./meta.js";
 import {
   createFourDAngles,
   hypersphereSliceRadius,
@@ -15,7 +18,7 @@ import {
 } from "./hypercube.js";
 import { orbMultiplier, pickSlice, shardCollides, sliceName } from "./slice.js";
 import { AudioBus } from "./audio.js";
-import { loadBestScore, saveBestScore } from "./storage.js";
+import { loadMeta, saveBestScore, saveMeta } from "./storage.js";
 import {
   circleHit,
   clamp,
@@ -54,7 +57,9 @@ export class Game {
     this.lastTime = 0;
     this.elapsed = 0;
     this.score = 0;
-    this.best = loadBestScore();
+    this.best = 0;
+    this.meta = loadMeta(emptyMeta);
+    this.best = this.meta.best || 0;
     this.combo = 0;
     this.comboTimer = 0;
     this.shake = 0;
@@ -79,6 +84,7 @@ export class Game {
     this.resetField();
     this.bindInput();
     this.syncHud();
+    this.renderMeta();
     this.draw(0);
   }
 
@@ -196,6 +202,7 @@ export class Game {
     this.ui.hud.hidden = false;
     this.ui.fold.hidden = false;
     this.ui.draft.hidden = true;
+    if (this.ui.hunger) this.ui.hunger.hidden = false;
     this.syncHud();
   }
 
@@ -218,21 +225,49 @@ export class Game {
 
   gameOver() {
     this.best = saveBestScore(this.score);
+    const reward = applyRunToMeta(this.meta, {
+      score: this.score,
+      orbs: this.run.orbs,
+      drafts: this.run.drafts,
+    });
+    this.meta.best = this.best;
+    saveMeta(this.meta);
     this.state = STATES.over;
-    this.ui.title.textContent = "Aether";
+    this.ui.title.textContent = titleForXp(this.meta.xp);
     this.ui.subtitle.hidden = true;
     this.ui.result.hidden = false;
     const chips = relicChips(this.run.stacks)
       .map((chip) => `${chip.name}${chip.level > 1 ? ` x${chip.level}` : ""}`)
       .join(" · ");
-    this.ui.result.textContent = chips
-      ? `Score ${this.score}  ·  Best ${this.best}\n${chips}`
-      : `Score ${this.score}  ·  Best ${this.best}`;
-    this.ui.play.textContent = "Play again";
+    const unlockNames = reward.unlocks.map((id) => boonById(id)?.name ?? id);
+    const lines = [`Score ${this.score}  ·  Best ${this.best}`, `+${reward.gained} XP`];
+    if (unlockNames.length) {
+      lines.push(`NEW UNLOCK: ${unlockNames.join(", ")}`);
+      this.audio.jackpot();
+    }
+    if (chips) lines.push(chips);
+    this.ui.result.textContent = lines.join("\n");
+    this.ui.play.textContent = "One more run";
     this.ui.overlay.hidden = false;
     this.ui.fold.hidden = true;
     this.ui.draft.hidden = true;
+    this.ui.hunger.hidden = true;
+    this.renderMeta();
     this.syncHud();
+  }
+
+  renderMeta() {
+    if (!this.ui.rank) return;
+    this.ui.rank.textContent = titleForXp(this.meta.xp);
+    const next = nextUnlock(this.meta);
+    if (next) {
+      const boon = boonById(next.id);
+      this.ui.nextUnlock.textContent = `NEXT ${boon?.name ?? next.id} · ${next.need} XP`;
+      this.ui.xpBar.style.width = `${Math.round((1 - next.need / Math.max(next.xp, 1)) * 100)}%`;
+    } else {
+      this.ui.nextUnlock.textContent = "FULL CABINET. KEEP GREEDING.";
+      this.ui.xpBar.style.width = "100%";
+    }
   }
 
   syncHud() {
@@ -255,9 +290,13 @@ export class Game {
     this.ui.fold.classList.toggle("busy", !ready);
 
     const chips = relicChips(this.run.stacks)
-      .map((chip) => `<span class="relic${chip.cursed ? " cursed" : ""}">${chip.tag}${chip.level > 1 ? ` ${chip.level}` : ""}</span>`)
+      .map((chip) => `<span class="relic${chip.cursed ? " cursed" : ""}${chip.tier >= 4 ? " evo" : ""}">${chip.tag}${chip.level > 1 ? ` ${chip.level}` : ""}</span>`)
       .join("");
     this.ui.relics.innerHTML = chips;
+    if (this.ui.hunger) {
+      this.ui.hunger.hidden = this.state !== STATES.playing && this.state !== STATES.draft;
+      this.ui.hunger.textContent = hungerText(this.run);
+    }
   }
 
   frame(time) {
@@ -300,7 +339,7 @@ export class Game {
 
   updateFold(dt) {
     if (this.run.foldTimer > 0) this.run.foldTimer = Math.max(0, this.run.foldTimer - dt);
-    const recharge = this.mods.frenzy && this.combo >= 4 ? dt * 1.85 : dt;
+    const recharge = this.mods.frenzy && this.combo >= 4 ? dt * 1.85 : this.mods.cascade && this.combo >= 6 ? dt * 1.4 : dt;
     if (this.run.foldCooldown > 0) this.run.foldCooldown = Math.max(0, this.run.foldCooldown - recharge);
     const foldingNow = this.run.foldTimer > 0;
     const ready = this.run.foldCooldown <= 0;
@@ -319,14 +358,18 @@ export class Game {
     this.flash = 0.28;
     this.shake = Math.max(this.shake, 0.35);
     this.audio.fold();
-    if (this.mods.echo > 0) {
-      this.run.echoes.push({
-        x: this.player.x,
-        y: this.player.y,
-        r: this.player.r,
-        polarity: -this.run.polarity,
-        life: this.mods.echoLife,
-      });
+    if (this.mods.echoCount > 0) {
+      const n = this.mods.echoCount;
+      for (let i = 0; i < n; i += 1) {
+        const spread = n === 1 ? 0 : (i - (n - 1) / 2) * 22;
+        this.run.echoes.push({
+          x: this.player.x + spread,
+          y: this.player.y,
+          r: this.player.r * 0.9,
+          polarity: -this.run.polarity,
+          life: this.mods.echoLife,
+        });
+      }
     }
     if (this.mods.burst > 0) this.unfoldBurst();
     this.syncHud();
@@ -345,7 +388,8 @@ export class Game {
         r: 11,
         phase: 0,
         life: this.mods.orbLife,
-        slice: shard.slice,
+        slice: this.mods.prismBomb ? this.run.polarity : shard.slice,
+        jackpot: false,
       });
       this.burst(shard.x, shard.y, SLICE_COLORS[String(shard.slice)].glow, 10);
       this.shards.splice(i, 1);
@@ -356,14 +400,16 @@ export class Game {
     this.state = STATES.draft;
     this.pointer.active = false;
     this.audio.draft();
-    const choices = pickDraft(this.run.stacks);
+    const choices = pickDraft(this.run.stacks, 3, Math.random, this.meta.unlocked);
+    this.ui.draftTitle.textContent = choices.some((boon) => boon.tier >= 4) ? "EVOLUTION" : "Take a boon";
     this.ui.boonRow.innerHTML = "";
     for (const boon of choices) {
       const level = (this.run.stacks[boon.id] || 0) + 1;
+      const fresh = !this.run.stacks[boon.id] && !(this.meta.seen || []).includes(boon.id);
       const button = document.createElement("button");
       button.type = "button";
-      button.className = `boon-card${boon.cursed ? " cursed" : ""}`;
-      button.innerHTML = `<span class="tag">${boon.tag}</span><strong>${boon.name}</strong><span>${boon.text}</span><em>Lv ${level}</em>`;
+      button.className = `boon-card${boon.cursed ? " cursed" : ""}${boon.tier >= 4 ? " evo" : ""}`;
+      button.innerHTML = `<span class="tag">${boon.tier >= 4 ? boon.tag : `T${boon.tier} ${boon.tag}`}${fresh ? " · NEW" : ""}</span><strong>${boon.name}</strong><span>${boon.text}</span><em>${boon.tier >= 4 ? "UNLOCK EVOLUTION" : `Lv ${level}`}</em>`;
       button.addEventListener("click", () => this.takeBoon(boon.id));
       this.ui.boonRow.appendChild(button);
     }
@@ -372,6 +418,9 @@ export class Game {
 
   takeBoon(id) {
     this.mods = applyBoon(this.run, id);
+    this.meta.seen = this.meta.seen || [];
+    if (!this.meta.seen.includes(id)) this.meta.seen.push(id);
+    saveMeta(this.meta);
     this.audio.boon();
     this.ui.draft.hidden = true;
     this.state = STATES.playing;
@@ -436,6 +485,22 @@ export class Game {
         });
       }
     }
+    if (this.mods.phantomDual) {
+      for (const echo of this.run.echoes) {
+        points.push({ x: echo.x + 16, y: echo.y - 10, r: 11 });
+        points.push({ x: echo.x - 16, y: echo.y + 10, r: 11 });
+      }
+    }
+    if (this.mods.splitRank) {
+      const ang = this.elapsed * 2.4;
+      const dist = 50 + this.mods.splitRank * 12;
+      points.push({
+        x: this.player.x + Math.cos(ang) * dist,
+        y: this.player.y + Math.sin(ang) * dist,
+        r: 13 + this.mods.splitRank * 2,
+        split: true,
+      });
+    }
     return points;
   }
 
@@ -463,6 +528,7 @@ export class Game {
 
   spawnOrb() {
     const r = rand(9, 13);
+    const jackpot = this.mods.jackpot > 0 && Math.random() < 0.08 + this.mods.jackpot * 0.06;
     const pos = keepAwayFrom(
       rand(28, this.width - 28),
       rand(90, this.height * 0.62),
@@ -473,10 +539,11 @@ export class Game {
     this.orbs.push({
       x: pos.x,
       y: pos.y,
-      r,
+      r: jackpot ? r + 6 : r,
       phase: rand(0, Math.PI * 2),
       life: this.mods.orbLife,
       slice: pickSlice(Math.random, 0.28),
+      jackpot,
     });
   }
 
@@ -535,11 +602,17 @@ export class Game {
         orbSlice: orb.slice,
         polarity: this.run.polarity,
         alignedStacks: this.mods.aligned,
+        jackpot: Boolean(orb.jackpot),
       }) * this.mods.scoreMult;
     this.score += Math.round(orbPoints(this.combo) * mult);
-    this.flash = Math.min(0.35, 0.12 + this.combo * 0.01);
-    this.audio.collect(this.combo);
-    this.burst(orb.x, orb.y, SLICE_COLORS[String(orb.slice)].orb, 14);
+    this.flash = Math.min(0.5, 0.12 + this.combo * 0.01 + (orb.jackpot ? 0.25 : 0));
+    if (orb.jackpot) this.audio.jackpot();
+    else this.audio.collect(this.combo);
+    this.burst(orb.x, orb.y, orb.jackpot ? "#fff4c2" : SLICE_COLORS[String(orb.slice)].orb, orb.jackpot ? 22 : 14);
+    if (this.mods.cascade && orb.slice === this.run.polarity) {
+      this.run.foldCooldown = Math.max(0, this.run.foldCooldown - 0.6 * this.mods.cascade);
+      if (this.combo >= 5 && this.run.foldCooldown <= 0) this.tryFold();
+    }
     this.syncHud();
     if (this.state === STATES.playing && this.run.orbs >= this.run.nextDraft) {
       this.showDraft();
@@ -557,11 +630,30 @@ export class Game {
         polarity: this.run.polarity,
         folding,
         bulkPhased,
+        twinSlice: Boolean(this.mods.twinSlice),
       });
       shard.x += shard.vx * dt * slow;
       shard.y += shard.vy * dt * slow;
       shard.rot += shard.spin * dt;
       shard.ghost = ghost;
+
+      if (this.mods.hungryGhosts) {
+        const eaten = this.run.echoes.some((echo) => echo.polarity === shard.slice && circleHit(shard.x, shard.y, shard.r, echo.x, echo.y, echo.r));
+        if (eaten) {
+          this.orbs.push({
+            x: shard.x,
+            y: shard.y,
+            r: 11,
+            phase: 0,
+            life: this.mods.orbLife,
+            slice: shard.slice,
+            jackpot: false,
+          });
+          this.burst(shard.x, shard.y, SLICE_COLORS[String(shard.slice)].glow, 8);
+          this.shards.splice(i, 1);
+          continue;
+        }
+      }
 
       if (
         !ghost &&
@@ -580,6 +672,7 @@ export class Game {
     if (this.run.glassCharges > 0) {
       this.run.glassCharges -= 1;
       this.tryFold(true);
+      if (this.mods.burst) this.unfoldBurst();
       this.flash = 0.6;
       this.shake = 1;
       this.burst(this.player.x, this.player.y, "#ffffff", 20);
@@ -684,6 +777,7 @@ export class Game {
     this.drawShards();
     this.drawTrail();
     this.drawEchoes();
+    this.drawSplitRank();
     if (this.state !== STATES.dying && this.state !== STATES.over) {
       this.drawPlayer();
     }
@@ -736,10 +830,10 @@ export class Game {
     const { ctx } = this;
     for (const orb of this.orbs) {
       const pulse = 1 + Math.sin(orb.phase) * 0.08;
-      const color = SLICE_COLORS[String(orb.slice)];
+      const color = orb.jackpot ? { glow: "#fff4c2", orb: "#ffe27a" } : SLICE_COLORS[String(orb.slice)];
       ctx.save();
       ctx.shadowColor = color.glow;
-      ctx.shadowBlur = 16;
+      ctx.shadowBlur = orb.jackpot ? 24 : 16;
       ctx.fillStyle = color.orb;
       ctx.beginPath();
       ctx.arc(orb.x, orb.y, orb.r * pulse, 0, Math.PI * 2);
@@ -803,6 +897,20 @@ export class Game {
       ctx.arc(echo.x, echo.y, echo.r, 0, Math.PI * 2);
       ctx.stroke();
     }
+  }
+
+  drawSplitRank() {
+    if (!this.mods.splitRank || this.state === STATES.dying || this.state === STATES.over) return;
+    const ang = this.elapsed * 2.4;
+    const dist = 50 + this.mods.splitRank * 12;
+    const x = this.player.x + Math.cos(ang) * dist;
+    const y = this.player.y + Math.sin(ang) * dist;
+    const { ctx } = this;
+    ctx.strokeStyle = "rgba(255, 226, 122, 0.85)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, 13 + this.mods.splitRank * 2, 0, Math.PI * 2);
+    ctx.stroke();
   }
 
   drawPlayer() {

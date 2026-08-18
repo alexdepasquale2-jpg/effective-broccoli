@@ -73,4 +73,11 @@ export class AudioBus {
     tone(this.ctx, { frequency: 523, duration: 0.12, type: "triangle", gain: 0.05 });
     tone(this.ctx, { frequency: 784, duration: 0.18, type: "sine", gain: 0.04, delay: 0.06 });
   }
+
+  jackpot() {
+    if (this.muted || !this.ctx) return;
+    tone(this.ctx, { frequency: 392, duration: 0.12, type: "square", gain: 0.04 });
+    tone(this.ctx, { frequency: 587, duration: 0.14, type: "triangle", gain: 0.05, delay: 0.05 });
+    tone(this.ctx, { frequency: 784, duration: 0.2, type: "sine", gain: 0.05, delay: 0.1 });
+  }
 }

@@ -18,6 +18,11 @@ const ui = {
   boonRow: document.querySelector("#boon-row"),
   relics: document.querySelector("#relics"),
   sliceChip: document.querySelector("#slice-chip"),
+  hunger: document.querySelector("#hunger"),
+  rank: document.querySelector("#rank"),
+  xpBar: document.querySelector("#xp-bar"),
+  nextUnlock: document.querySelector("#next-unlock"),
+  draftTitle: document.querySelector("#draft-title"),
 };
 
 const game = new Game(canvas, ui);
