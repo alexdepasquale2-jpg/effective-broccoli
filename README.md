@@ -23,9 +23,9 @@ A static build also lives in `docs/` if you later host it (GitHub Pages, Netlify
 
 - **Drag** to move
 - **Fold** (tap the button, tap the screen, or press Space) to swap ANA/KATA. Opposite-color shards pass through you; red bulk shards are 4D-thick and still hit
-- **Collect orbs** for points, combos, and a boon draft every few pickups
-- Cyan = ANA, magenta = KATA, gold/red = bulk
-- High score is saved on the device
+- **Collect orbs** — first boon at 4, then every 5. Stack 3 to evolve. Synergies appear when recipes line up.
+- Cyan = ANA, magenta = KATA, gold/red = bulk. Jackpots are fat and loud.
+- XP and ranks persist. The menu always shows the next locked boon.
 
 Add it to the home screen from a mobile browser for a fullscreen, app-like feel.
 
