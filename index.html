@@ -9,82 +9,83 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#2f5f25" />
+    <meta name="theme-color" content="#0d3b66" />
     <meta
       name="description"
-      content="Stick Ancestors — explore the savanna, conquer fear, grow neurons, and evolve your stick clan."
+      content="Harpoon Reef — top-down arcade harpoon fishing. Collect rare fish, upgrade your rig, trade for pearls."
     />
-    <title>Stick Ancestors</title>
+    <title>Harpoon Reef</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@400;700&family=Outfit:wght@400;600;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Rubik+Mono+One&display=swap"
       rel="stylesheet"
     />
   </head>
   <body>
     <div id="app">
-      <canvas id="game" aria-label="Stick Ancestors game canvas"></canvas>
+      <canvas id="game" aria-label="Harpoon Reef game canvas"></canvas>
 
-      <div id="clan-hud" hidden>
-        <div class="clan-top">
-          <span id="species">Sahelanthropus Stick</span>
-          <span id="clan-line">10.0M BC</span>
+      <div id="hud" hidden>
+        <div class="hud-top">
+          <span id="coins">$0</span>
+          <span id="pearls">0 ◈</span>
+          <span id="cargo">0/6</span>
         </div>
-        <div class="needs">
-          <span>⚡ <b id="energy">88</b></span>
-          <span>💧 <b id="thirst">72</b></span>
-          <span>☠ <b id="fear">18</b></span>
-          <span>♥ <b id="bond">24</b></span>
-          <span>🧠 <b id="ne">0</b> NE</span>
+        <div class="hud-sub">
+          <span id="rank">Dock Rat</span>
+          <span id="dex">0/10 species</span>
         </div>
-        <p id="hud-line" class="hud-line"></p>
-        <p id="discovered" class="hud-line"></p>
+        <div id="combo" hidden>x2</div>
       </div>
 
-      <div id="action-bar" hidden>
-        <button id="sense-btn" type="button" class="act-btn">Senses</button>
-        <button id="rest-btn" type="button" class="act-btn">Rest</button>
-        <button id="neuron-btn" type="button" class="act-btn">Neurons</button>
-        <button id="leap-btn" type="button" class="act-btn leap">Leap</button>
+      <div id="dock" hidden>
+        <button id="market-btn" type="button" class="dock-btn">Market</button>
+        <button id="upgrade-btn" type="button" class="dock-btn">Upgrades</button>
+        <button id="trade-btn" type="button" class="dock-btn">Trade</button>
       </div>
 
-      <div id="neurons" class="panel-modal" hidden>
+      <div id="market" class="panel-modal" hidden>
         <div class="panel-sheet">
-          <p class="eyebrow">Neuronal tree</p>
-          <h2>Reinforce discoveries</h2>
-          <p class="hint">Explore and interact to discover neurons. Rest at camp for NE.</p>
-          <div id="neuron-row"></div>
-          <button id="neuron-close" type="button" class="act-btn wide">Close</button>
+          <h2>Fish Market</h2>
+          <p class="hint">Sell your catch for coins. Rare species fetch more.</p>
+          <div id="cargo-list" class="cargo-list"></div>
+          <button id="sell-all" type="button" class="dock-btn wide gold">Sell All</button>
+          <button id="market-close" type="button" class="dock-btn wide ghost">Close</button>
         </div>
       </div>
 
-      <div id="interact" class="panel-modal" hidden>
+      <div id="upgrades" class="panel-modal" hidden>
         <div class="panel-sheet">
-          <h2 id="interact-title">Place</h2>
-          <p id="interact-flavor"></p>
-          <button id="interact-investigate" type="button" class="act-btn wide">Investigate fear</button>
-          <button id="interact-use" type="button" class="act-btn wide">Interact</button>
-          <button id="interact-close" type="button" class="act-btn wide ghost">Leave</button>
+          <h2>Deck Upgrades</h2>
+          <p class="hint">Incremental power for bigger hauls.</p>
+          <div id="upgrade-row"></div>
+          <button id="upgrade-close" type="button" class="dock-btn wide ghost">Close</button>
+        </div>
+      </div>
+
+      <div id="trade" class="panel-modal" hidden>
+        <div class="panel-sheet">
+          <h2>Rare Trades</h2>
+          <p class="hint">Bundle legendary fish for pearls and bonuses.</p>
+          <div id="trade-row"></div>
+          <button id="trade-close" type="button" class="dock-btn wide ghost">Close</button>
         </div>
       </div>
 
       <div id="overlay" class="overlay">
         <div class="panel">
-          <p class="eyebrow">Stick hominids · savanna odyssey</p>
-          <h1 id="title">Stick Ancestors</h1>
-          <p id="rank" class="rank">Lost Infant</p>
-          <div id="xp-wrap" class="xp-wrap"><div id="xp-bar" class="xp-bar"></div></div>
-          <p id="next-unlock" class="next-unlock">First evolution leap awaits</p>
+          <p class="eyebrow">Top-down arcade · incremental haul</p>
+          <h1 id="title">Harpoon Reef</h1>
+          <p id="rank-title" class="rank">Dock Rat</p>
           <p id="subtitle" class="subtitle">
-            Explore. Investigate fear. Eat, drink, groom. Discover neurons, reinforce them at camp, and leap generations.
+            Drag from your boat to aim. Release to harpoon. Reel rare fish, sell at the market, upgrade your rig, trade for pearls.
           </p>
-          <p id="result" class="result" hidden></p>
-          <button id="play" type="button">Begin Clan</button>
-          <p class="hint">Tap to walk · tap ? to investigate · Rest & Neurons at camp</p>
+          <button id="play" type="button">Cast Off</button>
+          <p class="hint">Aim · hook · reel · sell · upgrade · trade</p>
         </div>
       </div>
     </div>

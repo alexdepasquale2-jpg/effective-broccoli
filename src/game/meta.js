@@ -1,38 +1,16 @@
-export const MILESTONES = [
-  { leaps: 1, name: "Night Watcher" },
-  { leaps: 2, name: "Tool Knapper" },
-  { leaps: 3, name: "Savanna Walker" },
-];
+import { createSave } from "./economy.js";
 
 export function emptyMeta() {
   return {
-    leaps: 0,
-    xp: 0,
-    clan: null,
+    save: createSave(),
+    bestCombo: 0,
   };
 }
 
-export function titleForLeaps(leaps) {
-  let name = "Lost Infant";
-  for (const row of MILESTONES) {
-    if (leaps >= row.leaps) name = row.name;
-  }
-  return name;
-}
-
-export function nextMilestone(meta) {
-  const next = MILESTONES.find((row) => (meta.leaps || 0) < row.leaps);
-  if (!next) return null;
-  return {
-    name: next.name,
-    leaps: next.leaps,
-    need: next.leaps - (meta.leaps || 0),
-  };
-}
-
-export function applyLeapToMeta(meta, clan) {
-  const gained = 120 + clan.reinforced.length * 40;
-  meta.leaps = (meta.leaps || 0) + 1;
-  meta.xp = (meta.xp || 0) + gained;
-  return { gained, title: titleForLeaps(meta.leaps), next: nextMilestone(meta) };
+export function titleForCaught(caught) {
+  if (caught >= 200) return "Reef Baron";
+  if (caught >= 80) return "Abyss Trader";
+  if (caught >= 30) return "Harpoon Captain";
+  if (caught >= 10) return "Deck Hand";
+  return "Dock Rat";
 }

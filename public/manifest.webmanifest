@@ -1,12 +1,12 @@
 {
-  "name": "Stick Ancestors",
-  "short_name": "Ancestors",
-  "description": "Explore the savanna, conquer fear, grow neurons, and evolve your stick clan.",
+  "name": "Harpoon Reef",
+  "short_name": "Harpoon",
+  "description": "Top-down arcade harpoon fishing incremental.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#2f5f25",
-  "theme_color": "#2f5f25",
+  "background_color": "#0d3b66",
+  "theme_color": "#0d3b66",
   "icons": [
     {
       "src": "/icon.svg",

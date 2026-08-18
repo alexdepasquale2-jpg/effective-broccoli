@@ -1,17 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { applyLeapToMeta, emptyMeta, nextMilestone, titleForLeaps } from "./meta.js";
+import { emptyMeta, titleForCaught } from "./meta.js";
 
-describe("lineage meta", () => {
-  it("names ranks from evolution leaps", () => {
-    expect(titleForLeaps(0)).toBe("Lost Infant");
-    expect(titleForLeaps(2)).toBe("Tool Knapper");
+describe("meta", () => {
+  it("starts broke on the dock", () => {
+    const meta = emptyMeta();
+    expect(meta.save.coins).toBe(0);
   });
 
-  it("tracks next milestone", () => {
-    const meta = emptyMeta();
-    expect(nextMilestone(meta).name).toBe("Night Watcher");
-    const reward = applyLeapToMeta(meta, { reinforced: ["motricity", "olfactory"] });
-    expect(reward.gained).toBeGreaterThan(0);
-    expect(meta.leaps).toBe(1);
+  it("ranks captains by catch count", () => {
+    expect(titleForCaught(0)).toBe("Dock Rat");
+    expect(titleForCaught(40)).toBe("Harpoon Captain");
   });
 });

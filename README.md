@@ -1,33 +1,27 @@
-# Stick Ancestors
+# Harpoon Reef
 
-A mobile stick-figure take on **Ancestors: The Humankind Odyssey** — explore a savanna, conquer fear, discover neurons, reinforce them at camp, and leap generations.
+Top-down arcade harpoon incremental. Aim from your boat, hook fish, reel them in, sell at the market, buy upgrades, and trade rare species for pearls.
 
 ## Play
 
-**On a phone:** open the live HTTPS play link the agent gives you (`trycloudflare.com` while the session runs).
-
-Tap **Begin Clan**, then tap the ground to walk and tap glowing **?** markers to investigate fear.
-
-**On a computer:**
+**Phone:** use the live `trycloudflare.com` link from the agent session.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`.
+Open `http://localhost:5173`, tap **Cast Off**, drag from the boat to aim, release to fire.
 
 ## Loop
 
-- **Explore** the side-scrolling wilds: camp, berries, river, dark grove, rocks, tall grass, cave
-- **Investigate** unknown places to map them and grow fear neurons (Ancestors-style dread → knowledge)
-- **Survive** energy, thirst, and fear; groom clanmates at camp
-- **Discover neurons** by interacting (olfactory from food, striking from rocks, predator sense from grass, etc.)
-- **Rest** at camp to gain neuronal energy (NE)
-- **Reinforce** discovered neurons from the Neurons panel
-- **Evolution Leap** once Generational Memory is reinforced and you have 5+ neurons
+- **Harpoon** fish swimming around your boat (top-down)
+- **Reel** them in automatically — upgrade reel speed, range, and line strength
+- **Cargo** fills up — sell at the **Market** for coins
+- **Upgrades** make rarer fish spawn (sonar) and sell for more (trader's tongue)
+- **Trade** bundles of rare/legendary fish for pearls
 
-Progress persists in `localStorage`.
+Progress saves in `localStorage`.
 
 ## Scripts
 
@@ -35,11 +29,4 @@ Progress persists in `localStorage`.
 | --- | --- |
 | `npm run dev` | Dev server |
 | `npm test` | Unit tests |
-| `npm run build` | Production build to `docs/` |
-
-## Layout
-
-- `src/game/ancestors.js` — clan sim, neurons, fear, evolution (tested)
-- `src/game/wilds.js` — jungle map rendering
-- `src/game/game.js` — loop, UI, input
-- `src/game/stick.js` — hominid stick figures
+| `npm run build` | Build to `docs/` |

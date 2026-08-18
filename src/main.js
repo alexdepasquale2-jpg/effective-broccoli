@@ -7,34 +7,28 @@ const ui = {
   play: document.querySelector("#play"),
   title: document.querySelector("#title"),
   subtitle: document.querySelector("#subtitle"),
-  result: document.querySelector("#result"),
+  hud: document.querySelector("#hud"),
+  coins: document.querySelector("#coins"),
+  pearls: document.querySelector("#pearls"),
+  cargo: document.querySelector("#cargo"),
   rank: document.querySelector("#rank"),
-  xpBar: document.querySelector("#xp-bar"),
-  nextUnlock: document.querySelector("#next-unlock"),
-  clanHud: document.querySelector("#clan-hud"),
-  species: document.querySelector("#species"),
-  clanLine: document.querySelector("#clan-line"),
-  energy: document.querySelector("#energy"),
-  thirst: document.querySelector("#thirst"),
-  fear: document.querySelector("#fear"),
-  bond: document.querySelector("#bond"),
-  ne: document.querySelector("#ne"),
-  hudLine: document.querySelector("#hud-line"),
-  discovered: document.querySelector("#discovered"),
-  actionBar: document.querySelector("#action-bar"),
-  senseBtn: document.querySelector("#sense-btn"),
-  restBtn: document.querySelector("#rest-btn"),
-  neuronBtn: document.querySelector("#neuron-btn"),
-  leapBtn: document.querySelector("#leap-btn"),
-  neurons: document.querySelector("#neurons"),
-  neuronRow: document.querySelector("#neuron-row"),
-  neuronClose: document.querySelector("#neuron-close"),
-  interact: document.querySelector("#interact"),
-  interactTitle: document.querySelector("#interact-title"),
-  interactFlavor: document.querySelector("#interact-flavor"),
-  interactInvestigate: document.querySelector("#interact-investigate"),
-  interactUse: document.querySelector("#interact-use"),
-  interactClose: document.querySelector("#interact-close"),
+  rankTitle: document.querySelector("#rank-title"),
+  dex: document.querySelector("#dex"),
+  combo: document.querySelector("#combo"),
+  dock: document.querySelector("#dock"),
+  marketBtn: document.querySelector("#market-btn"),
+  upgradeBtn: document.querySelector("#upgrade-btn"),
+  tradeBtn: document.querySelector("#trade-btn"),
+  market: document.querySelector("#market"),
+  marketClose: document.querySelector("#market-close"),
+  cargoList: document.querySelector("#cargo-list"),
+  sellAll: document.querySelector("#sell-all"),
+  upgrades: document.querySelector("#upgrades"),
+  upgradeClose: document.querySelector("#upgrade-close"),
+  upgradeRow: document.querySelector("#upgrade-row"),
+  trade: document.querySelector("#trade"),
+  tradeClose: document.querySelector("#trade-close"),
+  tradeRow: document.querySelector("#trade-row"),
 };
 
 const game = new Game(canvas, ui);
@@ -47,8 +41,5 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     game.play();
   }
-  if (event.code === "Escape") {
-    game.closeNeurons();
-    game.closeInteract();
-  }
+  if (event.code === "Escape") game.closePanels();
 });

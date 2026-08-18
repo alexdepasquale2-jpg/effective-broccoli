@@ -1,20 +1,20 @@
-import { createClan } from "./ancestors.js";
+import { createSave } from "./economy.js";
 
-const KEY = "aether-meta-v1";
+const KEY = "harpoon-reef-v1";
 
 export function loadMeta(emptyMeta) {
   const fallback = emptyMeta();
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...fallback, clan: createClan() };
+    if (!raw) return fallback;
     const parsed = JSON.parse(raw);
     return {
       ...fallback,
       ...parsed,
-      clan: { ...createClan(), ...(parsed.clan || parsed.hero || {}) },
+      save: { ...createSave(), ...(parsed.save || {}) },
     };
   } catch {
-    return { ...fallback, clan: createClan() };
+    return fallback;
   }
 }
 
