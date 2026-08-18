@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, maximum-scale=1" />
+<meta name="theme-color" content="#0e1020" />
+<meta name="description" content="A small mobile-first web game foundation." />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Broccoli Drop</title>
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="icon" href="./assets/icons/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="./assets/icons/icon-180.png" />
+<link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game" aria-label="Game canvas" role="img"></canvas>
+
+    <!-- DOM overlay: menus and HUD live here so they stay crisp and accessible -->
+    <div id="ui" class="ui">
+      <div id="hud" class="hud hidden">
+        <span class="hud-score" id="hud-score">0</span>
+        <button class="hud-btn" id="btn-pause" type="button" aria-label="Pause">II</button>
+      </div>
+
+      <div id="panel-menu" class="panel">
+        <h1 class="title">Broccoli<span>Drop</span></h1>
+        <p class="subtitle">Slide to dodge. Grab the greens.</p>
+        <button class="btn btn-primary" id="btn-play" type="button">Play</button>
+        <p class="best">Best: <span id="menu-best">0</span></p>
+        <p class="hint">Drag anywhere &middot; or use &#8592; &#8594;</p>
+      </div>
+
+      <div id="panel-pause" class="panel hidden">
+        <h2 class="title-sm">Paused</h2>
+        <button class="btn btn-primary" id="btn-resume" type="button">Resume</button>
+        <button class="btn" id="btn-quit" type="button">Quit</button>
+      </div>
+
+      <div id="panel-over" class="panel hidden">
+        <h2 class="title-sm">Game Over</h2>
+        <p class="score-final"><span id="over-score">0</span></p>
+        <p class="best">Best: <span id="over-best">0</span></p>
+        <button class="btn btn-primary" id="btn-retry" type="button">Retry</button>
+        <button class="btn" id="btn-menu" type="button">Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

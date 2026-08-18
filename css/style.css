@@ -1,0 +1,155 @@
+/* Mobile-first shell: full-viewport, no scroll, no browser gestures stealing input. */
+:root {
+  --bg: #0e1020;
+  --bg-2: #171a33;
+  --fg: #eef1ff;
+  --muted: #9aa2c8;
+  --accent: #6ee7a8;
+  --accent-2: #4cc4ff;
+  --danger: #ff6b81;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(120% 90% at 50% 0%, var(--bg-2) 0%, var(--bg) 70%);
+}
+
+/* Pinned rather than laid out: a percentage height inside the centred grid
+   resolves against the canvas's own intrinsic size, which feeds back into
+   resize() and lets the canvas grow without bound. */
+#game {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* Overlay layer. Pointer events are opt-in per element so the canvas stays reachable. */
+.ui {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom));
+  pointer-events: none;
+}
+
+.hidden { display: none !important; }
+
+.hud {
+  position: absolute;
+  top: calc(12px + var(--safe-top));
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hud-score {
+  font-size: clamp(28px, 9vw, 44px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .5);
+}
+
+.hud-btn {
+  pointer-events: auto;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .1);
+  color: var(--fg);
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+
+.panel {
+  pointer-events: auto;
+  width: min(360px, 100%);
+  padding: 28px 22px;
+  border-radius: 24px;
+  background: rgba(14, 16, 32, .82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, .08);
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .45);
+}
+
+.title {
+  font-size: clamp(34px, 12vw, 52px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+.title span { color: var(--accent); }
+
+.title-sm { font-size: 30px; font-weight: 800; }
+
+.subtitle, .hint, .best { color: var(--muted); }
+.subtitle { margin: 10px 0 22px; font-size: 15px; }
+.best { margin-top: 14px; font-size: 14px; }
+.hint { margin-top: 6px; font-size: 12px; opacity: .75; }
+
+.score-final {
+  margin: 12px 0 0;
+  font-size: 64px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.btn {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 15px 18px;
+  border: 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .1);
+  color: var(--fg);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  /* Comfortable tap target on small screens. */
+  min-height: 52px;
+}
+
+.btn:active { transform: translateY(1px); }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #05261a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn:active { transform: none; }
+}
