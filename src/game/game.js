@@ -19,6 +19,7 @@ import {
 import { orbMultiplier, pickSlice, shardCollides, sliceName } from "./slice.js";
 import { AudioBus } from "./audio.js";
 import { loadMeta, saveBestScore, saveMeta } from "./storage.js";
+import { createCamera, floorCorners, projectPoint, unprojectPoint, vanishingPoint } from "./perspective.js";
 import {
   circleHit,
   clamp,
@@ -71,12 +72,13 @@ export class Game {
     this.fourD = { tesseract: null, cell16: null, slice: 1 };
     this.run = createRun();
     this.mods = createMods({});
-    this.pointer = { x: 0, y: 0, active: false, startX: 0, startY: 0, startAt: 0 };
+    this.pointer = { x: 0, y: 0, sx: 0, sy: 0, active: false, startX: 0, startY: 0, startAt: 0 };
     this.orbs = [];
     this.shards = [];
     this.particles = [];
     this.trail = [];
     this.stars = [];
+    this.camera = createCamera();
     this.running = false;
     this.boundFrame = (time) => this.frame(time);
 
@@ -115,21 +117,41 @@ export class Game {
   }
 
   seedStars() {
-    const count = Math.round((this.width * this.height) / 9000);
-    this.stars = Array.from({ length: clamp(count, 50, 140) }, () => ({
-      x: Math.random() * this.width,
-      y: Math.random() * this.height,
-      z: rand(0.2, 1.2),
+    const count = 90;
+    this.stars = Array.from({ length: count }, () => ({
+      side: Math.floor(rand(0, 3)) - 1,
+      t: Math.random(),
       tw: rand(0, Math.PI * 2),
-      size: rand(0.6, 2.2),
+      size: rand(0.5, 2.1),
     }));
+  }
+
+  world() {
+    return { width: this.width, height: this.height };
+  }
+
+  view(x, y) {
+    return projectPoint(x, y, this.world(), this.camera);
+  }
+
+  updateCamera(dt) {
+    const target = this.run.polarity >= 0 ? 0.72 : -0.72;
+    const folding = this.run.foldTimer > 0;
+    this.camera.shear += (target - this.camera.shear) * Math.min(1, (folding ? 8 : 3.2) * dt);
+    this.camera.punch = Math.max(0, this.camera.punch - dt * 2.4);
+    if (folding) this.camera.punch = Math.max(this.camera.punch, 0.22);
   }
 
   bindInput() {
     const toLocal = (event) => {
       const rect = this.canvas.getBoundingClientRect();
-      this.pointer.x = clamp(event.clientX - rect.left, 0, this.width);
-      this.pointer.y = clamp(event.clientY - rect.top, 0, this.height);
+      const sx = clamp(event.clientX - rect.left, 0, this.width);
+      const sy = clamp(event.clientY - rect.top, 0, this.height);
+      this.pointer.sx = sx;
+      this.pointer.sy = sy;
+      const world = unprojectPoint(sx, sy, this.world(), this.camera);
+      this.pointer.x = clamp(world.x, 0, this.width);
+      this.pointer.y = clamp(world.y, 0, this.height);
     };
 
     const onDown = (event) => {
@@ -137,8 +159,8 @@ export class Game {
       if (this.uiTarget(event)) return;
       this.pointer.active = true;
       toLocal(event);
-      this.pointer.startX = this.pointer.x;
-      this.pointer.startY = this.pointer.y;
+      this.pointer.startX = this.pointer.sx;
+      this.pointer.startY = this.pointer.sy;
       this.pointer.startAt = performance.now();
       if (this.state === STATES.playing) {
         try {
@@ -157,7 +179,7 @@ export class Game {
 
     const onUp = (event) => {
       if (this.pointer.active && this.state === STATES.playing && !this.uiTarget(event)) {
-        const moved = distance(this.pointer.x, this.pointer.y, this.pointer.startX, this.pointer.startY);
+        const moved = distance(this.pointer.sx, this.pointer.sy, this.pointer.startX, this.pointer.startY);
         const elapsed = performance.now() - this.pointer.startAt;
         if (moved < 18 && elapsed < 280) this.tryFold();
       }
@@ -315,6 +337,7 @@ export class Game {
         : 0.7;
     stepFourDAngles(this.player.angles, dt, speed);
     this.projectPlayer();
+    this.updateCamera(dt);
 
     if (this.state === STATES.playing) {
       this.elapsed += dt;
@@ -357,6 +380,7 @@ export class Game {
     this.run.foldCooldown = this.mods.foldCooldown;
     this.flash = 0.28;
     this.shake = Math.max(this.shake, 0.35);
+    this.camera.punch = Math.max(this.camera.punch, 0.55);
     this.audio.fold();
     if (this.mods.echoCount > 0) {
       const n = this.mods.echoCount;
@@ -734,14 +758,10 @@ export class Game {
   }
 
   driftStars(dt) {
-    const rush = 18 * (1 + this.mods.frenzy * 0.35);
     for (const star of this.stars) {
-      star.y += star.z * rush * dt;
-      star.tw += dt * star.z;
-      if (star.y > this.height + 4) {
-        star.y = -4;
-        star.x = Math.random() * this.width;
-      }
+      star.t += dt * 0.04 * (0.4 + star.size);
+      star.tw += dt * 2;
+      if (star.t > 1.05) star.t -= 1.15;
     }
   }
 
@@ -771,16 +791,9 @@ export class Game {
     ctx.save();
     ctx.translate(shakeX, shakeY);
 
-    this.drawBackdrop();
+    this.drawWell();
     this.drawStars();
-    this.drawOrbs();
-    this.drawShards();
-    this.drawTrail();
-    this.drawEchoes();
-    this.drawSplitRank();
-    if (this.state !== STATES.dying && this.state !== STATES.over) {
-      this.drawPlayer();
-    }
+    this.drawSorted();
     this.drawParticles();
 
     ctx.restore();
@@ -792,124 +805,237 @@ export class Game {
     }
   }
 
-  drawBackdrop() {
+  drawWell() {
     const { ctx, width, height } = this;
+    const { farLeft, farRight, nearLeft, nearRight, vp } = floorCorners(this.world(), this.camera);
+    const ana = this.run.polarity >= 0;
+
     const sky = ctx.createLinearGradient(0, 0, 0, height);
-    sky.addColorStop(0, this.run.polarity > 0 ? "#10203c" : "#1a082c");
-    sky.addColorStop(0.45, "#0b0618");
-    sky.addColorStop(1, "#05030c");
+    sky.addColorStop(0, ana ? "#071018" : "#140814");
+    sky.addColorStop(0.35, "#0b0618");
+    sky.addColorStop(1, "#04020a");
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, width, height);
 
-    const nebula = ctx.createRadialGradient(
-      width * 0.7,
-      height * 0.18,
-      20,
-      width * 0.7,
-      height * 0.18,
-      width * 0.7,
-    );
-    nebula.addColorStop(0, this.run.polarity > 0 ? "rgba(32, 120, 196, 0.32)" : "rgba(118, 62, 196, 0.35)");
-    nebula.addColorStop(1, "rgba(118, 62, 196, 0)");
-    ctx.fillStyle = nebula;
+    const mouth = ctx.createRadialGradient(vp.x, vp.y, 4, vp.x, vp.y, width * 0.42);
+    mouth.addColorStop(0, ana ? "rgba(120, 230, 255, 0.42)" : "rgba(210, 130, 255, 0.42)");
+    mouth.addColorStop(0.18, ana ? "rgba(40, 90, 180, 0.2)" : "rgba(90, 40, 140, 0.22)");
+    mouth.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = mouth;
     ctx.fillRect(0, 0, width, height);
+
+    ctx.beginPath();
+    ctx.moveTo(nearLeft.x, nearLeft.y);
+    ctx.lineTo(farLeft.x, farLeft.y);
+    ctx.lineTo(vp.x, vp.y);
+    ctx.lineTo(farRight.x, farRight.y);
+    ctx.lineTo(nearRight.x, nearRight.y);
+    ctx.closePath();
+    const floor = ctx.createLinearGradient(0, vp.y, 0, nearLeft.y);
+    floor.addColorStop(0, ana ? "rgba(28, 48, 90, 0.55)" : "rgba(48, 24, 78, 0.55)");
+    floor.addColorStop(1, "rgba(8, 6, 16, 0.92)");
+    ctx.fillStyle = floor;
+    ctx.fill();
+    ctx.strokeStyle = ana ? "rgba(92, 225, 255, 0.28)" : "rgba(210, 130, 255, 0.28)";
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(nearLeft.x, nearLeft.y);
+    ctx.lineTo(vp.x, vp.y);
+    ctx.lineTo(nearRight.x, nearRight.y);
+    ctx.strokeStyle = "rgba(255,255,255,0.12)";
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.2;
+    ctx.strokeStyle = "rgba(180, 210, 255, 0.5)";
+    for (let i = 1; i <= 8; i += 1) {
+      const y = this.height * (i / 9);
+      const a = projectPoint(0, y, this.world(), this.camera);
+      const b = projectPoint(this.width, y, this.world(), this.camera);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+    for (let i = 1; i <= 6; i += 1) {
+      const x = this.width * (i / 7);
+      const a = projectPoint(x, 0, this.world(), this.camera);
+      const b = projectPoint(x, this.height, this.world(), this.camera);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.beginPath();
+    ctx.ellipse(vp.x, vp.y + 8, 34 + this.camera.punch * 40, 12 + this.camera.punch * 10, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = ana ? "rgba(160, 245, 255, 0.7)" : "rgba(230, 170, 255, 0.7)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    const ghost = vanishingPoint(this.world(), { ...this.camera, shear: this.camera.shear * -0.55 });
+    ctx.beginPath();
+    ctx.ellipse(ghost.x, ghost.y + 6, 18, 7, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = ana ? "rgba(210, 130, 255, 0.25)" : "rgba(92, 225, 255, 0.25)";
+    ctx.stroke();
   }
 
   drawStars() {
     const { ctx } = this;
+    const vp = vanishingPoint(this.world(), this.camera);
+    const { nearLeft, nearRight } = floorCorners(this.world(), this.camera);
     for (const star of this.stars) {
-      const alpha = 0.25 + Math.abs(Math.sin(star.tw)) * 0.7;
-      ctx.fillStyle = `rgba(230, 236, 255, ${alpha * star.z})`;
-      ctx.beginPath();
-      ctx.arc(star.x, star.y, star.size * star.z, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  drawOrbs() {
-    const { ctx } = this;
-    for (const orb of this.orbs) {
-      const pulse = 1 + Math.sin(orb.phase) * 0.08;
-      const color = orb.jackpot ? { glow: "#fff4c2", orb: "#ffe27a" } : SLICE_COLORS[String(orb.slice)];
-      ctx.save();
-      ctx.shadowColor = color.glow;
-      ctx.shadowBlur = orb.jackpot ? 24 : 16;
-      ctx.fillStyle = color.orb;
-      ctx.beginPath();
-      ctx.arc(orb.x, orb.y, orb.r * pulse, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.7)";
-      ctx.beginPath();
-      ctx.arc(orb.x - orb.r * 0.28, orb.y - orb.r * 0.28, orb.r * 0.28, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  drawShards() {
-    const { ctx } = this;
-    for (const shard of this.shards) {
-      const color = SLICE_COLORS[String(shard.slice)];
-      ctx.save();
-      ctx.translate(shard.x, shard.y);
-      ctx.rotate(shard.rot);
-      ctx.globalAlpha = shard.ghost ? 0.28 : 1;
-      ctx.shadowColor = color.glow;
-      ctx.shadowBlur = shard.ghost ? 6 : 16;
-      ctx.beginPath();
-      for (let i = 0; i < shard.sides; i += 1) {
-        const angle = (i / shard.sides) * Math.PI * 2;
-        const radius = shard.r * (i % 2 === 0 ? 1 : 0.68);
-        const x = Math.cos(angle) * radius;
-        const y = Math.sin(angle) * radius;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+      const p = 0.08 + star.t * 0.9;
+      let x;
+      let y;
+      if (star.side < 0) {
+        x = nearLeft.x + (vp.x - nearLeft.x) * (1 - p);
+        y = nearLeft.y + (vp.y - nearLeft.y) * (1 - p);
+      } else if (star.side > 0) {
+        x = nearRight.x + (vp.x - nearRight.x) * (1 - p);
+        y = nearRight.y + (vp.y - nearRight.y) * (1 - p);
+      } else {
+        const along = projectPoint(this.width * (0.15 + (star.tw % 1) * 0.7), star.t * this.height, this.world(), this.camera);
+        x = along.x;
+        y = along.y;
       }
-      ctx.closePath();
-      ctx.fillStyle = color.fill;
-      ctx.fill();
-      ctx.strokeStyle = color.stroke;
-      ctx.lineWidth = 2;
-      ctx.setLineDash(shard.slice === 0 ? [] : shard.ghost ? [5, 4] : []);
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-
-  drawTrail() {
-    const { ctx } = this;
-    for (const t of this.trail) {
-      const a = t.life / 0.38;
-      ctx.fillStyle = t.polarity > 0 ? `rgba(92, 225, 255, ${a * 0.12})` : `rgba(180, 110, 255, ${a * 0.12})`;
+      const alpha = 0.2 + Math.abs(Math.sin(star.tw)) * 0.7;
+      ctx.fillStyle = `rgba(230, 236, 255, ${alpha * (0.35 + p)})`;
       ctx.beginPath();
-      ctx.arc(t.x, t.y, (t.r || this.player.r) * (0.55 + a * 0.5), 0, Math.PI * 2);
+      ctx.arc(x, y, star.size * (0.4 + p), 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
-  drawEchoes() {
+  drawShadow(x, y, r, alpha) {
+    const v = this.view(x, y);
     const { ctx } = this;
-    for (const echo of this.run.echoes) {
-      const a = clamp(echo.life / this.mods.echoLife, 0, 1);
-      ctx.strokeStyle = echo.polarity > 0 ? `rgba(92, 225, 255, ${a * 0.7})` : `rgba(200, 120, 255, ${a * 0.7})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(echo.x, echo.y, echo.r, 0, Math.PI * 2);
-      ctx.stroke();
+    ctx.save();
+    ctx.translate(v.x, v.y + 6 * v.s);
+    ctx.scale(1, 0.32);
+    ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * v.s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawSorted() {
+    const items = [
+      ...this.orbs.map((e) => ({ y: e.y, kind: "orb", e })),
+      ...this.shards.map((e) => ({ y: e.y, kind: "shard", e })),
+      ...this.trail.map((e) => ({ y: e.y, kind: "trail", e })),
+      ...this.run.echoes.map((e) => ({ y: e.y, kind: "echo", e })),
+    ];
+    if (this.mods.splitRank && this.state !== STATES.dying && this.state !== STATES.over) {
+      const ang = this.elapsed * 2.4;
+      const dist = 50 + this.mods.splitRank * 12;
+      items.push({
+        y: this.player.y + Math.sin(ang) * dist,
+        kind: "split",
+        e: {
+          x: this.player.x + Math.cos(ang) * dist,
+          y: this.player.y + Math.sin(ang) * dist,
+        },
+      });
+    }
+    if (this.state !== STATES.dying && this.state !== STATES.over) {
+      items.push({ y: this.player.y, kind: "player" });
+    }
+    items.sort((a, b) => a.y - b.y);
+    for (const item of items) {
+      if (item.kind === "orb") this.drawOrb(item.e);
+      else if (item.kind === "shard") this.drawShard(item.e);
+      else if (item.kind === "trail") this.drawTrailBit(item.e);
+      else if (item.kind === "echo") this.drawEcho(item.e);
+      else if (item.kind === "split") this.drawSplit(item.e);
+      else this.drawPlayer();
     }
   }
 
-  drawSplitRank() {
-    if (!this.mods.splitRank || this.state === STATES.dying || this.state === STATES.over) return;
-    const ang = this.elapsed * 2.4;
-    const dist = 50 + this.mods.splitRank * 12;
-    const x = this.player.x + Math.cos(ang) * dist;
-    const y = this.player.y + Math.sin(ang) * dist;
+  drawOrb(orb) {
+    const v = this.view(orb.x, orb.y);
+    const pulse = 1 + Math.sin(orb.phase) * 0.08;
+    const color = orb.jackpot ? { glow: "#fff4c2", orb: "#ffe27a" } : SLICE_COLORS[String(orb.slice)];
+    this.drawShadow(orb.x, orb.y, orb.r, 0.25);
+    const { ctx } = this;
+    ctx.save();
+    ctx.translate(v.x, v.y);
+    ctx.scale(v.s, v.s * 0.92);
+    ctx.shadowColor = color.glow;
+    ctx.shadowBlur = orb.jackpot ? 24 : 16;
+    ctx.fillStyle = color.orb;
+    ctx.beginPath();
+    ctx.arc(0, 0, orb.r * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.beginPath();
+    ctx.arc(-orb.r * 0.28, -orb.r * 0.28, orb.r * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawShard(shard) {
+    const v = this.view(shard.x, shard.y);
+    const color = SLICE_COLORS[String(shard.slice)];
+    this.drawShadow(shard.x, shard.y, shard.r, shard.ghost ? 0.08 : 0.3);
+    const { ctx } = this;
+    ctx.save();
+    ctx.translate(v.x, v.y);
+    ctx.scale(v.s, v.s * 0.88);
+    ctx.rotate(shard.rot);
+    ctx.globalAlpha = shard.ghost ? 0.28 : 1;
+    ctx.shadowColor = color.glow;
+    ctx.shadowBlur = shard.ghost ? 6 : 16;
+    ctx.beginPath();
+    for (let i = 0; i < shard.sides; i += 1) {
+      const angle = (i / shard.sides) * Math.PI * 2;
+      const radius = shard.r * (i % 2 === 0 ? 1 : 0.68);
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = color.fill;
+    ctx.fill();
+    ctx.strokeStyle = color.stroke;
+    ctx.lineWidth = 2;
+    ctx.setLineDash(shard.slice === 0 ? [] : shard.ghost ? [5, 4] : []);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawTrailBit(t) {
+    const v = this.view(t.x, t.y);
+    const a = t.life / 0.38;
+    const { ctx } = this;
+    ctx.fillStyle = t.polarity > 0 ? `rgba(92, 225, 255, ${a * 0.12})` : `rgba(180, 110, 255, ${a * 0.12})`;
+    ctx.beginPath();
+    ctx.ellipse(v.x, v.y, (t.r || this.player.r) * v.s * (0.55 + a * 0.5), (t.r || this.player.r) * v.s * 0.28, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawEcho(echo) {
+    const v = this.view(echo.x, echo.y);
+    const a = clamp(echo.life / this.mods.echoLife, 0, 1);
+    const { ctx } = this;
+    ctx.strokeStyle = echo.polarity > 0 ? `rgba(92, 225, 255, ${a * 0.7})` : `rgba(200, 120, 255, ${a * 0.7})`;
+    ctx.lineWidth = 2 * v.s;
+    ctx.beginPath();
+    ctx.ellipse(v.x, v.y, echo.r * v.s, echo.r * v.s * 0.45, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  drawSplit(split) {
+    const v = this.view(split.x, split.y);
     const { ctx } = this;
     ctx.strokeStyle = "rgba(255, 226, 122, 0.85)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(x, y, 13 + this.mods.splitRank * 2, 0, Math.PI * 2);
+    ctx.ellipse(v.x, v.y, (13 + this.mods.splitRank * 2) * v.s, (13 + this.mods.splitRank * 2) * v.s * 0.45, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
 
@@ -917,8 +1043,11 @@ export class Game {
     const { ctx, player, fourD } = this;
     if (!fourD.tesseract || !fourD.cell16) this.projectPlayer();
     const { tesseract, cell16, slice } = fourD;
+    const v = this.view(player.x, player.y);
+    this.drawShadow(player.x, player.y, player.r, 0.35);
     ctx.save();
-    ctx.translate(player.x, player.y);
+    ctx.translate(v.x, v.y);
+    ctx.scale(v.s, v.s * 1.12);
     if (this.run.foldTimer > 0) {
       ctx.translate(rand(-3, 3), rand(-3, 3));
     }
@@ -987,10 +1116,11 @@ export class Game {
     const { ctx } = this;
     for (const p of this.particles) {
       const a = p.life / (p.max || 0.6);
+      const v = this.view(p.x, p.y);
       ctx.globalAlpha = clamp(a, 0, 1);
       ctx.fillStyle = p.color;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.arc(v.x, v.y, p.size * v.s, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
     }
