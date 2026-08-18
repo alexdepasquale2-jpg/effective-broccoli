@@ -65,8 +65,8 @@ export class Game {
 
   resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    const width = Math.round(window.visualViewport?.width ?? window.innerWidth);
+    const height = Math.round(window.visualViewport?.height ?? window.innerHeight);
     this.dpr = dpr;
     this.width = width;
     this.height = height;
@@ -101,7 +101,11 @@ export class Game {
       this.pointer.active = true;
       toLocal(event);
       if (this.state === STATES.playing) {
-        this.canvas.setPointerCapture?.(event.pointerId);
+        try {
+          event.target?.setPointerCapture?.(event.pointerId);
+        } catch {
+          // Some mobile browsers reject capture on non-canvas targets.
+        }
       }
     };
 
@@ -114,11 +118,19 @@ export class Game {
       this.pointer.active = false;
     };
 
-    this.canvas.addEventListener("pointerdown", onDown);
-    this.canvas.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
+    window.addEventListener(
+      "touchmove",
+      (event) => {
+        event.preventDefault();
+      },
+      { passive: false },
+    );
     window.addEventListener("resize", () => this.resize());
+    window.visualViewport?.addEventListener("resize", () => this.resize());
     document.addEventListener("visibilitychange", () => {
       this.lastTime = performance.now();
     });
