@@ -1,15 +1,16 @@
 {
   "name": "Let It Pass",
   "short_name": "Let It Pass",
-  "description": "A quiet game about inaction. Things happen. You may act, or not.",
-  "start_url": "/",
+  "description": "A year in a valley where most things resolve without you. Watch, tend, act, or leave it alone.",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#05070c",
+  "background_color": "#04060a",
   "theme_color": "#0b1220",
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "./icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

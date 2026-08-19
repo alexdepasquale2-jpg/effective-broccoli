@@ -32,6 +32,23 @@ Progress persists in `localStorage`.
 
 Tap or click a card to act. Everything else is optional. `Esc` closes the ledger; `Enter` begins.
 
+## Hosting
+
+The production build is committed to `docs/` and uses fully relative asset paths
+(`base: './'`), so it can be served from any directory on any static host with no
+configuration.
+
+**GitHub Pages** — in the repository, go to **Settings → Pages**, set *Source* to
+**Deploy from a branch**, choose branch `cursor/2d-mobile-game-a595` (or `main`
+once merged) and folder **`/docs`**, then Save. The game will be live at:
+
+```
+https://alexdepasquale2-jpg.github.io/effective-broccoli/
+```
+
+**Anything else** — the contents of `docs/` are a plain static site. Drag the
+folder onto Netlify Drop, or run `npx serve docs`, and it works as-is.
+
 ## Scripts
 
 ```bash
