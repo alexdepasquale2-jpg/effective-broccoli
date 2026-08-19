@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { emptyRecord, loadRecord, mergeSession, saveRecord } from "./storage.js";
-import { createLedger } from "./ledger.js";
+import { emptyRecord, loadRecord, mergeRun, recordLine, saveRecord } from "./storage.js";
+import { createChronicle } from "./chronicle.js";
+import { applyEffects, createWorld } from "./world.js";
 
 const memory = new Map();
 
@@ -17,22 +18,28 @@ afterEach(() => memory.clear());
 
 describe("record", () => {
   it("starts empty and round-trips", () => {
-    expect(loadRecord().bestStillness).toBe(0);
-    saveRecord({ ...emptyRecord(), bestStillness: 420 });
-    expect(loadRecord().bestStillness).toBe(420);
+    expect(loadRecord().runs).toBe(0);
+    saveRecord({ ...emptyRecord(), bestValley: 71 });
+    expect(loadRecord().bestValley).toBe(71);
   });
 
-  it("keeps only the deepest session and accumulates lifetime totals", () => {
-    const ledger = { ...createLedger(), seen: 6, acted: 2, changedAnything: 1 };
-    let record = mergeSession(emptyRecord(), { stillness: 300.7, depthLevel: 3, ledger });
-    expect(record.bestStillness).toBe(300);
-    expect(record.deepestDepth).toBe(3);
+  it("keeps the best valley and accumulates lifetime totals", () => {
+    const chronicle = { ...createChronicle(), beats: 20, tended: 3, acted: 2, threadsChanged: 1, threadsWorsened: 1 };
+    const good = applyEffects(createWorld(), { self: 20, kin: 20, work: 20, town: 20, world: 20 });
 
-    record = mergeSession(record, { stillness: 100, depthLevel: 1, ledger });
-    expect(record.bestStillness).toBe(300);
-    expect(record.deepestDepth).toBe(3);
-    expect(record.lifetimeSeen).toBe(12);
-    expect(record.lifetimeActed).toBe(4);
-    expect(record.sessions).toBe(2);
+    let record = mergeRun(emptyRecord(), { world: good, chronicle, peakStillness: 812.6 });
+    expect(record.bestStillness).toBe(812);
+    expect(record.lifetimeInterventions).toBe(5);
+
+    const poor = applyEffects(createWorld(), { self: -30, kin: -30, work: -30, town: -30, world: -30 });
+    record = mergeRun(record, { world: poor, chronicle, peakStillness: 100 });
+    expect(record.bestValley).toBeGreaterThan(50);
+    expect(record.runs).toBe(2);
+    expect(record.lifetimeBeats).toBe(40);
+  });
+
+  it("says so plainly when you have never intervened", () => {
+    const record = { ...emptyRecord(), runs: 2 };
+    expect(recordLine(record)).toContain("never once put your hand in");
   });
 });

@@ -12,7 +12,7 @@
     <meta name="theme-color" content="#0b1220" />
     <meta
       name="description"
-      content="Let It Pass — a quiet game about inaction. Things happen. You may act, or not. Most of the time it changes nothing."
+      content="Let It Pass — a year in a valley where most things resolve without you. Watch, tend, act, or leave it alone."
     />
     <title>Let It Pass</title>
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -29,74 +29,103 @@
     <div id="app">
       <canvas id="game" aria-label="Let It Pass"></canvas>
 
-      <!-- Quiet HUD -->
+      <!-- HUD -->
       <div id="hud" hidden>
-        <div class="hud-left">
-          <div class="stillness-row">
-            <span id="stillness">0</span>
-            <span id="multiplier" class="multiplier">×1.0</span>
+        <div class="hud-row">
+          <div class="hud-block">
+            <div class="stillness-row">
+              <span id="stillness">0</span>
+              <span id="multiplier" class="multiplier">×1.0</span>
+            </div>
+            <div class="depth-row">
+              <span id="depth-name">Restless</span>
+              <div class="track"><div id="depth-track" class="track-fill"></div></div>
+            </div>
           </div>
-          <div class="depth-row">
-            <span id="depth-name">Restless</span>
-            <div class="track"><div id="progress" class="track-fill"></div></div>
+
+          <div class="hud-block right">
+            <div class="day-row">
+              <span id="day-label">Day 1 / 12</span>
+              <span id="season-label" class="season">Thaw</span>
+            </div>
+            <div class="vitality-row">
+              <span class="mini-label">vitality</span>
+              <div class="track wide"><div id="vitality" class="track-fill vital"></div></div>
+              <span id="vitality-text" class="mini-value">100</span>
+            </div>
           </div>
         </div>
-        <div class="hud-right">
-          <span id="untouched" class="untouched">0 let pass · 0 acted on</span>
+
+        <div class="hud-foot">
+          <span id="tally" class="tally">0 passed · 0 tended · 0 acted</span>
+          <span class="attune">read: <b id="attune-label">Unread</b></span>
+          <button id="chronicle-btn" type="button" class="btn ghost tiny">Chronicle</button>
         </div>
       </div>
 
-      <!-- Bottom dock -->
-      <div id="dock" hidden>
-        <button id="nothing-btn" type="button" class="btn tempt">DO SOMETHING</button>
-        <div class="dock-side">
-          <button id="ledger-btn" type="button" class="btn ghost">Ledger</button>
-          <button id="stop-btn" type="button" class="btn ghost">Stop</button>
+      <!-- Night -->
+      <div id="night-sheet" class="sheet" hidden>
+        <div class="sheet-box">
+          <p class="eyebrow">The day closes</p>
+          <h2 id="night-title">Night of day 1</h2>
+          <p id="night-sub" class="sub"></p>
+          <div id="night-body" class="night-body"></div>
+          <div id="night-world" class="meters"></div>
+          <button id="sleep-btn" type="button" class="btn wide">Sleep</button>
         </div>
       </div>
 
-      <!-- Ledger -->
-      <div id="ledger-sheet" class="sheet" hidden>
+      <!-- Chronicle -->
+      <div id="chronicle-sheet" class="sheet" hidden>
         <div class="sheet-box">
           <p class="eyebrow">So far</p>
-          <h2>The Ledger</h2>
-          <div id="ledger-lines" class="lines"></div>
-          <p id="ledger-verdict" class="verdict"></p>
-          <button id="ledger-close" type="button" class="btn wide ghost">Go back to nothing</button>
+          <h2>The Chronicle</h2>
+          <div id="chronicle-lines" class="lines"></div>
+          <div id="chronicle-log" class="log"></div>
+          <button id="chronicle-close" type="button" class="btn wide ghost">Back to the valley</button>
         </div>
       </div>
 
       <!-- Ending -->
       <div id="end-sheet" class="sheet" hidden>
         <div class="sheet-box">
-          <p class="eyebrow">The session is over</p>
-          <h2 id="end-title">You stopped</h2>
-          <p id="end-lead" class="lead"></p>
+          <p class="eyebrow">Twelve days later</p>
+          <h2 id="end-title">The year, accounted for</h2>
+          <div id="end-world" class="meters"></div>
+          <p id="end-world-verdict" class="verdict soft"></p>
           <div id="end-stats" class="stats"></div>
           <div id="end-lines" class="lines"></div>
           <p id="end-verdict" class="verdict"></p>
-          <button id="again-btn" type="button" class="btn wide">Sit down again</button>
+          <button id="again-btn" type="button" class="btn wide">Live it again</button>
         </div>
       </div>
 
       <!-- Title -->
       <div id="overlay" class="sheet">
         <div class="sheet-box title-box">
-          <p class="eyebrow">A game about not doing things</p>
+          <p class="eyebrow">A year in a valley · a game about not doing things</p>
           <h1>Let It Pass</h1>
           <p class="lead">
-            Things will arrive. Each one offers you something to do about it.
+            Twelve days. Five corners of a life — yourself, your kin, your work,
+            the town, the world. Stories run through all of them whether you are
+            in them or not.
+          </p>
+          <div class="verbs">
+            <p><b>Let it pass</b> — do nothing. Free. Usually right.</p>
+            <p><b>Watch</b> — spend a little to see what a moment actually needs.</p>
+            <p><b>Tend</b> — be present without fixing. Costs you.</p>
+            <p><b>Act</b> — put your hand in. Costs you a great deal.</p>
+          </div>
+          <p class="lead dim">
+            Loud things are rarely the ones that need you — but not never, so you
+            cannot make it a rule. Every intervention tires you, and each one in a
+            day costs more than the last. Run empty and you lose the day.
           </p>
           <p class="lead dim">
-            You can act. You can also sit there. Most of what arrives resolves the
-            same either way — but acting always costs you something, and the loud
-            things are almost never the ones that need you.
+            At the end you will be shown each story's ending beside the ending it
+            would have had if you had never touched it.
           </p>
-          <p class="lead dim">
-            Stillness accrues while you leave the world alone. At the end, the ledger
-            will tell you how many of your interventions changed anything at all.
-          </p>
-          <button id="play" type="button" class="btn wide">Begin doing nothing</button>
+          <button id="play" type="button" class="btn wide">Begin the year</button>
           <p class="footnote"><span id="record-line"></span></p>
         </div>
       </div>

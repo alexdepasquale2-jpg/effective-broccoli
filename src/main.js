@@ -1,5 +1,6 @@
 import "./style.css";
 import { Game } from "./game/game.js";
+import { recordLine } from "./game/storage.js";
 
 const canvas = document.querySelector("#game");
 const ui = {
@@ -11,22 +12,31 @@ const ui = {
   stillness: document.querySelector("#stillness"),
   multiplier: document.querySelector("#multiplier"),
   depthName: document.querySelector("#depth-name"),
-  progress: document.querySelector("#progress"),
-  untouched: document.querySelector("#untouched"),
+  depthTrack: document.querySelector("#depth-track"),
+  dayLabel: document.querySelector("#day-label"),
+  seasonLabel: document.querySelector("#season-label"),
+  vitality: document.querySelector("#vitality"),
+  vitalityText: document.querySelector("#vitality-text"),
+  tally: document.querySelector("#tally"),
+  attuneLabel: document.querySelector("#attune-label"),
+  chronicleBtn: document.querySelector("#chronicle-btn"),
 
-  dock: document.querySelector("#dock"),
-  nothingBtn: document.querySelector("#nothing-btn"),
-  ledgerBtn: document.querySelector("#ledger-btn"),
-  stopBtn: document.querySelector("#stop-btn"),
+  nightSheet: document.querySelector("#night-sheet"),
+  nightTitle: document.querySelector("#night-title"),
+  nightSub: document.querySelector("#night-sub"),
+  nightBody: document.querySelector("#night-body"),
+  nightWorld: document.querySelector("#night-world"),
+  sleepBtn: document.querySelector("#sleep-btn"),
 
-  ledgerSheet: document.querySelector("#ledger-sheet"),
-  ledgerLines: document.querySelector("#ledger-lines"),
-  ledgerVerdict: document.querySelector("#ledger-verdict"),
-  ledgerClose: document.querySelector("#ledger-close"),
+  chronicleSheet: document.querySelector("#chronicle-sheet"),
+  chronicleLines: document.querySelector("#chronicle-lines"),
+  chronicleLog: document.querySelector("#chronicle-log"),
+  chronicleClose: document.querySelector("#chronicle-close"),
 
   endSheet: document.querySelector("#end-sheet"),
   endTitle: document.querySelector("#end-title"),
-  endLead: document.querySelector("#end-lead"),
+  endWorld: document.querySelector("#end-world"),
+  endWorldVerdict: document.querySelector("#end-world-verdict"),
   endStats: document.querySelector("#end-stats"),
   endLines: document.querySelector("#end-lines"),
   endVerdict: document.querySelector("#end-verdict"),
@@ -37,38 +47,28 @@ const game = new Game(canvas, ui);
 game.startLoop();
 
 function showRecord() {
-  const r = game.record;
-  if (!r.sessions) {
-    ui.recordLine.textContent = "";
-    return;
-  }
-  const changed = r.lifetimeActed
-    ? `${r.lifetimeChanged} of your ${r.lifetimeActed} lifetime interventions changed anything.`
-    : "You have never once intervened.";
-  ui.recordLine.textContent = `Deepest stillness ${r.bestStillness}. ${changed}`;
+  ui.recordLine.textContent = recordLine(game.record);
 }
 showRecord();
 
-ui.play.addEventListener("click", () => game.play());
-
+ui.play.addEventListener("click", () => game.start());
+ui.sleepBtn.addEventListener("click", () => game.sleep());
+ui.chronicleBtn.addEventListener("click", () => game.openChronicle());
+ui.chronicleClose.addEventListener("click", () => game.closeChronicle());
 ui.againBtn.addEventListener("click", () => {
   ui.endSheet.hidden = true;
   showRecord();
-  game.play();
-});
-
-ui.nothingBtn.addEventListener("click", () => game.pressNothing());
-ui.ledgerBtn.addEventListener("click", () => game.openLedger());
-ui.ledgerClose.addEventListener("click", () => game.closeLedger());
-ui.stopBtn.addEventListener("click", () => {
-  game.endSession(false);
-  showRecord();
+  game.start();
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.code === "Escape") game.closeLedger();
+  if (event.code === "Escape") game.closeChronicle();
   if ((event.code === "Enter" || event.code === "Space") && !ui.overlay.hidden) {
     event.preventDefault();
-    game.play();
+    game.start();
+  }
+  if ((event.code === "Enter" || event.code === "Space") && !ui.nightSheet.hidden) {
+    event.preventDefault();
+    game.sleep();
   }
 });

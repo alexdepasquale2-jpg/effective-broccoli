@@ -1,13 +1,16 @@
-const KEY = "let-it-pass-v1";
+import { worldAverage } from "./world.js";
+
+const KEY = "let-it-pass-valley-v1";
 
 export function emptyRecord() {
   return {
+    runs: 0,
+    bestValley: 0,
     bestStillness: 0,
-    deepestDepth: 0,
-    lifetimeSeen: 0,
-    lifetimeActed: 0,
+    lifetimeBeats: 0,
+    lifetimeInterventions: 0,
     lifetimeChanged: 0,
-    sessions: 0,
+    lifetimeWorsened: 0,
   };
 }
 
@@ -26,19 +29,28 @@ export function saveRecord(record) {
   try {
     localStorage.setItem(KEY, JSON.stringify(record));
   } catch {
-    // Private mode should not break a game about letting things go.
+    // A game about letting go should not break over a blocked cookie jar.
   }
   return record;
 }
 
-export function mergeSession(record, { stillness, depthLevel, ledger }) {
+export function mergeRun(record, { world, chronicle, peakStillness }) {
   return {
     ...record,
-    bestStillness: Math.max(record.bestStillness, Math.floor(stillness)),
-    deepestDepth: Math.max(record.deepestDepth, depthLevel),
-    lifetimeSeen: record.lifetimeSeen + ledger.seen,
-    lifetimeActed: record.lifetimeActed + ledger.acted,
-    lifetimeChanged: record.lifetimeChanged + ledger.changedAnything,
-    sessions: record.sessions + 1,
+    runs: record.runs + 1,
+    bestValley: Math.max(record.bestValley, Math.round(worldAverage(world))),
+    bestStillness: Math.max(record.bestStillness, Math.floor(peakStillness || 0)),
+    lifetimeBeats: record.lifetimeBeats + chronicle.beats,
+    lifetimeInterventions: record.lifetimeInterventions + chronicle.tended + chronicle.acted,
+    lifetimeChanged: record.lifetimeChanged + chronicle.threadsChanged,
+    lifetimeWorsened: record.lifetimeWorsened + chronicle.threadsWorsened,
   };
+}
+
+export function recordLine(record) {
+  if (!record.runs) return "";
+  if (!record.lifetimeInterventions) {
+    return `${record.runs} ${record.runs === 1 ? "year" : "years"} lived. You have never once put your hand in.`;
+  }
+  return `${record.runs} ${record.runs === 1 ? "year" : "years"} lived · best valley ${record.bestValley} · ${record.lifetimeChanged} of ${record.lifetimeInterventions} interventions changed an ending.`;
 }
