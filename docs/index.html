@@ -9,12 +9,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#0d3b66" />
+    <meta name="theme-color" content="#2e7d32" />
     <meta
       name="description"
-      content="Harpoon Reef — top-down arcade harpoon fishing. Collect rare fish, upgrade your rig, trade for pearls."
+      content="Crop Survivors — Vampire Survivors meets Stardew Valley. Plant, water, harvest, and survive nightly monster hordes!"
     />
-    <title>Harpoon Reef</title>
+    <title>Crop Survivors · Farm & Survive</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <link rel="apple-touch-icon" href="./icon.svg" />
@@ -24,70 +24,104 @@
       href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Rubik+Mono+One&display=swap"
       rel="stylesheet"
     />
-    <script type="module" crossorigin src="./assets/index-DdxqVtkB.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DPXDuRkH.css">
+    <script type="module" crossorigin src="./assets/index-BnC8kgvD.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CLmxQPRl.css">
   </head>
   <body>
     <div id="app">
-      <canvas id="game" aria-label="Harpoon Reef game canvas"></canvas>
+      <canvas id="game" aria-label="Crop Survivors game canvas"></canvas>
 
+      <!-- HUD Top Bar -->
       <div id="hud" hidden>
         <div class="hud-top">
-          <span id="coins">$0</span>
-          <span id="pearls">0 ◈</span>
-          <span id="cargo">0/6</span>
+          <!-- Player Level & XP Bar -->
+          <div class="bar-container xp-container">
+            <span id="level-text" class="bar-label">Lv 1</span>
+            <div class="bar-bg"><div id="xp-bar" class="bar-fill xp-fill"></div></div>
+          </div>
+
+          <!-- Time Phase & Day Cycle -->
+          <div class="time-container">
+            <span id="time-banner" class="time-banner">☀️ DAY 1</span>
+            <span id="time-timer" class="day-timer">35s</span>
+          </div>
+
+          <!-- Gold Counter & Buttons -->
+          <div class="gold-container">
+            <span id="gold-text" class="gold-text">60g</span>
+            <button id="shop-btn" type="button" class="icon-btn" title="Farm Shop">🏡 Shop</button>
+          </div>
         </div>
-        <div class="hud-sub">
-          <span id="rank">Dock Rat</span>
-          <span id="dex">0/10 species</span>
+
+        <!-- HP Bar -->
+        <div class="hp-container">
+          <div class="bar-bg hp-bg"><div id="hp-bar" class="bar-fill hp-fill"></div></div>
+          <span id="hp-text" class="hp-text">100 / 100</span>
         </div>
-        <div id="combo" hidden>x2</div>
+
+        <!-- Seed Selector Bottom-Left Dock -->
+        <div id="seed-selector" class="seed-selector"></div>
       </div>
 
-      <div id="dock" hidden>
-        <button id="market-btn" type="button" class="dock-btn">Market</button>
-        <button id="upgrade-btn" type="button" class="dock-btn">Upgrades</button>
-        <button id="trade-btn" type="button" class="dock-btn">Trade</button>
-      </div>
-
-      <div id="market" class="panel-modal" hidden>
-        <div class="panel-sheet">
-          <h2>Fish Market</h2>
-          <p class="hint">Sell your catch for coins. Rare species fetch more.</p>
-          <div id="cargo-list" class="cargo-list"></div>
-          <button id="sell-all" type="button" class="dock-btn wide gold">Sell All</button>
-          <button id="market-close" type="button" class="dock-btn wide ghost">Close</button>
-        </div>
-      </div>
-
-      <div id="upgrades" class="panel-modal" hidden>
-        <div class="panel-sheet">
-          <h2>Deck Upgrades</h2>
-          <p class="hint">Incremental power for bigger hauls.</p>
-          <div id="upgrade-row"></div>
-          <button id="upgrade-close" type="button" class="dock-btn wide ghost">Close</button>
-        </div>
-      </div>
-
-      <div id="trade" class="panel-modal" hidden>
-        <div class="panel-sheet">
-          <h2>Rare Trades</h2>
-          <p class="hint">Bundle legendary fish for pearls and bonuses.</p>
-          <div id="trade-row"></div>
-          <button id="trade-close" type="button" class="dock-btn wide ghost">Close</button>
+      <!-- Level Up Modal (Vampire Survivors 3-Card Draft) -->
+      <div id="levelup-modal" class="modal" hidden>
+        <div class="modal-box levelup-box">
+          <p class="modal-eyebrow">LEVEL UP!</p>
+          <h2>Choose an Upgrade</h2>
+          <div id="levelup-options" class="levelup-options"></div>
         </div>
       </div>
 
+      <!-- Farm Shop Modal (Seeds & Crop Info) -->
+      <div id="shop-modal" class="modal" hidden>
+        <div class="modal-box shop-box">
+          <div class="modal-header">
+            <h2>🏡 Farm Seed Shop</h2>
+            <span id="shop-gold" class="modal-gold">60 Gold</span>
+          </div>
+          <p class="hint">Buy seeds for your farm plots. Harvested crops auto-ship for gold at dawn!</p>
+          <div id="seed-store-list" class="seed-store-list"></div>
+          <button id="shop-close" type="button" class="btn wide ghost">Close</button>
+        </div>
+      </div>
+
+      <!-- Meta Upgrades Modal (Persistent Farmhouse Upgrades) -->
+      <div id="meta-modal" class="modal" hidden>
+        <div class="modal-box meta-box">
+          <div class="modal-header">
+            <h2>📜 Farmstead Legacy</h2>
+            <span id="meta-gold" class="modal-gold">0 Gold</span>
+          </div>
+          <p class="hint">Permanent upgrades purchased with gold earned from past seasons.</p>
+          <div id="meta-upgrade-list" class="meta-upgrade-list"></div>
+          <button id="meta-close" type="button" class="btn wide ghost">Close</button>
+        </div>
+      </div>
+
+      <!-- Game Over Modal -->
+      <div id="gameover-modal" class="modal" hidden>
+        <div class="modal-box gameover-box">
+          <h2 class="gameover-title">💀 DEFEATED</h2>
+          <p class="hint">The night monsters overwhelmed your farm!</p>
+          <div id="gameover-stats" class="gameover-stats"></div>
+          <button id="restart-btn" type="button" class="btn wide gold">Try Next Season</button>
+        </div>
+      </div>
+
+      <!-- Main Title Screen Overlay -->
       <div id="overlay" class="overlay">
-        <div class="panel">
-          <p class="eyebrow">Top-down arcade · incremental haul</p>
-          <h1 id="title">Harpoon Reef</h1>
-          <p id="rank-title" class="rank">Dock Rat</p>
-          <p id="subtitle" class="subtitle">
-            Drag from your boat to aim. Release to harpoon. Reel rare fish, sell at the market, upgrade your rig, trade for pearls.
+        <div class="panel title-panel">
+          <p class="eyebrow">STARDEW VALLEY × VAMPIRE SURVIVORS</p>
+          <h1 id="title">CROP SURVIVORS</h1>
+          <p class="subtitle">
+            🌱 Plant & water crops by day. Auto-harvest for gold & XP.<br />
+            ⚔️ Cast scythes, sprinklers & haunted scarecrows to survive nightly horde swarms!
           </p>
-          <button id="play" type="button">Cast Off</button>
-          <p class="hint">Aim · hook · reel · sell · upgrade · trade</p>
+          <div class="title-actions">
+            <button id="play" type="button" class="btn gold big">Start Farming</button>
+            <button id="meta-btn" type="button" class="btn ghost">📜 Legacy Upgrades</button>
+          </div>
+          <p class="hint">Drag anywhere to move (virtual joystick or WASD) · Walk onto plots to plant/water/harvest</p>
         </div>
       </div>
     </div>

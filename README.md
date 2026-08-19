@@ -1,32 +1,27 @@
-# Harpoon Reef
+# Crop Survivors · Stardew Valley × Vampire Survivors
 
-Top-down arcade harpoon incremental. Aim from your boat, hook fish, reel them in, sell at the market, buy upgrades, and trade rare species for pearls.
+A top-down roguelite survival farming fusion!
 
-## Play
+- ☀️ **Day Cycle:** Plant seeds (Parsnip, Potato, Blood Strawberry, Iron Cauliflower, Astral Starfruit), water crops, expand your farm plot grid, and harvest for massive Gold & XP payouts.
+- 🌙 **Night Cycle:** Monster hordes (Night Crows, Crop Devourer Moles, Cave Bats, Cursed Tangleweed, Midnight Werewolf Bosses) swarm your farmstead!
+- 🌾 **Arsenal & Evolutions:**
+  - **Reaper Scythe** + **Enriched Compost** ➔ **Soul Harvester** (Lifesteal cleaves)
+  - **Pressure Sprinkler** + **Copper Watering Can** ➔ **Tsunami Matrix** (Auto-waters crops + pierces enemies)
+  - **Haunted Scarecrow** + **Dense Haystack** ➔ **Wicker Golem** (Solar radiation aura)
+  - **Iron Pitchfork** + **Rubber Wellies** ➔ **Titan Trident** (Tri-burst armor-piercing javelins)
+  - **Queen Bee Hive** + **Golden Honeycomb** ➔ **Apis Swarm Sovereign** (Homing golden hornets)
+  - **Solar Totem** + **Four-Leaf Clover** ➔ **Supernova Beacon** (Orbital laser bombardment)
+- 📜 **Persistent Farmstead Legacy:** Reinvest gold earned across seasons into Land Deed Expansions, Greenhouse Engines, Starting Wealth, and Blessed Soil!
 
-**Phone:** use the live `trycloudflare.com` link from the agent session.
+## Controls
 
-```bash
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173`, tap **Cast Off**, drag from the boat to aim, release to fire.
-
-## Loop
-
-- **Harpoon** fish swimming around your boat (top-down)
-- **Reel** them in automatically — upgrade reel speed, range, and line strength
-- **Cargo** fills up — sell at the **Market** for coins
-- **Upgrades** make rarer fish spawn (sonar) and sell for more (trader's tongue)
-- **Trade** bundles of rare/legendary fish for pearls
-
-Progress saves in `localStorage`.
+- **Touch / Mobile:** Drag anywhere for virtual dynamic joystick. Walk over tilled soil to auto-plant, water, or harvest. Tap 🏡 Shop button or walk up to Farmhouse.
+- **Keyboard / Desktop:** `WASD` or Arrow Keys to move. `Space` or `E` to interact. `B` for Farm Shop.
 
 ## Scripts
 
-| Command | What it does |
-| --- | --- |
-| `npm run dev` | Dev server |
-| `npm test` | Unit tests |
-| `npm run build` | Build to `docs/` |
+```bash
+npm run dev      # Local Vite dev server
+npm test         # Run full Vitest suite
+npm run build    # Production build into docs/
+```
