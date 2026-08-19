@@ -18,45 +18,17 @@ export function randInt(min, max) {
   return Math.floor(rand(min, max + 1));
 }
 
-export function circleHit(ax, ay, ar, bx, by, br) {
-  const dx = ax - bx;
-  const dy = ay - by;
-  const range = ar + br;
-  return dx * dx + dy * dy <= range * range;
-}
-
 export function distance(ax, ay, bx, by) {
   return Math.hypot(ax - bx, ay - by);
 }
 
-export function comboMultiplier(combo) {
-  return 1 + Math.max(0, combo - 1) * 0.25;
+export function pointInRect(px, py, x, y, w, h) {
+  return px >= x && px <= x + w && py >= y && py <= y + h;
 }
 
-export function orbPoints(combo) {
-  return Math.round(10 * comboMultiplier(combo));
-}
-
-export function spawnIntervals(elapsedSeconds) {
-  const t = Math.max(0, elapsedSeconds);
-  return {
-    orb: Math.max(0.32, 0.85 - t * 0.006),
-    shard: Math.max(0.26, 1.2 - t * 0.014),
-    shardSpeed: 90 + t * 6,
-  };
-}
-
-export function keepAwayFrom(x, y, px, py, minDistance) {
-  const d = distance(x, y, px, py);
-  if (d >= minDistance) {
-    return { x, y };
-  }
-  if (d === 0) {
-    return { x: px + minDistance, y: py };
-  }
-  const scale = minDistance / d;
-  return {
-    x: px + (x - px) * scale,
-    y: py + (y - py) * scale,
-  };
+export function formatDuration(seconds) {
+  const total = Math.max(0, Math.floor(seconds));
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
 }

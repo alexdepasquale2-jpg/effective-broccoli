@@ -9,129 +9,95 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#2e7d32" />
+    <meta name="theme-color" content="#0b1220" />
     <meta
       name="description"
-      content="Crop Survivors — Merge crops to summon powerful allies, wield unique weapons, and survive nightly monster swarms!"
+      content="Let It Pass — a quiet game about inaction. Things happen. You may act, or not. Most of the time it changes nothing."
     />
-    <title>Crop Survivors · Merge & Summon</title>
+    <title>Let It Pass</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Rubik+Mono+One&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
   </head>
   <body>
     <div id="app">
-      <canvas id="game" aria-label="Crop Survivors game canvas"></canvas>
+      <canvas id="game" aria-label="Let It Pass"></canvas>
 
-      <!-- HUD Top Bar -->
+      <!-- Quiet HUD -->
       <div id="hud" hidden>
-        <div class="hud-top">
-          <!-- Player Level & XP Bar -->
-          <div class="bar-container xp-container">
-            <span id="level-text" class="bar-label">Lv 1</span>
-            <div class="bar-bg"><div id="xp-bar" class="bar-fill xp-fill"></div></div>
+        <div class="hud-left">
+          <div class="stillness-row">
+            <span id="stillness">0</span>
+            <span id="multiplier" class="multiplier">×1.0</span>
           </div>
-
-          <!-- Time Phase & Day Cycle -->
-          <div class="time-container">
-            <span id="time-banner" class="time-banner">☀️ DAY 1</span>
-            <span id="time-timer" class="day-timer">35s</span>
-          </div>
-
-          <!-- Gold Counter & Buttons -->
-          <div class="gold-container">
-            <span id="gold-text" class="gold-text">60g</span>
-            <button id="shop-btn" type="button" class="icon-btn" title="Farm Shop">🏡 Shop</button>
+          <div class="depth-row">
+            <span id="depth-name">Restless</span>
+            <div class="track"><div id="progress" class="track-fill"></div></div>
           </div>
         </div>
-
-        <!-- HP Bar & Ally count -->
-        <div class="hp-row">
-          <div class="hp-container">
-            <div class="bar-bg hp-bg"><div id="hp-bar" class="bar-fill hp-fill"></div></div>
-            <span id="hp-text" class="hp-text">100 / 100</span>
-          </div>
-          <span id="ally-counter" class="ally-counter">🛡️ Allies: 0</span>
-        </div>
-
-        <!-- Seed Selector Bottom-Left Dock & Auto-Merge Button -->
-        <div class="bottom-dock">
-          <div id="seed-selector" class="seed-selector"></div>
-          <button id="merge-btn" type="button" class="icon-btn merge-action-btn" title="Auto merge adjacent crops">
-            ✨ Auto Merge
-          </button>
+        <div class="hud-right">
+          <span id="untouched" class="untouched">0 let pass · 0 acted on</span>
         </div>
       </div>
 
-      <!-- Level Up Modal (Vampire Survivors 3-Card Draft) -->
-      <div id="levelup-modal" class="modal" hidden>
-        <div class="modal-box levelup-box">
-          <p class="modal-eyebrow">LEVEL UP!</p>
-          <h2>Choose an Upgrade</h2>
-          <div id="levelup-options" class="levelup-options"></div>
+      <!-- Bottom dock -->
+      <div id="dock" hidden>
+        <button id="nothing-btn" type="button" class="btn tempt">DO SOMETHING</button>
+        <div class="dock-side">
+          <button id="ledger-btn" type="button" class="btn ghost">Ledger</button>
+          <button id="stop-btn" type="button" class="btn ghost">Stop</button>
         </div>
       </div>
 
-      <!-- Farm Shop Modal (Seeds & Crop Info) -->
-      <div id="shop-modal" class="modal" hidden>
-        <div class="modal-box shop-box">
-          <div class="modal-header">
-            <h2>🏡 Farm Seed Shop</h2>
-            <span id="shop-gold" class="modal-gold">60 Gold</span>
-          </div>
-          <p class="hint">
-            Drag identical crops together on plots to MERGE them into Giant crops (⭐Lv2 ➔ 🌟Lv3) to summon guardian allies!
+      <!-- Ledger -->
+      <div id="ledger-sheet" class="sheet" hidden>
+        <div class="sheet-box">
+          <p class="eyebrow">So far</p>
+          <h2>The Ledger</h2>
+          <div id="ledger-lines" class="lines"></div>
+          <p id="ledger-verdict" class="verdict"></p>
+          <button id="ledger-close" type="button" class="btn wide ghost">Go back to nothing</button>
+        </div>
+      </div>
+
+      <!-- Ending -->
+      <div id="end-sheet" class="sheet" hidden>
+        <div class="sheet-box">
+          <p class="eyebrow">The session is over</p>
+          <h2 id="end-title">You stopped</h2>
+          <p id="end-lead" class="lead"></p>
+          <div id="end-stats" class="stats"></div>
+          <div id="end-lines" class="lines"></div>
+          <p id="end-verdict" class="verdict"></p>
+          <button id="again-btn" type="button" class="btn wide">Sit down again</button>
+        </div>
+      </div>
+
+      <!-- Title -->
+      <div id="overlay" class="sheet">
+        <div class="sheet-box title-box">
+          <p class="eyebrow">A game about not doing things</p>
+          <h1>Let It Pass</h1>
+          <p class="lead">
+            Things will arrive. Each one offers you something to do about it.
           </p>
-          <div id="seed-store-list" class="seed-store-list"></div>
-          <button id="shop-close" type="button" class="btn wide ghost">Close</button>
-        </div>
-      </div>
-
-      <!-- Meta Upgrades Modal (Persistent Farmhouse Upgrades) -->
-      <div id="meta-modal" class="modal" hidden>
-        <div class="modal-box meta-box">
-          <div class="modal-header">
-            <h2>📜 Farmstead Legacy</h2>
-            <span id="meta-gold" class="modal-gold">0 Gold</span>
-          </div>
-          <p class="hint">Permanent upgrades purchased with gold earned from past seasons.</p>
-          <div id="meta-upgrade-list" class="meta-upgrade-list"></div>
-          <button id="meta-close" type="button" class="btn wide ghost">Close</button>
-        </div>
-      </div>
-
-      <!-- Game Over Modal -->
-      <div id="gameover-modal" class="modal" hidden>
-        <div class="modal-box gameover-box">
-          <h2 class="gameover-title">💀 DEFEATED</h2>
-          <p class="hint">The night monsters overwhelmed your farmstead!</p>
-          <div id="gameover-stats" class="gameover-stats"></div>
-          <button id="restart-btn" type="button" class="btn wide gold">Try Next Season</button>
-        </div>
-      </div>
-
-      <!-- Main Title Screen Overlay -->
-      <div id="overlay" class="overlay">
-        <div class="panel title-panel">
-          <p class="eyebrow">MERGE FARMING × ALLY SUMMONING × SURVIVORS</p>
-          <h1 id="title">CROP SURVIVORS</h1>
-          <p class="subtitle">
-            🌱 <b>Merge Crops:</b> Drag matching crops together to create Giant Crops that summon powerful Elemental Allies!<br />
-            ⚔️ <b>Unique Arsenal:</b> Wield Coop Egg Blasters, Seed Gatlings, Compost Mortars, and Soul Scythes to survive the night!
+          <p class="lead dim">
+            You can act. You can also sit there. Most of what arrives resolves the
+            same either way — but acting always costs you something, and the loud
+            things are almost never the ones that need you.
           </p>
-          <div class="title-actions">
-            <button id="play" type="button" class="btn gold big">Start Farming</button>
-            <button id="meta-btn" type="button" class="btn ghost">📜 Legacy Upgrades</button>
-          </div>
-          <p class="hint">
-            Drag matching crops to merge · Walk onto plots to plant/water/harvest · Use virtual joystick or WASD to move
+          <p class="lead dim">
+            Stillness accrues while you leave the world alone. At the end, the ledger
+            will tell you how many of your interventions changed anything at all.
           </p>
+          <button id="play" type="button" class="btn wide">Begin doing nothing</button>
+          <p class="footnote"><span id="record-line"></span></p>
         </div>
       </div>
     </div>

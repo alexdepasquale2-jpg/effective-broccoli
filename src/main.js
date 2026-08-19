@@ -1,107 +1,74 @@
 import "./style.css";
 import { Game } from "./game/game.js";
-import { loadMeta, buyMetaUpgrade } from "./game/metaStorage.js";
-import { META_UPGRADES } from "./game/farmingData.js";
 
 const canvas = document.querySelector("#game");
 const ui = {
   overlay: document.querySelector("#overlay"),
   play: document.querySelector("#play"),
+  recordLine: document.querySelector("#record-line"),
+
   hud: document.querySelector("#hud"),
-  hpBar: document.querySelector("#hp-bar"),
-  hpText: document.querySelector("#hp-text"),
-  xpBar: document.querySelector("#xp-bar"),
-  levelText: document.querySelector("#level-text"),
-  goldText: document.querySelector("#gold-text"),
-  timeBanner: document.querySelector("#time-banner"),
-  timeTimer: document.querySelector("#time-timer"),
-  allyCounter: document.querySelector("#ally-counter"),
-  seedSelector: document.querySelector("#seed-selector"),
-  shopBtn: document.querySelector("#shop-btn"),
-  mergeBtn: document.querySelector("#merge-btn"),
-  shopModal: document.querySelector("#shop-modal"),
-  shopGold: document.querySelector("#shop-gold"),
-  seedStoreList: document.querySelector("#seed-store-list"),
-  shopClose: document.querySelector("#shop-close"),
-  metaBtn: document.querySelector("#meta-btn"),
-  metaModal: document.querySelector("#meta-modal"),
-  metaGold: document.querySelector("#meta-gold"),
-  metaUpgradeList: document.querySelector("#meta-upgrade-list"),
-  metaClose: document.querySelector("#meta-close"),
-  levelupModal: document.querySelector("#levelup-modal"),
-  levelupOptions: document.querySelector("#levelup-options"),
-  gameoverModal: document.querySelector("#gameover-modal"),
-  gameoverStats: document.querySelector("#gameover-stats"),
-  restartBtn: document.querySelector("#restart-btn"),
+  stillness: document.querySelector("#stillness"),
+  multiplier: document.querySelector("#multiplier"),
+  depthName: document.querySelector("#depth-name"),
+  progress: document.querySelector("#progress"),
+  untouched: document.querySelector("#untouched"),
+
+  dock: document.querySelector("#dock"),
+  nothingBtn: document.querySelector("#nothing-btn"),
+  ledgerBtn: document.querySelector("#ledger-btn"),
+  stopBtn: document.querySelector("#stop-btn"),
+
+  ledgerSheet: document.querySelector("#ledger-sheet"),
+  ledgerLines: document.querySelector("#ledger-lines"),
+  ledgerVerdict: document.querySelector("#ledger-verdict"),
+  ledgerClose: document.querySelector("#ledger-close"),
+
+  endSheet: document.querySelector("#end-sheet"),
+  endTitle: document.querySelector("#end-title"),
+  endLead: document.querySelector("#end-lead"),
+  endStats: document.querySelector("#end-stats"),
+  endLines: document.querySelector("#end-lines"),
+  endVerdict: document.querySelector("#end-verdict"),
+  againBtn: document.querySelector("#again-btn"),
 };
 
 const game = new Game(canvas, ui);
 game.startLoop();
 
-// Button Event Listeners
-ui.play?.addEventListener("click", () => {
-  game.play();
-});
-
-ui.restartBtn?.addEventListener("click", () => {
-  ui.gameoverModal.hidden = true;
-  game.play();
-});
-
-ui.shopBtn?.addEventListener("click", () => {
-  game.openShop();
-});
-
-ui.shopClose?.addEventListener("click", () => {
-  game.closeShop();
-});
-
-ui.mergeBtn?.addEventListener("click", () => {
-  game.tryAutoMergeAdjacent();
-});
-
-// Meta Upgrades Modal
-function renderMetaModal() {
-  const meta = loadMeta();
-  ui.metaGold.textContent = `${meta.totalGold} Gold`;
-  ui.metaUpgradeList.innerHTML = "";
-
-  for (const up of META_UPGRADES) {
-    const curLevel = meta.upgrades[up.id] || 0;
-    const isMax = curLevel >= up.max;
-    const cost = up.cost(curLevel);
-
-    const card = document.createElement("div");
-    card.className = "meta-card";
-    card.innerHTML = `
-      <span class="meta-icon">${up.icon}</span>
-      <div class="meta-info">
-        <strong>${up.name} (Lv ${curLevel}/${up.max})</strong>
-        <p>${up.desc}</p>
-      </div>
-      <button type="button" class="buy-meta-btn" ${isMax || meta.totalGold < cost ? "disabled" : ""}>
-        ${isMax ? "MAX" : `Upgrade ${cost}g`}
-      </button>
-    `;
-
-    const btn = card.querySelector(".buy-meta-btn");
-    btn.addEventListener("click", () => {
-      const res = buyMetaUpgrade(meta, up.id);
-      if (res.ok) {
-        renderMetaModal();
-        game.meta = meta;
-      }
-    });
-
-    ui.metaUpgradeList.appendChild(card);
+function showRecord() {
+  const r = game.record;
+  if (!r.sessions) {
+    ui.recordLine.textContent = "";
+    return;
   }
+  const changed = r.lifetimeActed
+    ? `${r.lifetimeChanged} of your ${r.lifetimeActed} lifetime interventions changed anything.`
+    : "You have never once intervened.";
+  ui.recordLine.textContent = `Deepest stillness ${r.bestStillness}. ${changed}`;
 }
+showRecord();
 
-ui.metaBtn?.addEventListener("click", () => {
-  ui.metaModal.hidden = false;
-  renderMetaModal();
+ui.play.addEventListener("click", () => game.play());
+
+ui.againBtn.addEventListener("click", () => {
+  ui.endSheet.hidden = true;
+  showRecord();
+  game.play();
 });
 
-ui.metaClose?.addEventListener("click", () => {
-  ui.metaModal.hidden = true;
+ui.nothingBtn.addEventListener("click", () => game.pressNothing());
+ui.ledgerBtn.addEventListener("click", () => game.openLedger());
+ui.ledgerClose.addEventListener("click", () => game.closeLedger());
+ui.stopBtn.addEventListener("click", () => {
+  game.endSession(false);
+  showRecord();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.code === "Escape") game.closeLedger();
+  if ((event.code === "Enter" || event.code === "Space") && !ui.overlay.hidden) {
+    event.preventDefault();
+    game.play();
+  }
 });

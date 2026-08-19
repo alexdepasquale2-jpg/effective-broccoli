@@ -1,18 +1,17 @@
-function tone(ctx, { frequency, duration, type = "sine", gain = 0.08, slide = 0, delay = 0 }) {
+function voice(ctx, { frequency, duration, type = "sine", gain = 0.05, delay = 0, glide = 0 }) {
   const now = ctx.currentTime + delay;
   const osc = ctx.createOscillator();
   const amp = ctx.createGain();
   osc.type = type;
   osc.frequency.setValueAtTime(frequency, now);
-  if (slide) {
-    osc.frequency.exponentialRampToValueAtTime(Math.max(40, frequency + slide), now + duration);
-  }
-  amp.gain.setValueAtTime(gain, now);
+  if (glide) osc.frequency.exponentialRampToValueAtTime(Math.max(30, frequency + glide), now + duration);
+  amp.gain.setValueAtTime(0.0001, now);
+  amp.gain.exponentialRampToValueAtTime(gain, now + Math.min(0.12, duration * 0.3));
   amp.gain.exponentialRampToValueAtTime(0.0001, now + duration);
   osc.connect(amp);
   amp.connect(ctx.destination);
   osc.start(now);
-  osc.stop(now + duration + 0.02);
+  osc.stop(now + duration + 0.05);
 }
 
 export class AudioBus {
@@ -27,57 +26,41 @@ export class AudioBus {
       if (!Ctx) return;
       this.ctx = new Ctx();
     }
-    if (this.ctx.state === "suspended") {
-      this.ctx.resume();
-    }
+    if (this.ctx.state === "suspended") this.ctx.resume();
   }
 
-  collect(combo) {
+  // A thing arrived and asked for you.
+  arrive() {
     if (this.muted || !this.ctx) return;
-    const pitch = 520 + Math.min(combo, 12) * 42;
-    tone(this.ctx, { frequency: pitch, duration: 0.12, type: "triangle", gain: 0.06 });
-    tone(this.ctx, {
-      frequency: pitch * 1.5,
-      duration: 0.16,
-      type: "sine",
-      gain: 0.04,
-      delay: 0.03,
-    });
+    voice(this.ctx, { frequency: 294, duration: 1.1, gain: 0.022 });
+    voice(this.ctx, { frequency: 441, duration: 0.9, gain: 0.014, delay: 0.08 });
   }
 
-  start() {
+  // You let it go by.
+  pass() {
     if (this.muted || !this.ctx) return;
-    tone(this.ctx, { frequency: 220, duration: 0.18, type: "sine", gain: 0.05, slide: 180 });
+    voice(this.ctx, { frequency: 392, duration: 1.6, gain: 0.03 });
+    voice(this.ctx, { frequency: 588, duration: 1.4, gain: 0.018, delay: 0.1 });
+    voice(this.ctx, { frequency: 784, duration: 1.2, gain: 0.01, delay: 0.2 });
   }
 
-  hit() {
+  // You reached in.
+  act() {
     if (this.muted || !this.ctx) return;
-    tone(this.ctx, { frequency: 180, duration: 0.28, type: "sawtooth", gain: 0.05, slide: -120 });
-    tone(this.ctx, { frequency: 90, duration: 0.4, type: "triangle", gain: 0.07 });
+    voice(this.ctx, { frequency: 176, duration: 0.5, type: "triangle", gain: 0.045, glide: -60 });
   }
 
-  fold() {
+  // Depth crossed.
+  deepen() {
     if (this.muted || !this.ctx) return;
-    tone(this.ctx, { frequency: 140, duration: 0.22, type: "sine", gain: 0.05, slide: 420 });
-    tone(this.ctx, { frequency: 880, duration: 0.12, type: "triangle", gain: 0.03, delay: 0.04 });
+    voice(this.ctx, { frequency: 196, duration: 2.6, gain: 0.03 });
+    voice(this.ctx, { frequency: 294, duration: 2.4, gain: 0.02, delay: 0.25 });
+    voice(this.ctx, { frequency: 441, duration: 2.2, gain: 0.012, delay: 0.5 });
   }
 
-  draft() {
+  // The button that does nothing.
+  nothing() {
     if (this.muted || !this.ctx) return;
-    tone(this.ctx, { frequency: 330, duration: 0.16, type: "square", gain: 0.03 });
-    tone(this.ctx, { frequency: 495, duration: 0.2, type: "sine", gain: 0.04, delay: 0.05 });
-  }
-
-  boon() {
-    if (this.muted || !this.ctx) return;
-    tone(this.ctx, { frequency: 523, duration: 0.12, type: "triangle", gain: 0.05 });
-    tone(this.ctx, { frequency: 784, duration: 0.18, type: "sine", gain: 0.04, delay: 0.06 });
-  }
-
-  jackpot() {
-    if (this.muted || !this.ctx) return;
-    tone(this.ctx, { frequency: 392, duration: 0.12, type: "square", gain: 0.04 });
-    tone(this.ctx, { frequency: 587, duration: 0.14, type: "triangle", gain: 0.05, delay: 0.05 });
-    tone(this.ctx, { frequency: 784, duration: 0.2, type: "sine", gain: 0.05, delay: 0.1 });
+    voice(this.ctx, { frequency: 118, duration: 0.22, type: "square", gain: 0.012 });
   }
 }
