@@ -22,6 +22,7 @@ export class Input {
     };
 
     this.keys = new Set();
+    this._pressed = new Set(); // keys that went down since the last endFrame
     this._tapped = false;      // a press that started this frame
     this._prevX = 0;
     this._prevY = 0;
@@ -37,11 +38,13 @@ export class Input {
 
     window.addEventListener('keydown', (e) => {
       this.keys.add(e.key);
+      this._pressed.add(e.key);
       if (e.key === ' ' || e.key.startsWith('Arrow')) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.key));
     window.addEventListener('blur', () => {
       this.keys.clear();
+      this._pressed.clear();
       this.pointer.down = false;
     });
   }
@@ -96,6 +99,15 @@ export class Input {
     return a;
   }
 
+  /**
+   * Edge-triggered key read: true if `key` went down since the last frame.
+   * Consuming it clears the press, so one keystroke drives one action even
+   * though several updates may run per rendered frame.
+   */
+  consumeKey(key) {
+    return this._pressed.delete(key);
+  }
+
   /** True once per press. Consuming it clears the flag. */
   consumeTap() {
     const t = this._tapped;
@@ -110,5 +122,6 @@ export class Input {
     this._prevX = this.pointer.x;
     this._prevY = this.pointer.y;
     this._tapped = false;
+    this._pressed.clear();
   }
 }

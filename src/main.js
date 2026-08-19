@@ -22,7 +22,7 @@ const viewport = new Viewport(canvas);
 const input = new Input(viewport, canvas);
 const audio = new Audio();
 const ui = new UI();
-const background = new Background(viewport);
+const background = new Background();
 
 const context = { viewport, input, audio, ui, background, scenes: null };
 

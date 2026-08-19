@@ -2,8 +2,8 @@ import { load, save } from '../engine/storage.js';
 import { play } from './play.js';
 
 /**
- * Result screen. Keeps the finished board visible behind the panel so the
- * player can see where it went wrong, and commits the high score.
+ * Debrief. Keeps the final board visible behind the panel so the operator can
+ * see which sectors went down, and commits the best score.
  */
 export const gameover = {
   enter(ctx, { score = 0 } = {}) {
@@ -17,13 +17,14 @@ export const gameover = {
 
   update(dt, ctx) {
     ctx.background.update(dt, ctx.viewport);
-    play.particles.update(dt);
+    play.grid.layout(ctx.viewport);
+    play.fx.update(dt);
   },
 
   render(ctx2d, ctx) {
     ctx.background.render(ctx2d, ctx.viewport);
-    play.items.render(ctx2d);
-    play.player?.render(ctx2d, 0);
-    play.particles.render(ctx2d);
+    play.grid.render(ctx2d);
+    play.contacts.render(ctx2d, play.grid, play.time);
+    play.fx.render(ctx2d);
   },
 };

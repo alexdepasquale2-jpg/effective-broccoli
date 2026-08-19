@@ -6,7 +6,7 @@
  * old modules.
  */
 
-const CACHE = 'broccoli-drop-v1';
+const CACHE = 'sector-command-v1';
 
 const ASSETS = [
   './',
@@ -22,8 +22,8 @@ const ASSETS = [
   './src/engine/audio.js',
   './src/engine/storage.js',
   './src/game/config.js',
-  './src/game/player.js',
-  './src/game/items.js',
+  './src/game/grid.js',
+  './src/game/contacts.js',
   './src/game/background.js',
   './src/scenes/menu.js',
   './src/scenes/play.js',

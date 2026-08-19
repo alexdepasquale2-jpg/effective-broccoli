@@ -1,8 +1,8 @@
 import { load } from '../engine/storage.js';
 
 /**
- * Title screen. The buttons themselves are DOM (see index.html) — canvas here
- * only keeps the backdrop alive so the scene never looks frozen.
+ * Mission briefing. The buttons are DOM (see index.html) — canvas here only
+ * keeps the map alive so the screen never looks frozen.
  */
 export const menu = {
   enter(ctx) {

@@ -1,66 +1,69 @@
 /**
- * Scrolling parallax backdrop, shared by every scene so transitions never
- * flash an empty canvas. It is purely decorative and holds no game state.
+ * Tactical map backdrop: latitude/longitude hatching, a rotating radar sweep
+ * and a drifting scanline. Purely decorative and holds no game state, so
+ * every scene can draw it and transitions never flash an empty canvas.
  */
 
-const LAYERS = [
-  { count: 26, speed: 12, size: 2.0, alpha: 0.30 },
-  { count: 16, speed: 28, size: 3.0, alpha: 0.45 },
-  { count: 8,  speed: 52, size: 4.5, alpha: 0.60 },
-];
+const HATCH = 44;        // spacing of the map grid, design units
+const SWEEP_RATE = 0.55; // radians per second
 
 export class Background {
-  constructor(viewport) {
-    this.dots = [];
-    this._w = viewport.width;
-    for (let l = 0; l < LAYERS.length; l++) {
-      for (let i = 0; i < LAYERS[l].count; i++) {
-        this.dots.push({
-          layer: l,
-          x: Math.random() * viewport.width,
-          y: Math.random() * viewport.height,
-        });
-      }
-    }
+  constructor() {
+    this.time = 0;
+    this.sweep = 0;
+    this.scan = 0;
   }
 
   update(dt, viewport) {
-    // A rotation changes the design width; stretch the field to match so the
-    // dots stay evenly spread instead of bunching at their old width.
-    if (viewport.width !== this._w) {
-      const k = viewport.width / this._w;
-      for (const d of this.dots) d.x *= k;
-      this._w = viewport.width;
-    }
-
-    for (const d of this.dots) {
-      d.y += LAYERS[d.layer].speed * dt;
-      if (d.y > viewport.height + 8) {
-        d.y = -8;
-        d.x = Math.random() * viewport.width;
-      }
-    }
+    this.time += dt;
+    this.sweep = (this.sweep + SWEEP_RATE * dt) % (Math.PI * 2);
+    this.scan = (this.scan + 90 * dt) % (viewport.height + 120);
   }
 
   render(ctx, viewport) {
-    const g = ctx.createLinearGradient(0, 0, 0, viewport.height);
-    g.addColorStop(0, '#171a33');
-    g.addColorStop(1, '#0b0d1c');
+    const { width: w, height: h } = viewport;
+
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#08120c');
+    g.addColorStop(1, '#040806');
     ctx.fillStyle = g;
-    ctx.fillRect(0, 0, viewport.width, viewport.height);
+    ctx.fillRect(0, 0, w, h);
 
-    for (const d of this.dots) {
-      const L = LAYERS[d.layer];
-      ctx.globalAlpha = L.alpha;
-      ctx.fillStyle = '#9fb4ff';
-      ctx.fillRect(d.x, d.y, L.size, L.size);
+    // Map hatching.
+    ctx.strokeStyle = 'rgba(80, 200, 130, .07)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x <= w; x += HATCH) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+    for (let y = 0; y <= h; y += HATCH) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+    ctx.stroke();
+
+    // Radar sweep, centred on the board.
+    const cx = w / 2;
+    const cy = h / 2;
+    const rad = Math.hypot(w, h) / 2;
+    const grad = ctx.createLinearGradient(
+      cx, cy,
+      cx + Math.cos(this.sweep) * rad, cy + Math.sin(this.sweep) * rad
+    );
+    grad.addColorStop(0, 'rgba(90, 255, 170, .12)');
+    grad.addColorStop(1, 'rgba(90, 255, 170, 0)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(this.sweep) * rad, cy + Math.sin(this.sweep) * rad);
+    ctx.stroke();
+
+    // Range rings.
+    ctx.strokeStyle = 'rgba(90, 255, 170, .06)';
+    for (let i = 1; i <= 3; i++) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, (rad / 3.2) * i, 0, Math.PI * 2);
+      ctx.stroke();
     }
-    ctx.globalAlpha = 1;
 
-    // Ground line the basket sits on.
-    ctx.fillStyle = 'rgba(110,231,168,.14)';
-    ctx.fillRect(0, viewport.height - 46, viewport.width, 46);
-    ctx.fillStyle = 'rgba(110,231,168,.35)';
-    ctx.fillRect(0, viewport.height - 46, viewport.width, 2);
+    // Drifting scanline.
+    ctx.fillStyle = 'rgba(120, 255, 190, .05)';
+    ctx.fillRect(0, this.scan - 60, w, 60);
   }
 }

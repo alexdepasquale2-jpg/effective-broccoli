@@ -8,9 +8,11 @@
  */
 
 const SOUNDS = {
-  pickup: { freq: 660, to: 990, dur: 0.12, type: 'triangle', gain: 0.25 },
-  hit:    { freq: 220, to: 90,  dur: 0.30, type: 'sawtooth', gain: 0.30 },
-  ui:     { freq: 520, to: 520, dur: 0.06, type: 'square',   gain: 0.15 },
+  hit:      { freq: 320, to: 60,   dur: 0.22, type: 'square',   gain: 0.26 },
+  miss:     { freq: 180, to: 140,  dur: 0.07, type: 'square',   gain: 0.12 },
+  friendly: { freq: 140, to: 190,  dur: 0.36, type: 'sawtooth', gain: 0.24 },
+  breach:   { freq: 190, to: 55,   dur: 0.55, type: 'sawtooth', gain: 0.30 },
+  ui:       { freq: 440, to: 440,  dur: 0.05, type: 'square',   gain: 0.14 },
 };
 
 export class Audio {

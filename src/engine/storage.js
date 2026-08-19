@@ -6,7 +6,7 @@
  * than taking the game down with it.
  */
 
-const PREFIX = 'broccolidrop:';
+const PREFIX = 'sectorcommand:';
 
 export function load(key, fallback = null) {
   try {
