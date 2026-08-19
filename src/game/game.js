@@ -224,7 +224,6 @@ export class Game {
       y: 0,
       w: 0,
       h: 0,
-      slot: 0,
       exit: 0,
       exitKind: null,
       jitter: rand(0, Math.PI * 2),
@@ -251,9 +250,6 @@ export class Game {
     const baseY = height * 0.46;
     const gap = 12;
 
-    const live = this.cards.filter((c) => c.phase !== "resolving");
-    live.forEach((card, index) => (card.slot = index));
-
     let stackY = baseY;
     for (const card of this.cards) {
       const ctx = this.ctx;
@@ -262,8 +258,11 @@ export class Game {
       card.w = cardW;
       card.h = 30 + lines.length * 24 + 44;
 
+      // A resolving card keeps its place until it is gone, so the stack never
+      // slides out from under a finger that is already reaching for something.
       if (card.phase === "resolving") {
         card.exit = Math.min(1, card.exit + dt * 1.25);
+        stackY += card.h + gap;
         continue;
       }
 

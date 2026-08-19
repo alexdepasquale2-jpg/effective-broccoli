@@ -59,17 +59,20 @@ canvas {
 }
 
 #stillness {
-  font-size: 34px;
+  font-size: 38px;
   font-weight: 500;
   letter-spacing: -0.02em;
   line-height: 1;
-  color: var(--ink);
+  color: #ffffff;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.9);
 }
 
 .multiplier {
-  font-size: 12px;
-  color: var(--calm);
+  font-size: 13px;
+  font-weight: 500;
+  color: #9fd8dc;
   letter-spacing: 0.04em;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
 }
 
 .depth-row {
@@ -82,14 +85,15 @@ canvas {
 #depth-name {
   font-family: "Cormorant Garamond", Georgia, serif;
   font-style: italic;
-  font-size: 15px;
-  color: var(--dim);
+  font-size: 16px;
+  color: rgba(232, 240, 246, 0.82);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
 }
 
 .track {
   width: 74px;
   height: 2px;
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.16);
   overflow: hidden;
 }
 
@@ -101,10 +105,11 @@ canvas {
 }
 
 .untouched {
-  font-size: 11px;
-  color: var(--faint);
+  font-size: 12px;
+  color: rgba(232, 240, 246, 0.6);
   letter-spacing: 0.03em;
   text-align: right;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
 }
 
 /* ----------------------------------------------------------------- dock */
