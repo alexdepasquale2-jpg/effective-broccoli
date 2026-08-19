@@ -1,68 +1,163 @@
-// Crops database
+// Crops database with merge tiers
 export const CROPS = {
   parsnip: {
     id: "parsnip",
     name: "Parsnip",
-    growTime: 6, // seconds in day
-    yieldValue: 8,
+    growTime: 5,
+    yieldValue: 10,
     xp: 6,
     seedCost: 4,
     color: "#fffae0",
     leafColor: "#55a840",
     icon: "🥕",
+    tier: 1,
+    allySummon: "carrotSprite",
     unlockedAtDay: 1,
   },
   potato: {
     id: "potato",
     name: "Sturdy Potato",
-    growTime: 9,
-    yieldValue: 18,
+    growTime: 7,
+    yieldValue: 22,
     xp: 14,
-    seedCost: 9,
+    seedCost: 8,
     color: "#c99e65",
     leafColor: "#3e8c32",
     icon: "🥔",
+    tier: 2,
+    allySummon: "potatoGolem",
     unlockedAtDay: 1,
   },
   strawberry: {
     id: "strawberry",
     name: "Blood Strawberry",
-    growTime: 14,
-    yieldValue: 40,
-    xp: 30,
-    seedCost: 20,
+    growTime: 10,
+    yieldValue: 50,
+    xp: 32,
+    seedCost: 18,
     color: "#ff3b56",
     leafColor: "#22772e",
     icon: "🍓",
+    tier: 3,
+    allySummon: "crimsonVampire",
     unlockedAtDay: 2,
   },
   cauliflower: {
     id: "cauliflower",
     name: "Iron Cauliflower",
-    growTime: 20,
-    yieldValue: 90,
-    xp: 65,
-    seedCost: 45,
+    growTime: 14,
+    yieldValue: 110,
+    xp: 75,
+    seedCost: 40,
     color: "#e8f5e9",
     leafColor: "#1b5e20",
     icon: "🥦",
+    tier: 4,
+    allySummon: "ironTreant",
     unlockedAtDay: 3,
   },
   starfruit: {
     id: "starfruit",
     name: "Astral Starfruit",
-    growTime: 30,
-    yieldValue: 240,
-    xp: 180,
-    seedCost: 110,
+    growTime: 20,
+    yieldValue: 280,
+    xp: 200,
+    seedCost: 95,
     color: "#ffd700",
     leafColor: "#00e676",
     icon: "⭐",
+    tier: 5,
+    allySummon: "cosmicDragon",
     unlockedAtDay: 5,
   },
 };
 
-// Weapons & Boons (Vampire Survivors style automatic weapons & passives)
+// Merge chain: Level 1 + Level 1 -> Level 2 -> Level 3 (Giant Crop) -> SUMMON ALLY!
+export const CROP_TIER_ORDER = ["parsnip", "potato", "strawberry", "cauliflower", "starfruit"];
+
+export function getNextTierCrop(currentCropId) {
+  const idx = CROP_TIER_ORDER.indexOf(currentCropId);
+  if (idx >= 0 && idx < CROP_TIER_ORDER.length - 1) {
+    return CROP_TIER_ORDER[idx + 1];
+  }
+  return null; // Max tier or unknown
+}
+
+// Summonable allies created by merging crops to giant star tier
+export const ALLIES = {
+  carrotSprite: {
+    id: "carrotSprite",
+    name: "Root Sprite",
+    icon: "🧚‍♂️",
+    desc: "Swift woodland fairy shooting piercing thorn arrows at nearby threats.",
+    hp: 120,
+    damage: 22,
+    cooldown: 0.85,
+    range: 220,
+    type: "ranged",
+    color: "#ff9800",
+    size: 16,
+    speed: 130,
+  },
+  potatoGolem: {
+    id: "potatoGolem",
+    name: "Earthen Spud Golem",
+    icon: "🗿",
+    desc: "Colossal tanking spud that slams the ground, stunning and crushing swarms.",
+    hp: 350,
+    damage: 45,
+    cooldown: 1.4,
+    range: 90,
+    type: "melee_slam",
+    color: "#8d6e63",
+    size: 24,
+    speed: 75,
+  },
+  crimsonVampire: {
+    id: "crimsonVampire",
+    name: "Berry Bloodstalker",
+    icon: "🦇",
+    desc: "Fierce phantom that unleashes life-draining crimson beams, healing the player.",
+    hp: 200,
+    damage: 38,
+    cooldown: 0.95,
+    range: 180,
+    type: "lifesteal_beam",
+    color: "#e91e63",
+    size: 18,
+    speed: 160,
+  },
+  ironTreant: {
+    id: "ironTreant",
+    name: "Ironwood Treant",
+    icon: "🌳",
+    desc: "Ancient guardian summoning root spikes in wide clusters around the farm.",
+    hp: 550,
+    damage: 70,
+    cooldown: 1.8,
+    range: 160,
+    type: "earthquake",
+    color: "#2e7d32",
+    size: 30,
+    speed: 85,
+  },
+  cosmicDragon: {
+    id: "cosmicDragon",
+    name: "Astral Wyrm",
+    icon: "🐉",
+    desc: "Legendary deity breathing celestial plasma lasers across the entire battlefield.",
+    hp: 1000,
+    damage: 120,
+    cooldown: 1.2,
+    range: 300,
+    type: "plasma_breath",
+    color: "#ffd700",
+    size: 36,
+    speed: 140,
+  },
+};
+
+// Weapons database with unique new weapons (Egg Blaster, Seed Gatling, Fertilizer Mortar, etc.)
 export const WEAPONS = {
   scythe: {
     id: "scythe",
@@ -74,8 +169,6 @@ export const WEAPONS = {
     cooldown: 1.1,
     damage: 18,
     range: 75,
-    duration: 0.25,
-    knockback: 65,
     evolutionReq: "fertilizer",
     evolutionName: "Soul Harvester",
     evolutionDesc: "Massive twin scythes that heal 1 HP on kill.",
@@ -84,7 +177,7 @@ export const WEAPONS = {
     id: "sprinkler",
     name: "Pressure Sprinkler",
     type: "weapon",
-    desc: "Shoots rotating high-pressure water jets that pierce enemies and water nearby crops.",
+    desc: "Shoots rotating high-pressure water jets that pierce enemies & water crops.",
     maxLevel: 5,
     icon: "💦",
     cooldown: 0.8,
@@ -95,15 +188,60 @@ export const WEAPONS = {
     evolutionName: "Tsunami Matrix",
     evolutionDesc: "Torrential 8-way streams that drown elite foes.",
   },
+  eggBlaster: {
+    id: "eggBlaster",
+    name: "Coop Egg Blaster",
+    type: "weapon",
+    desc: "Fires bouncing explosive eggs that shatter into yolk shrapnel.",
+    maxLevel: 5,
+    icon: "🥚",
+    cooldown: 1.3,
+    damage: 32,
+    speed: 290,
+    bounceCount: 3,
+    evolutionReq: "hayBale",
+    evolutionName: "Phoenix Nova Egg",
+    evolutionDesc: "Giant blazing phoenix eggs detonating in fiery chain reactions.",
+  },
+  seedGatling: {
+    id: "seedGatling",
+    name: "Seed Minigun",
+    type: "weapon",
+    desc: "Unleashes rapid-fire bursts of high-velocity spiked pumpkin seeds.",
+    maxLevel: 5,
+    icon: "🌰",
+    cooldown: 0.35,
+    damage: 8,
+    speed: 420,
+    spread: 0.18,
+    evolutionReq: "boots",
+    evolutionName: "Bramble Cannon",
+    evolutionDesc: "Continuous stream of armor-shredding explosive thorn shells.",
+  },
+  fertilizerMortar: {
+    id: "fertilizerMortar",
+    name: "Compost Mortar",
+    type: "weapon",
+    desc: "Lobs heavy toxic compost shells that leave lingering corrosive sludge pools.",
+    maxLevel: 5,
+    icon: "💣",
+    cooldown: 2.2,
+    damage: 48,
+    radius: 70,
+    poolDuration: 3.5,
+    evolutionReq: "honeyComb",
+    evolutionName: "Biohazard Catapult",
+    evolutionDesc: "Massive toxic mushroom clouds melting entire hordes.",
+  },
   scarecrow: {
     id: "scarecrow",
     name: "Haunted Scarecrow",
     type: "weapon",
-    desc: "Summons floating scarecrows that orbit and electrocute encroaching pests.",
+    desc: "Summons floating scarecrows that orbit and electrocute pests.",
     maxLevel: 5,
     icon: "🎃",
     cooldown: 2.5,
-    damage: 15,
+    damage: 16,
     count: 2,
     orbitRadius: 90,
     evolutionReq: "hayBale",
@@ -144,7 +282,7 @@ export const WEAPONS = {
     id: "sunburst",
     name: "Solar Totem",
     type: "weapon",
-    desc: "Drops searing sunbeams from the sky onto cluster of foes.",
+    desc: "Drops searing sunbeams from the sky onto clusters of foes.",
     maxLevel: 5,
     icon: "☀️",
     cooldown: 2.0,
@@ -228,7 +366,7 @@ export function checkEvolution(weaponId, weaponLevel, inventory) {
   return Boolean(inventory.passives[reqPassive] && inventory.passives[reqPassive] >= 1);
 }
 
-// Meta Upgrades (Persistent across runs via Gold earned from shipping crops)
+// Meta Upgrades
 export const META_UPGRADES = [
   {
     id: "startingGold",
@@ -272,7 +410,7 @@ export const META_UPGRADES = [
   },
 ];
 
-// Monster Types
+// Monsters
 export const MONSTERS = {
   crow: {
     id: "crow",

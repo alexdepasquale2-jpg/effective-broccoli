@@ -15,8 +15,10 @@ const ui = {
   goldText: document.querySelector("#gold-text"),
   timeBanner: document.querySelector("#time-banner"),
   timeTimer: document.querySelector("#time-timer"),
+  allyCounter: document.querySelector("#ally-counter"),
   seedSelector: document.querySelector("#seed-selector"),
   shopBtn: document.querySelector("#shop-btn"),
+  mergeBtn: document.querySelector("#merge-btn"),
   shopModal: document.querySelector("#shop-modal"),
   shopGold: document.querySelector("#shop-gold"),
   seedStoreList: document.querySelector("#seed-store-list"),
@@ -52,6 +54,10 @@ ui.shopBtn?.addEventListener("click", () => {
 
 ui.shopClose?.addEventListener("click", () => {
   game.closeShop();
+});
+
+ui.mergeBtn?.addEventListener("click", () => {
+  game.tryAutoMergeAdjacent();
 });
 
 // Meta Upgrades Modal

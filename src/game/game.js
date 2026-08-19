@@ -1,8 +1,9 @@
 import { clamp, distance, rand, randInt, circleHit } from "./utils.js";
-import { CROPS, WEAPONS, PASSIVES } from "./farmingData.js";
+import { CROPS, WEAPONS, PASSIVES, ALLIES } from "./farmingData.js";
 import { FarmPlot, createFarmGrid } from "./farmPlot.js";
 import { createPlayerStats, recomputePlayerStats, pickLevelUpOptions, getRequiredXp } from "./combatSystems.js";
 import { Monster, WaveSpawner } from "./monsterSpawner.js";
+import { Ally } from "./allySystem.js";
 import { loadMeta, saveMeta } from "./metaStorage.js";
 import { AudioBus } from "./audio.js";
 
@@ -15,8 +16,8 @@ export const GAME_STATES = {
 };
 
 export const TIME_OF_DAY = {
-  DAY: "DAY", // 40 seconds: Peaceful farming, planting, watering, seed purchasing
-  NIGHT: "NIGHT", // 60 seconds: Vampire survivors horde defense, swarms, boss fights
+  DAY: "DAY", // 35 seconds: Farming, merge crops to giant level, water, summon allies
+  NIGHT: "NIGHT", // 55+ seconds: Vampire survivors horde defense, swarms, boss fights
 };
 
 export class Game {
@@ -43,7 +44,7 @@ export class Game {
     // Run Session State
     this.dayNumber = 1;
     this.timePhase = TIME_OF_DAY.DAY;
-    this.phaseTimer = 35; // 35s day
+    this.phaseTimer = 35;
     this.phaseDuration = 35;
 
     // Player Run Data
@@ -58,7 +59,7 @@ export class Game {
       xpNeeded: 5,
       gold: 50 + (this.meta.upgrades.startingGold || 0) * 50,
       selectedSeed: "parsnip",
-      seedInventory: { parsnip: 5, potato: 2, strawberry: 0, cauliflower: 0, starfruit: 0 },
+      seedInventory: { parsnip: 6, potato: 2, strawberry: 0, cauliflower: 0, starfruit: 0 },
       cropInventory: {},
     };
 
@@ -74,6 +75,9 @@ export class Game {
     this.weaponTimers = {
       scythe: 0,
       sprinkler: 0,
+      eggBlaster: 0,
+      seedGatling: 0,
+      fertilizerMortar: 0,
       scarecrow: 0,
       pitchfork: 0,
       beehive: 0,
@@ -82,12 +86,17 @@ export class Game {
 
     // World Entities
     this.plots = createFarmGrid(9, this.meta.upgrades.plotCount || 0);
+    this.allies = [];
     this.monsters = [];
     this.projectiles = [];
     this.xpGems = [];
     this.damageNumbers = [];
     this.particles = [];
     this.scarecrowOrbitAngle = 0;
+
+    // Drag-to-merge plot state
+    this.dragSourcePlot = null;
+    this.pointerPos = { x: 0, y: 0 };
 
     // Spawner
     this.spawner = new WaveSpawner();
@@ -136,12 +145,15 @@ export class Game {
       if (e.code === "KeyB") {
         this.openShop();
       }
+      if (e.code === "KeyM") {
+        this.tryAutoMergeAdjacent();
+      }
     });
     window.addEventListener("keyup", (e) => {
       this.keys[e.code] = false;
     });
 
-    // Touch / Mouse Joystick
+    // Touch / Mouse Joystick & Plot Merge Click/Drag
     const getPos = (e) => {
       const rect = this.canvas.getBoundingClientRect();
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -149,34 +161,76 @@ export class Game {
       return { x: clientX - rect.left, y: clientY - rect.top };
     };
 
+    const toWorld = (screenX, screenY) => {
+      return {
+        x: screenX - this.width / 2 + this.camera.x,
+        y: screenY - this.height / 2 + this.camera.y,
+      };
+    };
+
     const onStart = (e) => {
       this.audio.unlock();
       if (e.target.closest("button, .modal, #shop-modal, #levelup-modal, #meta-modal")) return;
       const pos = getPos(e);
-      this.virtualJoystick.active = true;
-      this.virtualJoystick.startX = pos.x;
-      this.virtualJoystick.startY = pos.y;
-      this.virtualJoystick.curX = pos.x;
-      this.virtualJoystick.curY = pos.y;
-      this.virtualJoystick.dx = 0;
-      this.virtualJoystick.dy = 0;
+      this.pointerPos = pos;
+      const worldPos = toWorld(pos.x, pos.y);
+
+      // Check if clicked directly on a plot with a crop for merging!
+      const clickedPlot = this.getPlotAt(worldPos.x, worldPos.y);
+      if (clickedPlot && clickedPlot.crop) {
+        this.dragSourcePlot = clickedPlot;
+      } else {
+        this.virtualJoystick.active = true;
+        this.virtualJoystick.startX = pos.x;
+        this.virtualJoystick.startY = pos.y;
+        this.virtualJoystick.curX = pos.x;
+        this.virtualJoystick.curY = pos.y;
+        this.virtualJoystick.dx = 0;
+        this.virtualJoystick.dy = 0;
+      }
     };
 
     const onMove = (e) => {
-      if (!this.virtualJoystick.active) return;
       const pos = getPos(e);
-      this.virtualJoystick.curX = pos.x;
-      this.virtualJoystick.curY = pos.y;
-      const rawDx = pos.x - this.virtualJoystick.startX;
-      const rawDy = pos.y - this.virtualJoystick.startY;
-      const dist = Math.hypot(rawDx, rawDy) || 1;
-      const maxDist = 55;
-      const factor = Math.min(dist, maxDist) / dist;
-      this.virtualJoystick.dx = (rawDx * factor) / maxDist;
-      this.virtualJoystick.dy = (rawDy * factor) / maxDist;
+      this.pointerPos = pos;
+
+      if (this.virtualJoystick.active) {
+        this.virtualJoystick.curX = pos.x;
+        this.virtualJoystick.curY = pos.y;
+        const rawDx = pos.x - this.virtualJoystick.startX;
+        const rawDy = pos.y - this.virtualJoystick.startY;
+        const dist = Math.hypot(rawDx, rawDy) || 1;
+        const maxDist = 55;
+        const factor = Math.min(dist, maxDist) / dist;
+        this.virtualJoystick.dx = (rawDx * factor) / maxDist;
+        this.virtualJoystick.dy = (rawDy * factor) / maxDist;
+      }
     };
 
-    const onEnd = () => {
+    const onEnd = (e) => {
+      if (this.dragSourcePlot) {
+        const pos = this.pointerPos;
+        const worldPos = toWorld(pos.x, pos.y);
+        const targetPlot = this.getPlotAt(worldPos.x, worldPos.y);
+
+        if (targetPlot && targetPlot !== this.dragSourcePlot && this.dragSourcePlot.canMergeWith(targetPlot)) {
+          const mergeResult = this.dragSourcePlot.mergeInto(targetPlot);
+          if (mergeResult) {
+            this.audio.jackpot();
+            this.createMergeParticles(targetPlot.x, targetPlot.y);
+            const sizeName = mergeResult.level === 2 ? "Large" : "GIANT ★ SUMMON READY";
+            this.createFloatingText(
+              targetPlot.x,
+              targetPlot.y - 30,
+              `✨ MERGED! ${sizeName} ${CROPS[mergeResult.type].name}`,
+              "#ffd700"
+            );
+            this.syncUI();
+          }
+        }
+        this.dragSourcePlot = null;
+      }
+
       this.virtualJoystick.active = false;
       this.virtualJoystick.dx = 0;
       this.virtualJoystick.dy = 0;
@@ -188,6 +242,36 @@ export class Game {
     window.addEventListener("pointercancel", onEnd);
     window.addEventListener("resize", () => this.resize());
     window.visualViewport?.addEventListener("resize", () => this.resize());
+  }
+
+  getPlotAt(worldX, worldY) {
+    for (const plot of this.plots) {
+      if (Math.abs(worldX - plot.x) <= plot.size / 2 + 6 && Math.abs(worldY - plot.y) <= plot.size / 2 + 6) {
+        return plot;
+      }
+    }
+    return null;
+  }
+
+  tryAutoMergeAdjacent() {
+    // Auto merge all ready matching pairs on the farm
+    for (let i = 0; i < this.plots.length; i++) {
+      const pA = this.plots[i];
+      if (!pA.crop) continue;
+
+      for (let j = i + 1; j < this.plots.length; j++) {
+        const pB = this.plots[j];
+        if (pA.canMergeWith(pB)) {
+          const mergeResult = pA.mergeInto(pB);
+          if (mergeResult) {
+            this.audio.jackpot();
+            this.createMergeParticles(pB.x, pB.y);
+            this.createFloatingText(pB.x, pB.y - 25, `✨ MERGED! ${CROPS[mergeResult.type].name}`, "#ffd700");
+          }
+          break;
+        }
+      }
+    }
   }
 
   play() {
@@ -205,7 +289,7 @@ export class Game {
     this.player.xp = 0;
     this.player.xpNeeded = getRequiredXp(1);
     this.player.gold = 60 + (this.meta.upgrades.startingGold || 0) * 50;
-    this.player.seedInventory = { parsnip: 6, potato: 2, strawberry: 0, cauliflower: 0, starfruit: 0 };
+    this.player.seedInventory = { parsnip: 8, potato: 4, strawberry: 0, cauliflower: 0, starfruit: 0 };
     this.player.cropInventory = {};
 
     this.stats = createPlayerStats(this.meta.upgrades);
@@ -217,6 +301,7 @@ export class Game {
     this.stats = recomputePlayerStats(this.stats, this.inventory.passives);
 
     this.plots = createFarmGrid(9, this.meta.upgrades.plotCount || 0);
+    this.allies = [];
     this.monsters = [];
     this.projectiles = [];
     this.xpGems = [];
@@ -244,6 +329,7 @@ export class Game {
     this.updateTimeAndCycles(dt);
     this.updatePlayerMovement(dt);
     this.updateCrops(dt);
+    this.updateAllies(dt);
     this.updateWeapons(dt);
     this.updateProjectiles(dt);
     this.updateMonsters(dt);
@@ -267,9 +353,14 @@ export class Game {
         this.phaseDuration = 55 + this.dayNumber * 5;
         this.phaseTimer = this.phaseDuration;
         this.spawner.reset();
-        this.audio.hit(); // Ominous gong
+        this.audio.hit();
         this.flash = 0.4;
-        this.createFloatingText(this.player.x, this.player.y - 40, "🌙 NIGHT HAS FALLEN! PROTECT THE FARM!", "#ff5252");
+        this.createFloatingText(
+          this.player.x,
+          this.player.y - 40,
+          "🌙 NIGHT SWARM! ALLIES TO BATTLE STATIONS!",
+          "#ff5252"
+        );
       } else {
         // Night survived! Dawn breaks!
         this.timePhase = TIME_OF_DAY.DAY;
@@ -277,22 +368,25 @@ export class Game {
         this.phaseDuration = 35;
         this.phaseTimer = this.phaseDuration;
 
-        // Auto sell harvested crops at dawn for big payout!
         this.autoShipCrops();
 
-        // Kill remaining night monsters and turn to XP
+        // Convert leftover monsters to XP
         for (const m of this.monsters) {
           this.xpGems.push({ x: m.x, y: m.y, value: m.xp });
         }
         this.monsters = [];
 
-        // Save progress to meta
         this.meta.highestNight = Math.max(this.meta.highestNight, this.dayNumber);
         saveMeta(this.meta);
 
         this.audio.jackpot();
         this.flash = 0.5;
-        this.createFloatingText(this.player.x, this.player.y - 40, `☀️ DAY ${this.dayNumber} DAWNS! HARVEST & PREPARE!`, "#ffd700");
+        this.createFloatingText(
+          this.player.x,
+          this.player.y - 40,
+          `☀️ DAY ${this.dayNumber} DAWNS! MERGE CROPS & REPAIR!`,
+          "#ffd700"
+        );
       }
       this.syncUI();
     }
@@ -319,13 +413,11 @@ export class Game {
     let mx = 0;
     let my = 0;
 
-    // Keyboard Input
     if (this.keys["KeyW"] || this.keys["ArrowUp"]) my -= 1;
     if (this.keys["KeyS"] || this.keys["ArrowDown"]) my += 1;
     if (this.keys["KeyA"] || this.keys["ArrowLeft"]) mx -= 1;
     if (this.keys["KeyD"] || this.keys["ArrowRight"]) mx += 1;
 
-    // Virtual Joystick Input
     if (this.virtualJoystick.active) {
       mx += this.virtualJoystick.dx;
       my += this.virtualJoystick.dy;
@@ -342,7 +434,6 @@ export class Game {
       this.player.facingY = ny;
     }
 
-    // World bounds constraint (Soft boundary with farm fence at radius ~750)
     const worldRadius = 800;
     const playerDist = Math.hypot(this.player.x, this.player.y);
     if (playerDist > worldRadius) {
@@ -355,38 +446,66 @@ export class Game {
     for (const plot of this.plots) {
       const matured = plot.update(dt, this.stats.cropSpeedMult);
       if (matured) {
-        this.createFloatingText(plot.x, plot.y - 20, "✨ READY!", "#76ff03");
+        const isGiant = plot.crop && plot.crop.level >= 3;
+        this.createFloatingText(plot.x, plot.y - 20, isGiant ? "🌟 SUMMON READY!" : "✨ READY!", "#76ff03");
       }
 
-      // Proximity interaction: Auto-water/plant/harvest if player walks over plot
-      if (distance(this.player.x, this.player.y, plot.x, plot.y) < 32) {
+      // Walking over plots plants/waters/harvests
+      if (!this.dragSourcePlot && distance(this.player.x, this.player.y, plot.x, plot.y) < 32) {
         if (!plot.crop) {
-          // Plant selected seed
           const seed = this.player.selectedSeed;
           if (this.player.seedInventory[seed] > 0) {
             this.player.seedInventory[seed] -= 1;
-            plot.plant(seed);
+            plot.plant(seed, 1);
             this.audio.collect(1);
             this.createFloatingText(plot.x, plot.y - 15, `Planted ${CROPS[seed].name}`, "#a5d6a7");
             this.syncUI();
           }
         } else if (plot.crop.isReady) {
-          // Harvest
-          const harvested = plot.harvest();
-          if (harvested) {
-            this.player.cropInventory[harvested.id] = (this.player.cropInventory[harvested.id] || 0) + 1;
-            this.addXp(harvested.xp);
+          const harvest = plot.harvest();
+          if (harvest) {
+            this.player.cropInventory[harvest.cropData.id] =
+              (this.player.cropInventory[harvest.cropData.id] || 0) + (harvest.level === 3 ? 3 : harvest.level);
+            this.addXp(harvest.xp);
             this.meta.totalCropsHarvested += 1;
-            this.audio.collect(3);
-            this.createFloatingText(plot.x, plot.y - 25, `+1 ${harvested.name} (${harvested.icon})`, "#ffd54f");
+
+            if (harvest.allyType) {
+              // SUMMON POWERFUL ALLY!
+              const ally = new Ally(harvest.allyType, plot.x, plot.y);
+              this.allies.push(ally);
+              this.flash = 0.6;
+              this.audio.jackpot();
+              this.createFloatingText(
+                plot.x,
+                plot.y - 35,
+                `⚡ SUMMONED ${ally.icon} ${ally.name.toUpperCase()}!`,
+                "#ffd700"
+              );
+            } else {
+              this.audio.collect(3);
+              this.createFloatingText(plot.x, plot.y - 25, `+${harvest.cropData.name} (${harvest.cropData.icon})`, "#ffd54f");
+            }
             this.syncUI();
           }
         } else if (!plot.isWatered) {
-          // Water
           plot.water();
           this.audio.collect(2);
         }
       }
+    }
+  }
+
+  updateAllies(dt) {
+    for (let i = this.allies.length - 1; i >= 0; i--) {
+      const ally = this.allies[i];
+      ally.update(
+        dt,
+        this.monsters,
+        this.player.x,
+        this.player.y,
+        (p) => this.projectiles.push(p),
+        (x, y, dmg, col) => this.createDamageNumber(x, y, dmg, col)
+      );
     }
   }
 
@@ -429,7 +548,7 @@ export class Game {
         const damage = (isEvo ? 26 : wData.damage + this.inventory.weapons.sprinkler * 3) * this.stats.damageMult;
 
         for (let i = 0; i < streams; i++) {
-          const angle = (performance.now() * 0.005) + (i * Math.PI * 2) / streams;
+          const angle = performance.now() * 0.005 + (i * Math.PI * 2) / streams;
           this.projectiles.push({
             type: "water_jet",
             x: this.player.x,
@@ -443,7 +562,6 @@ export class Game {
           });
         }
 
-        // Sprinkler also waters nearby farm plots automatically!
         for (const plot of this.plots) {
           if (distance(this.player.x, this.player.y, plot.x, plot.y) < 140) {
             plot.water();
@@ -452,7 +570,89 @@ export class Game {
       }
     }
 
-    // 3. Pitchfork / Titan Trident
+    // 3. Egg Blaster / Phoenix Nova Egg (Unique Weapon)
+    if (this.inventory.weapons.eggBlaster) {
+      this.weaponTimers.eggBlaster -= dt;
+      if (this.weaponTimers.eggBlaster <= 0) {
+        const isEvo = Boolean(this.inventory.evolutions.eggBlaster);
+        const wData = WEAPONS.eggBlaster;
+        this.weaponTimers.eggBlaster = wData.cooldown * cdMult;
+        const count = isEvo ? 3 : 1 + Math.floor(this.inventory.weapons.eggBlaster / 3);
+        const damage = (isEvo ? 75 : wData.damage + this.inventory.weapons.eggBlaster * 8) * this.stats.damageMult;
+
+        for (let i = 0; i < count; i++) {
+          const angle = Math.atan2(this.player.facingY, this.player.facingX) + rand(-0.35, 0.35);
+          this.projectiles.push({
+            type: "bouncing_egg",
+            x: this.player.x,
+            y: this.player.y,
+            vx: Math.cos(angle) * wData.speed,
+            vy: Math.sin(angle) * wData.speed,
+            damage,
+            bouncesLeft: isEvo ? 5 : 3,
+            life: 2.0,
+            isEvo,
+          });
+        }
+        this.audio.start();
+      }
+    }
+
+    // 4. Seed Gatling / Bramble Cannon (Unique Weapon)
+    if (this.inventory.weapons.seedGatling) {
+      this.weaponTimers.seedGatling -= dt;
+      if (this.weaponTimers.seedGatling <= 0) {
+        const isEvo = Boolean(this.inventory.evolutions.seedGatling);
+        const wData = WEAPONS.seedGatling;
+        this.weaponTimers.seedGatling = (isEvo ? 0.18 : wData.cooldown) * cdMult;
+        const damage = (isEvo ? 18 : wData.damage + this.inventory.weapons.seedGatling * 2) * this.stats.damageMult;
+        const angle = Math.atan2(this.player.facingY, this.player.facingX) + rand(-wData.spread, wData.spread);
+
+        this.projectiles.push({
+          type: "gatling_seed",
+          x: this.player.x,
+          y: this.player.y,
+          vx: Math.cos(angle) * wData.speed,
+          vy: Math.sin(angle) * wData.speed,
+          damage,
+          life: 0.8,
+          isEvo,
+        });
+      }
+    }
+
+    // 5. Fertilizer Mortar / Biohazard Catapult (Unique Weapon)
+    if (this.inventory.weapons.fertilizerMortar) {
+      this.weaponTimers.fertilizerMortar -= dt;
+      if (this.weaponTimers.fertilizerMortar <= 0) {
+        const isEvo = Boolean(this.inventory.evolutions.fertilizerMortar);
+        const wData = WEAPONS.fertilizerMortar;
+        this.weaponTimers.fertilizerMortar = wData.cooldown * cdMult;
+        const damage = (isEvo ? 90 : wData.damage + this.inventory.weapons.fertilizerMortar * 12) * this.stats.damageMult;
+
+        let tx = this.player.x + rand(-180, 180);
+        let ty = this.player.y + rand(-180, 180);
+        const target = this.getClosestMonster(this.player.x, this.player.y);
+        if (target) {
+          tx = target.x;
+          ty = target.y;
+        }
+
+        this.projectiles.push({
+          type: "mortar_sludge",
+          x: tx,
+          y: ty,
+          radius: isEvo ? 100 : wData.radius,
+          damage,
+          duration: isEvo ? 5.0 : wData.poolDuration,
+          isEvo,
+          hitMonstersTimer: 0,
+        });
+        this.audio.hit();
+      }
+    }
+
+    // 6. Pitchfork / Titan Trident
     if (this.inventory.weapons.pitchfork) {
       this.weaponTimers.pitchfork -= dt;
       if (this.weaponTimers.pitchfork <= 0) {
@@ -481,7 +681,7 @@ export class Game {
       }
     }
 
-    // 4. Beehive
+    // 7. Beehive
     if (this.inventory.weapons.beehive) {
       this.weaponTimers.beehive -= dt;
       if (this.weaponTimers.beehive <= 0) {
@@ -492,7 +692,6 @@ export class Game {
         const damage = (isEvo ? 24 : wData.damage + this.inventory.weapons.beehive * 3) * this.stats.damageMult;
 
         for (let i = 0; i < count; i++) {
-          const angle = Math.random() * Math.PI * 2;
           this.projectiles.push({
             type: "bee",
             x: this.player.x + rand(-15, 15),
@@ -506,7 +705,7 @@ export class Game {
       }
     }
 
-    // 5. Sunburst Solar Totem
+    // 8. Sunburst Solar Totem
     if (this.inventory.weapons.sunburst) {
       this.weaponTimers.sunburst -= dt;
       if (this.weaponTimers.sunburst <= 0) {
@@ -515,15 +714,12 @@ export class Game {
         this.weaponTimers.sunburst = wData.cooldown * cdMult;
         const damage = (isEvo ? 90 : wData.damage + this.inventory.weapons.sunburst * 12) * this.stats.damageMult;
 
-        // Target closest monster or random area
         let targetX = this.player.x + rand(-150, 150);
         let targetY = this.player.y + rand(-150, 150);
-        if (this.monsters.length > 0) {
-          const closest = this.getClosestMonster(this.player.x, this.player.y);
-          if (closest) {
-            targetX = closest.x;
-            targetY = closest.y;
-          }
+        const closest = this.getClosestMonster(this.player.x, this.player.y);
+        if (closest) {
+          targetX = closest.x;
+          targetY = closest.y;
         }
 
         this.projectiles.push({
@@ -575,7 +771,6 @@ export class Game {
             this.createDamageNumber(m.x, m.y, p.damage, p.isEvo ? "#ffd700" : "#ffffff");
 
             if (p.isEvo && p.type === "scythe_slash" && dead) {
-              // Soul Harvester lifesteal
               this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + 1);
             }
           }
@@ -584,17 +779,23 @@ export class Game {
         if (p.duration <= 0) {
           this.projectiles.splice(i, 1);
         }
-      } else if (p.type === "water_jet" || p.type === "pitchfork") {
+      } else if (p.type === "bouncing_egg") {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
         p.life -= dt;
 
         for (const m of this.monsters) {
-          if (distance(p.x, p.y, m.x, m.y) < 18 + m.size) {
-            m.takeDamage(p.damage, p.vx * 0.25, p.vy * 0.25);
-            this.createDamageNumber(m.x, m.y, p.damage, "#80d8ff");
-            p.pierce -= 1;
-            if (p.pierce <= 0) {
+          if (distance(p.x, p.y, m.x, m.y) < 16 + m.size) {
+            m.takeDamage(p.damage, p.vx * 0.4, p.vy * 0.4);
+            this.createDamageNumber(m.x, m.y, p.damage, "#ffeb3b");
+            p.bouncesLeft -= 1;
+            p.vx *= -0.85;
+            p.vy *= -0.85;
+
+            // Egg shrapnel particles
+            this.createDeathParticles(p.x, p.y, "#fffde7");
+
+            if (p.bouncesLeft <= 0) {
               p.life = 0;
               break;
             }
@@ -602,6 +803,50 @@ export class Game {
         }
 
         if (p.life <= 0) {
+          this.projectiles.splice(i, 1);
+        }
+      } else if (p.type === "gatling_seed" || p.type === "water_jet" || p.type === "pitchfork" || p.type === "ally_thorn" || p.type === "cosmic_plasma") {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+
+        for (const m of this.monsters) {
+          if (distance(p.x, p.y, m.x, m.y) < 18 + m.size) {
+            m.takeDamage(p.damage, p.vx * 0.25, p.vy * 0.25);
+            this.createDamageNumber(m.x, m.y, p.damage, p.color || "#80d8ff");
+            if (p.pierce) {
+              p.pierce -= 1;
+              if (p.pierce <= 0) p.life = 0;
+            } else {
+              p.life = 0;
+            }
+            break;
+          }
+        }
+
+        if (p.life <= 0) {
+          this.projectiles.splice(i, 1);
+        }
+      } else if (p.type === "mortar_sludge") {
+        p.duration -= dt;
+        p.hitMonstersTimer -= dt;
+
+        if (p.hitMonstersTimer <= 0) {
+          p.hitMonstersTimer = 0.25;
+          for (const m of this.monsters) {
+            if (distance(p.x, p.y, m.x, m.y) < p.radius + m.size) {
+              m.takeDamage(p.damage * 0.4);
+              this.createDamageNumber(m.x, m.y, p.damage * 0.4, "#aeea00");
+            }
+          }
+        }
+
+        if (p.duration <= 0) {
+          this.projectiles.splice(i, 1);
+        }
+      } else if (p.type === "crimson_beam" || p.type === "ground_shockwave") {
+        p.duration -= dt;
+        if (p.duration <= 0) {
           this.projectiles.splice(i, 1);
         }
       } else if (p.type === "bee") {
@@ -652,7 +897,6 @@ export class Game {
   }
 
   updateMonsters(dt) {
-    // Wave Spawner during Night
     if (this.timePhase === TIME_OF_DAY.NIGHT) {
       const newMonsters = this.spawner.update(
         dt,
@@ -667,24 +911,20 @@ export class Game {
       }
     }
 
-    // Monster AI & Attacks
     for (let i = this.monsters.length - 1; i >= 0; i--) {
       const m = this.monsters[i];
       m.update(dt, this.player.x, this.player.y);
 
-      // Attack player on contact
       if (distance(this.player.x, this.player.y, m.x, m.y) < 18 + m.size) {
         this.playerTakeDamage(m.damage * dt);
       }
 
-      // Check death
       if (m.hp <= 0) {
         this.monsters.splice(i, 1);
         this.meta.totalMonstersSlain += 1;
         this.xpGems.push({ x: m.x, y: m.y, value: m.xp });
         this.createDeathParticles(m.x, m.y, m.color);
 
-        // Rare crop drop chance on kill (Luck based)
         if (Math.random() < 0.08 + this.stats.luck * 0.1) {
           const seeds = Object.keys(CROPS);
           const seedDrop = seeds[randInt(0, Math.min(seeds.length - 1, this.dayNumber))];
@@ -851,8 +1091,23 @@ export class Game {
     }
   }
 
+  createMergeParticles(x, y) {
+    for (let i = 0; i < 16; i++) {
+      const angle = rand(0, Math.PI * 2);
+      const speed = rand(60, 200);
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: rand(4, 8),
+        color: "#ffd700",
+        life: 0.6,
+      });
+    }
+  }
+
   updateCamera(dt) {
-    // Smooth camera lerp tracking player
     const targetX = this.player.x;
     const targetY = this.player.y;
     this.camera.x += (targetX - this.camera.x) * Math.min(1, 10 * dt);
@@ -860,7 +1115,6 @@ export class Game {
   }
 
   tryInteract() {
-    // Interact with Farmhouse at x: 0, y: -160
     if (distance(this.player.x, this.player.y, 0, -160) < 95) {
       this.openShop();
     }
@@ -888,7 +1142,7 @@ export class Game {
         <span class="crop-icon">${data.icon}</span>
         <div class="crop-details">
           <strong>${data.name} ${!isUnlocked ? `(Day ${data.unlockedAtDay}+)` : ""}</strong>
-          <small>Grows in ${data.growTime}s · Sells for ${data.yieldValue}g (Bag: ${count})</small>
+          <small>Grows in ${data.growTime}s · Summons: ${ALLIES[data.allySummon].name} · (Bag: ${count})</small>
         </div>
         <button type="button" class="buy-btn" ${!isUnlocked || this.player.gold < data.seedCost ? "disabled" : ""}>
           Buy ${data.seedCost}g
@@ -919,6 +1173,7 @@ export class Game {
     this.ui.gameoverModal.hidden = false;
     this.ui.gameoverStats.innerHTML = `
       <p>Survives until: <b>Day ${this.dayNumber}</b></p>
+      <p>Allies Summoned: <b>${this.allies.length}</b></p>
       <p>Player Level Reached: <b>Lv ${this.player.level}</b></p>
       <p>Gold Deposited: <b>+${this.player.gold}g</b></p>
     `;
@@ -938,6 +1193,11 @@ export class Game {
     this.ui.timeBanner.textContent = `${this.timePhase === TIME_OF_DAY.DAY ? "☀️ DAY" : "🌙 NIGHT"} ${this.dayNumber}`;
     this.ui.timeTimer.textContent = `${Math.ceil(this.phaseTimer)}s`;
     this.ui.timeTimer.className = this.timePhase === TIME_OF_DAY.NIGHT ? "night-timer" : "day-timer";
+
+    // Ally counter banner
+    if (this.ui.allyCounter) {
+      this.ui.allyCounter.textContent = `🛡️ Allies: ${this.allies.length}`;
+    }
 
     // Seed selector bar
     if (this.ui.seedSelector) {
@@ -961,58 +1221,73 @@ export class Game {
     const { ctx, width, height } = this;
     ctx.clearRect(0, 0, width, height);
 
-    // Screen Shake Offset
     const sx = this.shake ? rand(-6, 6) * this.shake : 0;
     const sy = this.shake ? rand(-6, 6) * this.shake : 0;
 
     ctx.save();
     ctx.translate(width / 2 + sx - this.camera.x, height / 2 + sy - this.camera.y);
 
-    // 1. Draw World Background & Terrain (Stardew Valley farm grass)
+    // 1. Terrain
     this.drawTerrain(ctx);
 
-    // 2. Draw Farm Plots & Growing Crops
+    // 2. Farm Plots & Merged Crops
     this.drawFarmPlots(ctx);
 
-    // 3. Draw Farmhouse & Barn
+    // 3. Farmhouse
     this.drawFarmBuildings(ctx);
 
-    // 4. Draw XP Gems
+    // 4. XP Gems
     this.drawGems(ctx);
 
-    // 5. Draw Monsters
+    // 5. Summoned Allies
+    this.drawAllies(ctx);
+
+    // 6. Monsters
     this.drawMonsters(ctx);
 
-    // 6. Draw Player (Farmer with straw hat & animations)
+    // 7. Player
     this.drawPlayer(ctx);
 
-    // 7. Draw Weapons, Projectiles & Orbiters
+    // 8. Weapons, Projectiles & Orbiters
     this.drawProjectiles(ctx);
 
-    // 8. Draw Particles & Damage Numbers
+    // 9. Particles & Damage Numbers
     this.drawEffects(ctx);
+
+    // 10. Drag-to-merge visual line
+    if (this.dragSourcePlot) {
+      const targetWorld = {
+        x: this.pointerPos.x - width / 2 + this.camera.x,
+        y: this.pointerPos.y - height / 2 + this.camera.y,
+      };
+      ctx.strokeStyle = "#ffd700";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(this.dragSourcePlot.x, this.dragSourcePlot.y);
+      ctx.lineTo(targetWorld.x, targetWorld.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     ctx.restore();
 
-    // 9. Day/Night Screen Ambient Tint Overlay
+    // 11. Day/Night Screen Lighting
     this.drawAmbientLighting(ctx, width, height);
 
-    // 10. Draw Virtual Touch Joystick
+    // 12. Virtual Touch Joystick
     this.drawJoystick(ctx);
   }
 
   drawTerrain(ctx) {
-    // Farm grass field
     const size = 1800;
     ctx.fillStyle = "#5c8a3d";
     ctx.fillRect(-size / 2, -size / 2, size, size);
 
-    // Dirt pathways
     ctx.fillStyle = "#8d6e4a";
     ctx.fillRect(-220, -180, 440, 26);
     ctx.fillRect(-18, -180, 36, 420);
 
-    // Wooden fences around boundary
     ctx.strokeStyle = "#4e342e";
     ctx.lineWidth = 6;
     ctx.strokeRect(-800, -800, 1600, 1600);
@@ -1020,56 +1295,73 @@ export class Game {
 
   drawFarmPlots(ctx) {
     for (const plot of this.plots) {
-      // Tilled soil plot
       ctx.fillStyle = plot.isWatered ? "#3e2723" : "#6d4c41";
       ctx.fillRect(plot.x - plot.size / 2, plot.y - plot.size / 2, plot.size, plot.size);
       ctx.strokeStyle = plot.isWatered ? "#271610" : "#4e342e";
       ctx.lineWidth = 2;
       ctx.strokeRect(plot.x - plot.size / 2, plot.y - plot.size / 2, plot.size, plot.size);
 
-      // Crop visual
+      // Selected for dragging outline
+      if (this.dragSourcePlot === plot) {
+        ctx.strokeStyle = "#ffd700";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(plot.x - plot.size / 2 - 2, plot.y - plot.size / 2 - 2, plot.size + 4, plot.size + 4);
+      }
+
       if (plot.crop) {
         const cropData = CROPS[plot.crop.type];
         const progressPct = Math.min(1.0, plot.crop.progress / plot.crop.maxTime);
+        const level = plot.crop.level;
+        const isGiant = level >= 3;
 
         if (plot.crop.isReady) {
-          // Fully grown harvestable crop with pulsing bounce
           const bounce = Math.sin(performance.now() * 0.008) * 3;
-          ctx.font = "24px sans-serif";
+          const fontPx = isGiant ? 32 : level === 2 ? 26 : 20;
+          ctx.font = `${fontPx}px sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(cropData.icon, plot.x, plot.y + bounce);
+
+          // Star badge for level 2 / 3 giant crops
+          if (level > 1) {
+            ctx.font = "12px sans-serif";
+            ctx.fillText(isGiant ? "🌟Lv3" : "⭐Lv2", plot.x, plot.y - 18);
+          }
         } else {
-          // Sprout stage 1 / 2
-          const sproutSize = 4 + progressPct * 12;
+          const baseSize = level === 3 ? 8 : level === 2 ? 6 : 4;
+          const sproutSize = baseSize + progressPct * (level === 3 ? 18 : 12);
+
           ctx.fillStyle = cropData.leafColor;
           ctx.beginPath();
           ctx.arc(plot.x, plot.y - 2, sproutSize, 0, Math.PI * 2);
           ctx.fill();
 
-          // Small progress dot
           ctx.fillStyle = cropData.color;
           ctx.beginPath();
           ctx.arc(plot.x, plot.y - 2, sproutSize * 0.5, 0, Math.PI * 2);
           ctx.fill();
+
+          if (level > 1) {
+            ctx.fillStyle = "#ffd700";
+            ctx.font = "10px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(isGiant ? "🌟" : "⭐", plot.x, plot.y - sproutSize - 4);
+          }
         }
       }
     }
   }
 
   drawFarmBuildings(ctx) {
-    // Cozy Farmhouse at x: 0, y: -160
     const hx = 0;
     const hy = -160;
 
-    // Walls
     ctx.fillStyle = "#c28858";
     ctx.fillRect(hx - 60, hy - 40, 120, 80);
     ctx.strokeStyle = "#3e2723";
     ctx.lineWidth = 3;
     ctx.strokeRect(hx - 60, hy - 40, 120, 80);
 
-    // Red Roof
     ctx.fillStyle = "#b71c1c";
     ctx.beginPath();
     ctx.moveTo(hx - 75, hy - 40);
@@ -1079,11 +1371,9 @@ export class Game {
     ctx.fill();
     ctx.stroke();
 
-    // Door
     ctx.fillStyle = "#4e342e";
     ctx.fillRect(hx - 16, hy + 10, 32, 30);
 
-    // Farmhouse Sign
     ctx.fillStyle = "#ffe082";
     ctx.fillRect(hx - 45, hy - 25, 90, 20);
     ctx.strokeRect(hx - 45, hy - 25, 90, 20);
@@ -1105,12 +1395,43 @@ export class Game {
     }
   }
 
+  drawAllies(ctx) {
+    for (const ally of this.allies) {
+      ctx.save();
+      ctx.translate(ally.x, ally.y);
+
+      // Glowing aura
+      ctx.fillStyle = `${ally.color}33`;
+      ctx.beginPath();
+      ctx.arc(0, 0, ally.size * 1.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Shadow
+      ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+      ctx.beginPath();
+      ctx.ellipse(0, ally.size * 0.8, ally.size * 0.8, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ally Icon & Body
+      ctx.font = `${Math.round(ally.size * 1.5)}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(ally.icon, 0, Math.sin(ally.animPhase) * 3);
+
+      // Ally Name tag
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 10px sans-serif";
+      ctx.fillText(ally.name, 0, -ally.size - 6);
+
+      ctx.restore();
+    }
+  }
+
   drawMonsters(ctx) {
     for (const m of this.monsters) {
       ctx.save();
       ctx.translate(m.x, m.y);
 
-      // Flash white on hit
       ctx.fillStyle = m.hitTimer > 0 ? "#ffffff" : m.color;
       ctx.beginPath();
       ctx.arc(0, 0, m.size, 0, Math.PI * 2);
@@ -1119,14 +1440,12 @@ export class Game {
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // Monster glowing eyes
       ctx.fillStyle = m.eyeColor;
       ctx.beginPath();
       ctx.arc(-m.size * 0.35, -m.size * 0.2, m.size * 0.2, 0, Math.PI * 2);
       ctx.arc(m.size * 0.35, -m.size * 0.2, m.size * 0.2, 0, Math.PI * 2);
       ctx.fill();
 
-      // Boss Crown
       if (m.isBoss) {
         ctx.fillStyle = "#ffd700";
         ctx.font = "16px sans-serif";
@@ -1142,23 +1461,19 @@ export class Game {
     ctx.save();
     ctx.translate(this.player.x, this.player.y);
 
-    // Player Shadow
     ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
     ctx.beginPath();
     ctx.ellipse(0, 14, 16, 6, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Body (Farmer Overalls)
     ctx.fillStyle = "#1976d2";
     ctx.fillRect(-9, -4, 18, 16);
 
-    // Head
     ctx.fillStyle = "#ffcc80";
     ctx.beginPath();
     ctx.arc(0, -10, 11, 0, Math.PI * 2);
     ctx.fill();
 
-    // Straw Hat (Stardew signature!)
     ctx.fillStyle = "#fbc02d";
     ctx.beginPath();
     ctx.ellipse(0, -16, 18, 6, 0, 0, Math.PI * 2);
@@ -1184,13 +1499,52 @@ export class Game {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.isEvo ? 8 : 5, 0, Math.PI * 2);
         ctx.fill();
-      } else if (p.type === "pitchfork") {
-        ctx.strokeStyle = p.isEvo ? "#ff3d00" : "#b0bec5";
-        ctx.lineWidth = 4;
+      } else if (p.type === "bouncing_egg") {
+        ctx.fillStyle = p.isEvo ? "#ff5722" : "#fffde7";
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, 8, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#3e2723";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      } else if (p.type === "gatling_seed") {
+        ctx.fillStyle = p.isEvo ? "#ffd700" : "#ff9800";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (p.type === "mortar_sludge") {
+        ctx.fillStyle = p.isEvo ? "rgba(174, 234, 0, 0.4)" : "rgba(76, 175, 80, 0.35)";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#7cb342";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else if (p.type === "pitchfork" || p.type === "ally_thorn") {
+        ctx.strokeStyle = p.isEvo ? "#ff3d00" : p.color || "#b0bec5";
+        ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(p.x - p.vx * 0.05, p.y - p.vy * 0.05);
         ctx.lineTo(p.x + p.vx * 0.05, p.y + p.vy * 0.05);
         ctx.stroke();
+      } else if (p.type === "crimson_beam") {
+        ctx.strokeStyle = "rgba(233, 30, 99, 0.85)";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.tx, p.ty);
+        ctx.stroke();
+      } else if (p.type === "ground_shockwave") {
+        ctx.strokeStyle = p.color || "#8d6e63";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (p.type === "cosmic_plasma") {
+        ctx.fillStyle = "#ffd700";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+        ctx.fill();
       } else if (p.type === "bee") {
         ctx.fillStyle = p.isEvo ? "#ff9100" : "#ffeb3b";
         ctx.beginPath();
@@ -1207,7 +1561,6 @@ export class Game {
       }
     }
 
-    // Draw Orbiting Scarecrows
     if (this.inventory.weapons.scarecrow) {
       const isEvo = Boolean(this.inventory.evolutions.scarecrow);
       const count = isEvo ? 4 : 2 + Math.floor(this.inventory.weapons.scarecrow / 2);
@@ -1227,7 +1580,6 @@ export class Game {
   }
 
   drawEffects(ctx) {
-    // Damage numbers & text popups
     for (const d of this.damageNumbers) {
       ctx.fillStyle = d.color;
       ctx.font = "bold 13px sans-serif";
@@ -1235,7 +1587,6 @@ export class Game {
       ctx.fillText(d.text, d.x, d.y);
     }
 
-    // Particles
     for (const p of this.particles) {
       ctx.fillStyle = p.color;
       ctx.beginPath();
@@ -1246,12 +1597,10 @@ export class Game {
 
   drawAmbientLighting(ctx, width, height) {
     if (this.timePhase === TIME_OF_DAY.NIGHT) {
-      // Dark gothic night darkness overlay with soft player lantern circle!
       ctx.save();
       ctx.fillStyle = "rgba(10, 15, 30, 0.65)";
       ctx.fillRect(0, 0, width, height);
 
-      // Lantern light cut out around player
       const cx = width / 2;
       const cy = height / 2;
       const lightGrad = ctx.createRadialGradient(cx, cy, 30, cx, cy, 180);
@@ -1262,7 +1611,6 @@ export class Game {
       ctx.restore();
     }
 
-    // Flash white on hit
     if (this.flash > 0) {
       ctx.fillStyle = `rgba(255, 255, 255, ${this.flash * 0.35})`;
       ctx.fillRect(0, 0, width, height);
@@ -1273,14 +1621,12 @@ export class Game {
     if (!this.virtualJoystick.active) return;
     const j = this.virtualJoystick;
 
-    // Base ring
     ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(j.startX, j.startY, 50, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Thumb nub
     ctx.fillStyle = "rgba(255, 215, 0, 0.75)";
     ctx.beginPath();
     ctx.arc(j.startX + j.dx * 50, j.startY + j.dy * 50, 22, 0, Math.PI * 2);

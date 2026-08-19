@@ -6,16 +6,21 @@ import {
   checkEvolution,
   META_UPGRADES,
   MONSTERS,
+  ALLIES,
 } from "./farmingData.js";
 
 describe("FarmSurvivor Data Models", () => {
-  it("defines all initial starter crops and weapons", () => {
+  it("defines all initial starter crops, weapons, and allies", () => {
     expect(CROPS.parsnip.yieldValue).toBeGreaterThan(0);
     expect(CROPS.starfruit.growTime).toBeGreaterThan(CROPS.parsnip.growTime);
 
     expect(WEAPONS.scythe.evolutionReq).toBe("fertilizer");
     expect(WEAPONS.sprinkler.evolutionReq).toBe("wateringCan");
+    expect(WEAPONS.eggBlaster.evolutionReq).toBe("hayBale");
+    expect(WEAPONS.seedGatling.evolutionReq).toBe("boots");
+    expect(WEAPONS.fertilizerMortar.evolutionReq).toBe("honeyComb");
     expect(PASSIVES.fertilizer.stat).toBe("damageMult");
+    expect(ALLIES.cosmicDragon.hp).toBe(1000);
   });
 
   it("checks weapon evolution conditions properly", () => {

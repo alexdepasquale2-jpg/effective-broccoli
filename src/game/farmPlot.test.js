@@ -22,7 +22,7 @@ describe("FarmPlot & Grid logic", () => {
     // Harvest
     const harvestResult = plot.harvest();
     expect(harvestResult.id).toBe("parsnip");
-    expect(harvestResult.yieldValue).toBe(8);
+    expect(harvestResult.yieldValue).toBe(10);
     expect(plot.crop).toBe(null);
   });
 
