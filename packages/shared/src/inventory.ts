@@ -1,4 +1,6 @@
-import { INVENTORY_SLOTS, type InventorySlot, type ItemDef } from '@glimmer/shared';
+import { INVENTORY_SLOTS } from './constants.ts';
+import type { ItemDef } from './content.ts';
+import type { InventorySlot } from './protocol.ts';
 
 /**
  * Slot-based inventory with stacking, matching how Glitch packs behaved:

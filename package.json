@@ -12,7 +12,8 @@
     "packages/shared",
     "packages/dataforge",
     "packages/server",
-    "packages/client"
+    "packages/client",
+    "packages/demo"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
@@ -22,7 +23,8 @@
     "test": "npm run build -w @glimmer/shared && vitest run",
     "dataforge": "npm run start -w @glimmer/dataforge",
     "db:migrate": "npm run migrate -w @glimmer/server",
-    "dev": "npm run build -w @glimmer/shared && (npm run dev -w @glimmer/server & npm run dev -w @glimmer/client & wait)"
+    "dev": "npm run build -w @glimmer/shared && (npm run dev -w @glimmer/server & npm run dev -w @glimmer/client & wait)",
+    "demo:build": "npm run build -w @glimmer/demo"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

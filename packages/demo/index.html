@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Project Glimmer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,400;9..144,600;9..144,700&family=Nunito:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="page">
+      <header id="masthead">
+        <div class="masthead-left">
+          <h1>Project Glimmer</h1>
+          <p class="sub">A playable slice of a <em>Glitch</em> revival</p>
+        </div>
+        <div class="masthead-right">
+          <span id="place"></span>
+          <button id="reset" type="button">Start over</button>
+        </div>
+      </header>
+
+      <main id="viewport">
+        <canvas id="meadow"></canvas>
+
+        <div id="hud">
+          <section id="skills-panel" aria-label="Skills">
+            <h2>Skills</h2>
+            <div id="skills"></div>
+          </section>
+
+          <div id="toasts" role="status" aria-live="polite"></div>
+
+          <section id="pack" aria-label="Pack">
+            <div id="slots"></div>
+            <p id="controls">
+              <kbd>A</kbd><kbd>D</kbd> walk &middot; <kbd>Space</kbd> jump &middot; <kbd>E</kbd> or
+              click a trant to harvest
+            </p>
+          </section>
+        </div>
+      </main>
+
+      <footer id="colophon">
+        <div class="col">
+          <h3>What this is</h3>
+          <p>
+            The vertical slice of a <em>Glitch</em> revival, running single-player in this page. The
+            physics, inventory stacking, skill curve and harvest rules are the
+            <strong>same modules the real server runs</strong> — only the network round trip is
+            replaced.
+          </p>
+        </div>
+        <div class="col">
+          <h3>What it isn’t</h3>
+          <p>
+            The real build is a Node server on Postgres with authoritative rooms over WebSockets,
+            where other players walk past you and everything persists to a database. That needs
+            hosting; this page needs none.
+          </p>
+        </div>
+        <div class="col">
+          <h3>Where the world comes from</h3>
+          <p id="source-note"></p>
+          <p class="fine">
+            Art, music and the complete server-side game code of <em>Glitch</em> were released into
+            the public domain (CC0) by Tiny Speck. The <em>Glitch</em> name and logo were not, and
+            are not used here.
+          </p>
+        </div>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

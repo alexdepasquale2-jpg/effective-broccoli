@@ -12,9 +12,10 @@ import {
   type InventorySlot,
   type Location,
   type ServerMessage,
+  addItem,
+  isFull,
 } from '@glimmer/shared';
 import type { Content } from '../content.ts';
-import { addItem, isFull } from './inventory.ts';
 
 /** A connected player, as the room sees them. */
 export interface Occupant {

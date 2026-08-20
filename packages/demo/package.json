@@ -1,0 +1,18 @@
+{
+  "name": "@glimmer/demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Single-player, self-contained build of the vertical slice, for publishing as a shareable page.",
+  "scripts": {
+    "prebuild": "node --experimental-strip-types scripts/embed-content.ts",
+    "build": "npm run prebuild && tsc --build && vite build && node --experimental-strip-types scripts/build-artifact.ts",
+    "dev": "npm run prebuild && vite"
+  },
+  "dependencies": {
+    "@glimmer/shared": "*"
+  },
+  "devDependencies": {
+    "vite": "^8.2.1"
+  }
+}
