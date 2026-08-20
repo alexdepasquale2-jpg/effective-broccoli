@@ -9,23 +9,23 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#0b1220" />
+    <meta name="theme-color" content="#081017" />
     <meta
       name="description"
-      content="Let It Pass — a year in a valley where most things resolve without you. Watch, tend, act, or leave it alone."
+      content="Let It Pass — Top-down action game where doing nothing is your greatest power. Explore, observe, and master stillness."
     />
-    <title>Let It Pass</title>
+    <title>Let It Pass · Action & Stillness</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <link rel="apple-touch-icon" href="./icon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600;800&display=swap"
       rel="stylesheet"
     />
-    <script type="module" crossorigin src="./assets/index-RGjnUNR0.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BgFKWXPJ.css">
+    <script type="module" crossorigin src="./assets/index-B245-4nR.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-xdI_V99J.css">
   </head>
   <body>
     <div id="app">
@@ -47,88 +47,50 @@
 
           <div class="hud-block right">
             <div class="day-row">
-              <span id="day-label">Day 1 / 12</span>
-              <span id="season-label" class="season">Thaw</span>
+              <span id="day-label">Time: 60s</span>
             </div>
             <div class="vitality-row">
-              <span class="mini-label">vitality</span>
-              <div class="track wide"><div id="vitality" class="track-fill vital"></div></div>
-              <span id="vitality-text" class="mini-value">100</span>
+              <span id="season-label" class="season">🧘 Channelling Stillness</span>
             </div>
           </div>
         </div>
 
         <div class="hud-foot">
           <span id="tally" class="tally">0 passed · 0 tended · 0 acted</span>
-          <span class="attune">read: <b id="attune-label">Unread</b></span>
-          <button id="chronicle-btn" type="button" class="btn ghost tiny">Chronicle</button>
-        </div>
-      </div>
-
-      <!-- Night -->
-      <div id="night-sheet" class="sheet" hidden>
-        <div class="sheet-box">
-          <p class="eyebrow">The day closes</p>
-          <h2 id="night-title">Night of day 1</h2>
-          <p id="night-sub" class="sub"></p>
-          <div id="night-body" class="night-body"></div>
-          <div id="night-world" class="meters"></div>
-          <button id="sleep-btn" type="button" class="btn wide">Sleep</button>
-        </div>
-      </div>
-
-      <!-- Chronicle -->
-      <div id="chronicle-sheet" class="sheet" hidden>
-        <div class="sheet-box">
-          <p class="eyebrow">So far</p>
-          <h2>The Chronicle</h2>
-          <div id="chronicle-lines" class="lines"></div>
-          <div id="chronicle-log" class="log"></div>
-          <button id="chronicle-close" type="button" class="btn wide ghost">Back to the valley</button>
+          <button id="action-btn" type="button" class="btn act-trigger-btn">💥 Strike (Space)</button>
         </div>
       </div>
 
       <!-- Ending -->
       <div id="end-sheet" class="sheet" hidden>
         <div class="sheet-box">
-          <p class="eyebrow">Twelve days later</p>
-          <h2 id="end-title">The year, accounted for</h2>
-          <div id="end-world" class="meters"></div>
-          <p id="end-world-verdict" class="verdict soft"></p>
+          <p class="eyebrow">The Cycle Ends</p>
+          <h2 id="end-title">The Accounting</h2>
           <div id="end-stats" class="stats"></div>
           <div id="end-lines" class="lines"></div>
           <p id="end-verdict" class="verdict"></p>
-          <button id="again-btn" type="button" class="btn wide">Live it again</button>
+          <button id="again-btn" type="button" class="btn wide">Breathe Again</button>
         </div>
       </div>
 
-      <!-- Title -->
+      <!-- Title Screen -->
       <div id="overlay" class="sheet">
         <div class="sheet-box title-box">
-          <p class="eyebrow">A year in a valley · a game about not doing things</p>
+          <p class="eyebrow">ACTION MEETS STILLNESS</p>
           <h1>Let It Pass</h1>
           <p class="lead">
-            Twelve days. Five corners of a life — yourself, your kin, your work,
-            the town, the world. Stories run through all of them whether you are
-            in them or not.
+            Move through an interactive world where crises and spectacles unfold in real-time.
           </p>
           <div class="verbs">
-            <p><b>Let it pass</b> — do nothing. Free. Usually right.</p>
-            <p><b>Watch</b> — spend a little to see what a moment actually needs.</p>
-            <p><b>Tend</b> — be present without fixing. Costs you.</p>
-            <p><b>Act</b> — put your hand in. Costs you a great deal.</p>
+            <p>🏃 <b>Move:</b> WASD / Arrow keys or Touch Joystick to navigate.</p>
+            <p>🧘 <b>Stand Still:</b> Stopping expands your <b>Stillness Aura</b> and resolves chaotic storms naturally.</p>
+            <p>🤝 <b>Tend:</b> Stay peacefully beside quiet suffering to comfort them.</p>
+            <p>💥 <b>Strike (Space):</b> Intervene forcefully when an action is truly required.</p>
           </div>
           <p class="lead dim">
-            Loud things are rarely the ones that need you — but not never, so you
-            cannot make it a rule. Every intervention tires you, and each one in a
-            day costs more than the last. Run empty and you lose the day.
+            Loud whirlwinds and fires burn themselves out if you leave them alone. Over-reacting causes disruption. Discernment is everything.
           </p>
-          <p class="lead dim">
-            At the end you will be shown each story's ending beside the ending it
-            would have had if you had never touched it.
-          </p>
-          <button id="play" type="button" class="btn wide">Begin the year</button>
-          <p class="footnote"><span id="record-line"></span></p>
+          <button id="play" type="button" class="btn wide gold">Enter the Realm</button>
         </div>
       </div>
     </div>

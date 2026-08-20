@@ -171,8 +171,24 @@ canvas {
   margin-top: 9px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  flex-wrap: wrap;
+}
+
+.act-trigger-btn {
+  pointer-events: auto;
+  background: linear-gradient(180deg, #ff8a65, #e64a19);
+  color: #fff;
+  border: 1px solid #ffab91;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(230, 74, 25, 0.4);
+}
+
+.btn.gold {
+  background: linear-gradient(180deg, #80deea, #00acc1);
+  color: #041014;
+  font-weight: 700;
+  border: 0;
 }
 
 .tally,

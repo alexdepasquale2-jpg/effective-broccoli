@@ -1,48 +1,16 @@
+import { clamp, damp, distance, rand, randInt } from "./utils.js";
+import { INCIDENT_TYPES, Incident } from "./incidentData.js";
 import { AudioBus } from "./audio.js";
-import { accounting, createChronicle, recordBeat, recordCollapse, recordThread } from "./chronicle.js";
-import {
-  attuneLevel,
-  autoRevealed,
-  canAfford,
-  costOf,
-  createResources,
-  depthFor,
-  gainAttunement,
-  nextDepth,
-  spend,
-  stillnessRate,
-  streakMultiplier,
-  vitalityRate,
-} from "./resources.js";
-import { Scene } from "./scene.js";
-import { loadRecord, mergeRun, saveRecord } from "./storage.js";
-import {
-  REVEALS,
-  THREADS,
-  applyChoice,
-  createRun,
-  currentBeat,
-  finishRun,
-} from "./threads.js";
-import { clamp, damp, pointInRect, rand } from "./utils.js";
-import {
-  DOMAINS,
-  TOTAL_DAYS,
-  applyEffects,
-  conditionOf,
-  createWorld,
-  seasonFor,
-  seedWeights,
-  worldAverage,
-  worldVerdict,
-} from "./world.js";
+import { loadRecord, saveRecord, mergeRun } from "./storage.js";
+import { accounting, createChronicle, recordBeat, recordThread } from "./chronicle.js";
+import { createWorld, applyEffects, conditionOf, DOMAINS, TOTAL_DAYS, seasonFor, worldAverage, worldVerdict } from "./world.js";
+import { depthFor, nextDepth, streakMultiplier, stillnessRate } from "./resources.js";
 
-export const STATES = { TITLE: "TITLE", DAY: "DAY", NIGHT: "NIGHT", ENDED: "ENDED" };
-
-const DAY_LENGTH = 52;
-const MAX_RUNS = 4;
-const MAX_CARDS = 2;
-const ECHO_LIFE = 7;
+export const STATES = {
+  TITLE: "TITLE",
+  PLAYING: "PLAYING",
+  ENDED: "ENDED",
+};
 
 export class Game {
   constructor(canvas, ui) {
@@ -50,38 +18,64 @@ export class Game {
     this.ctx = canvas.getContext("2d");
     this.ui = ui;
     this.audio = new AudioBus();
-    this.scene = new Scene();
     this.record = loadRecord();
 
     this.state = STATES.TITLE;
+    this.dpr = window.devicePixelRatio || 1;
     this.width = 640;
     this.height = 480;
-    this.dpr = 1;
     this.lastTime = 0;
     this.running = false;
     this.boundFrame = (t) => this.frame(t);
 
-    this.reset();
-    this.resize();
-    this.bindInput();
-    this.syncHud();
-    this.draw();
+    // World & Camera
+    this.camera = { x: 0, y: 0 };
+    this.shake = 0;
+    this.flash = 0;
+
+    // Simulation & Chronicle
+    this.world = createWorld();
+    this.chronicle = createChronicle();
+    this.stillness = 0;
+    this.peakStillness = 0;
+    this.stillnessStreak = 0;
+    this.energy = 100;
+    this.elapsed = 0;
+    this.dayTimer = 60; // 60s day cycle
+
+    // Interactive Action Player
+    this.player = {
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      speed: 180,
+      isActing: false,
+      actTimer: 0,
+      auraRadius: 40,
+      standStillTimer: 0,
+    };
+
+    // World Incidents & Particles
+    this.incidents = [];
+    this.particles = [];
+    this.floatingTexts = [];
+    this.ambientMotes = [];
+    this.ripples = [];
+    this.spawnerTimer = 3.0;
+
+    // Controls
+    this.keys = {};
+    this.virtualJoystick = { active: false, startX: 0, startY: 0, curX: 0, curY: 0, dx: 0, dy: 0 };
+
+    this.init();
   }
 
-  reset() {
-    this.world = createWorld();
-    this.resources = createResources();
-    this.chronicle = createChronicle();
-    this.runs = [];
-    this.cards = [];
-    this.echoes = [];
-    this.usedThreadIds = [];
-    this.dayTimer = DAY_LENGTH;
-    this.elapsed = 0;
-    this.lastActionAt = 0;
-    this.time = 0;
-    this.flash = 0;
-    this.nightReport = [];
+  init() {
+    this.resize();
+    this.bindInputs();
+    this.initAmbientMotes();
+    this.syncHud();
   }
 
   startLoop() {
@@ -103,752 +97,601 @@ export class Game {
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${height}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.scene.layout(width, height);
   }
 
-  bindInput() {
-    this.canvas.addEventListener("pointerdown", (e) => {
-      this.audio.unlock();
-      if (this.state !== STATES.DAY) return;
-      const rect = this.canvas.getBoundingClientRect();
-      this.tapAt(e.clientX - rect.left, e.clientY - rect.top);
+  initAmbientMotes() {
+    this.ambientMotes = Array.from({ length: 65 }, () => ({
+      x: rand(-900, 900),
+      y: rand(-900, 900),
+      size: rand(1.2, 3.2),
+      alpha: rand(0.2, 0.6),
+      driftX: rand(-12, 12),
+      driftY: rand(-15, -4),
+      phase: rand(0, Math.PI * 2),
+    }));
+  }
+
+  bindInputs() {
+    // Keyboard
+    window.addEventListener("keydown", (e) => {
+      this.keys[e.code] = true;
+      if (e.code === "Space" || e.code === "KeyJ") {
+        this.playerAct();
+      }
     });
+    window.addEventListener("keyup", (e) => {
+      this.keys[e.code] = false;
+    });
+
+    // Touch / Mouse Joystick
+    const getPos = (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return { x: clientX - rect.left, y: clientY - rect.top };
+    };
+
+    const onStart = (e) => {
+      this.audio.unlock();
+      if (e.target.closest("button, .sheet")) return;
+      const pos = getPos(e);
+      this.virtualJoystick.active = true;
+      this.virtualJoystick.startX = pos.x;
+      this.virtualJoystick.startY = pos.y;
+      this.virtualJoystick.curX = pos.x;
+      this.virtualJoystick.curY = pos.y;
+      this.virtualJoystick.dx = 0;
+      this.virtualJoystick.dy = 0;
+    };
+
+    const onMove = (e) => {
+      if (!this.virtualJoystick.active) return;
+      const pos = getPos(e);
+      this.virtualJoystick.curX = pos.x;
+      this.virtualJoystick.curY = pos.y;
+      const rawDx = pos.x - this.virtualJoystick.startX;
+      const rawDy = pos.y - this.virtualJoystick.startY;
+      const dist = Math.hypot(rawDx, rawDy) || 1;
+      const maxDist = 55;
+      const factor = Math.min(dist, maxDist) / dist;
+      this.virtualJoystick.dx = (rawDx * factor) / maxDist;
+      this.virtualJoystick.dy = (rawDy * factor) / maxDist;
+    };
+
+    const onEnd = () => {
+      this.virtualJoystick.active = false;
+      this.virtualJoystick.dx = 0;
+      this.virtualJoystick.dy = 0;
+    };
+
+    this.canvas.addEventListener("pointerdown", onStart);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
     window.addEventListener("resize", () => this.resize());
     window.visualViewport?.addEventListener("resize", () => this.resize());
-    window.addEventListener(
-      "touchmove",
-      (e) => {
-        if (e.target.closest("button, .sheet")) return;
-        e.preventDefault();
-      },
-      { passive: false },
-    );
   }
 
-  tapAt(x, y) {
-    for (const card of this.cards) {
-      if (card.phase !== "settled" || !card.hits) continue;
-      for (const hit of card.hits) {
-        if (pointInRect(x, y, hit.x, hit.y, hit.w, hit.h)) {
-          if (hit.action === "watch") this.watchCard(card);
-          else this.chooseCard(card, hit.action);
-          return;
-        }
-      }
-    }
-  }
+  playerAct() {
+    if (this.state !== STATES.PLAYING || this.player.isActing) return;
+    this.player.isActing = true;
+    this.player.actTimer = 0.25;
+    this.stillnessStreak = 0; // Action disrupts stillness!
+    this.audio.reach("act");
+    this.shake = 0.4;
 
-  // ------------------------------------------------------------- lifecycle
+    // Create action shockwave
+    this.particles.push({
+      type: "act_shockwave",
+      x: this.player.x,
+      y: this.player.y,
+      radius: 20,
+      maxRadius: 85,
+      life: 0.35,
+      maxLife: 0.35,
+    });
+  }
 
   start() {
     this.audio.unlock();
-    this.reset();
-    this.state = STATES.DAY;
+    this.state = STATES.PLAYING;
+    this.world = createWorld();
+    this.chronicle = createChronicle();
+    this.stillness = 0;
+    this.peakStillness = 0;
+    this.stillnessStreak = 0;
+    this.energy = 100;
+    this.elapsed = 0;
+    this.dayTimer = 60;
+
+    this.player.x = 0;
+    this.player.y = 0;
+    this.player.vx = 0;
+    this.player.vy = 0;
+    this.player.standStillTimer = 0;
+
+    this.incidents = [];
+    this.particles = [];
+    this.floatingTexts = [];
+    this.spawnerTimer = 1.0;
+
     this.ui.overlay.hidden = true;
     this.ui.hud.hidden = false;
-    this.ui.nightSheet.hidden = true;
     this.ui.endSheet.hidden = true;
     this.ui.chronicleSheet.hidden = true;
-    this.seedDay();
-    this.pushEcho("The valley wakes. Most of what happens here does not require you.", "#a9c6d8");
+
+    this.createFloatingText(0, -50, "Breathe. When you stand still, the Stillness aura expands.", "#80deea");
     this.syncHud();
-  }
-
-  seedDay() {
-    const weights = seedWeights(this.world);
-    const available = THREADS.filter((t) => !this.usedThreadIds.includes(t.id));
-    const wanted = Math.min(this.world.day === 1 ? 2 : rand(0, 1) > 0.45 ? 2 : 1, MAX_RUNS - this.runs.length);
-
-    for (let i = 0; i < wanted; i += 1) {
-      const pool = available.filter((t) => !this.usedThreadIds.includes(t.id));
-      if (!pool.length) return;
-
-      const total = pool.reduce((sum, t) => sum + (weights[t.domain] || 1), 0);
-      let roll = Math.random() * total;
-      let picked = pool[0];
-      for (const thread of pool) {
-        roll -= weights[thread.domain] || 1;
-        if (roll <= 0) {
-          picked = thread;
-          break;
-        }
-      }
-
-      this.usedThreadIds.push(picked.id);
-      const run = createRun(picked, this.world.day);
-      run.cooldown = rand(1.5, 6 + i * 5);
-      this.runs.push(run);
-    }
   }
 
   frame(time) {
     const dt = clamp((time - this.lastTime) / 1000, 0, 0.05);
     this.lastTime = time;
-    this.time += dt;
+
     this.update(dt);
     this.draw();
+
     requestAnimationFrame(this.boundFrame);
   }
 
   update(dt) {
-    this.scene.update(dt);
-    this.updateEchoes(dt);
-    this.flash = Math.max(0, this.flash - dt * 2);
-    if (this.state !== STATES.DAY) {
-      this.layoutCards(dt);
-      return;
-    }
+    if (this.state !== STATES.PLAYING) return;
 
     this.elapsed += dt;
     this.dayTimer -= dt;
 
-    const streak = this.elapsed - this.lastActionAt;
-    const depth = depthFor(this.resources.stillness);
-    this.resources.stillness += stillnessRate(depth.level, streak) * dt;
-    this.resources.peakStillness = Math.max(this.resources.peakStillness, this.resources.stillness);
-    this.resources.vitality = Math.min(
-      this.resources.vitalityMax,
-      this.resources.vitality + vitalityRate(streak, depth.level) * dt,
-    );
+    this.updatePlayerMovement(dt);
+    this.updateStillness(dt);
+    this.updateSpawner(dt);
+    this.updateIncidents(dt);
+    this.updateParticles(dt);
+    this.updateCamera(dt);
 
-    this.scheduleBeats(dt);
-    this.updateCards(dt);
-    this.syncHud();
-
-    if (this.dayTimer <= 0) this.endDay();
-  }
-
-  scheduleBeats(dt) {
-    for (const run of this.runs) {
-      if (run.done || run.card) continue;
-      run.cooldown -= dt;
-      if (run.cooldown <= 0 && this.cards.filter((c) => c.phase !== "resolving").length < MAX_CARDS) {
-        this.presentBeat(run);
-      }
+    if (this.dayTimer <= 0) {
+      this.finishSession();
     }
   }
 
-  presentBeat(run) {
-    const beat = currentBeat(run);
-    if (!beat) return;
+  updatePlayerMovement(dt) {
+    let mx = 0;
+    let my = 0;
 
-    const revealed = autoRevealed(this.resources, run.thread);
-    const card = {
-      run,
-      beat,
-      remaining: beat.window,
-      revealed,
-      phase: "incoming",
-      x: this.width + 60,
-      y: 0,
-      w: 0,
-      h: 0,
-      exit: 0,
-      exitKind: null,
-      hits: [],
-      jitter: rand(0, Math.PI * 2),
-    };
-    run.card = card;
-    this.cards.push(card);
-    this.audio.arrive(run.thread.loud);
-  }
+    if (this.keys["KeyW"] || this.keys["ArrowUp"]) my -= 1;
+    if (this.keys["KeyS"] || this.keys["ArrowDown"]) my += 1;
+    if (this.keys["KeyA"] || this.keys["ArrowLeft"]) mx -= 1;
+    if (this.keys["KeyD"] || this.keys["ArrowRight"]) mx += 1;
 
-  updateCards(dt) {
-    for (const card of this.cards) {
-      if (card.phase === "settled") {
-        card.remaining -= dt;
-        if (card.remaining <= 0) this.chooseCard(card, "pass", true);
-      } else if (card.phase === "incoming") {
-        card.remaining -= dt * 0.3;
-      }
+    if (this.virtualJoystick.active) {
+      mx += this.virtualJoystick.dx;
+      my += this.virtualJoystick.dy;
     }
-    this.layoutCards(dt);
-    this.cards = this.cards.filter((c) => c.phase !== "resolving" || c.exit < 1);
-  }
 
-  watchCard(card) {
-    if (card.revealed) return;
-    if (!canAfford(this.resources, "watch", this.resources.fatigue)) {
-      this.pushEcho("You have nothing left to look with.", "#d08a8a");
-      return;
-    }
-    this.resources = spend(this.resources, "watch", 0);
-    this.resources = gainAttunement(this.resources, 7);
-    card.revealed = true;
-    this.lastActionAt = this.elapsed;
-    this.audio.watch();
-    this.syncHud();
-  }
-
-  chooseCard(card, choice, automatic = false) {
-    if (card.phase === "resolving") return;
-
-    if (choice !== "pass") {
-      if (!canAfford(this.resources, choice, this.resources.fatigue)) {
-        this.pushEcho("You do not have it in you right now.", "#d08a8a");
-        return;
-      }
-      this.resources = spend(this.resources, choice, this.resources.fatigue);
-      this.lastActionAt = this.elapsed;
-      this.audio.reach(choice);
-    } else if (!automatic) {
-      this.audio.pass();
+    const dist = Math.hypot(mx, my);
+    if (dist > 0.05) {
+      const speed = this.player.speed;
+      const nx = mx / (dist > 1 ? dist : 1);
+      const ny = my / (dist > 1 ? dist : 1);
+      this.player.vx = nx * speed;
+      this.player.vy = ny * speed;
+      this.player.x += this.player.vx * dt;
+      this.player.y += this.player.vy * dt;
+      this.player.standStillTimer = 0;
     } else {
-      this.audio.pass();
+      this.player.vx = 0;
+      this.player.vy = 0;
+      this.player.standStillTimer += dt;
     }
 
-    const { run: updatedRun, resolution } = applyChoice(card.run, choice);
-    const run = this.runs.find((r) => r.id === card.run.id);
-    Object.assign(run, updatedRun, { card: null });
+    // World border constraint (Circle map radius ~800)
+    const pDist = Math.hypot(this.player.x, this.player.y);
+    if (pDist > 780) {
+      this.player.x = (this.player.x / pDist) * 780;
+      this.player.y = (this.player.y / pDist) * 780;
+    }
 
+    // Handle act timer
+    if (this.player.isActing) {
+      this.player.actTimer -= dt;
+      if (this.player.actTimer <= 0) {
+        this.player.isActing = false;
+      }
+    }
+  }
+
+  updateStillness(dt) {
+    // Standing still expands your peaceful aura & rapidly generates Stillness score!
+    if (this.player.standStillTimer > 0.4) {
+      this.stillnessStreak += dt;
+      this.player.auraRadius = damp(this.player.auraRadius, 140, 3.5, dt);
+    } else {
+      this.stillnessStreak = Math.max(0, this.stillnessStreak - dt * 2);
+      this.player.auraRadius = damp(this.player.auraRadius, 40, 5.0, dt);
+    }
+
+    const depth = depthFor(this.stillness);
+    this.stillness += stillnessRate(depth.level, this.stillnessStreak) * dt;
+    this.peakStillness = Math.max(this.peakStillness, this.stillness);
+    this.syncHud();
+  }
+
+  updateSpawner(dt) {
+    this.spawnerTimer -= dt;
+    if (this.spawnerTimer <= 0 && this.incidents.length < 6) {
+      this.spawnerTimer = rand(4.0, 7.5);
+      const keys = Object.keys(INCIDENT_TYPES);
+      const chosenKey = keys[randInt(0, keys.length - 1)];
+
+      // Spawn at random location around world
+      const angle = rand(0, Math.PI * 2);
+      const spawnDist = rand(150, 550);
+      const sx = this.player.x + Math.cos(angle) * spawnDist;
+      const sy = this.player.y + Math.sin(angle) * spawnDist;
+
+      this.incidents.push(new Incident(chosenKey, sx, sy));
+      this.audio.arrive(INCIDENT_TYPES[chosenKey].loud);
+    }
+  }
+
+  updateIncidents(dt) {
+    const playerSpeed = Math.hypot(this.player.vx, this.player.vy);
+
+    for (let i = this.incidents.length - 1; i >= 0; i--) {
+      const inc = this.incidents[i];
+      const res = inc.update(dt, this.player.x, this.player.y, playerSpeed, this.player.isActing);
+
+      if (res) {
+        this.incidents.splice(i, 1);
+        this.handleIncidentResolution(res);
+      }
+    }
+  }
+
+  handleIncidentResolution(res) {
+    // Record into chronicle
     this.chronicle = recordBeat(this.chronicle, {
-      choice,
-      need: resolution.need,
-      threadTitle: resolution.threadTitle,
-      text: resolution.text,
+      choice: res.action,
+      need: res.need,
+      threadTitle: res.title,
+      text: res.text,
     });
 
-    if (resolution.right) {
-      this.resources = gainAttunement(this.resources, 5);
-      this.resources.standing = Math.min(100, this.resources.standing + 1);
-    } else if (choice !== "pass") {
-      this.resources.standing = Math.max(0, this.resources.standing - 1);
-    }
-
-    const tone = resolution.right ? "#a9dcc4" : choice === "pass" ? "#9db6cc" : "#dba98a";
-    this.pushEcho(resolution.text, tone);
-
-    card.phase = "resolving";
-    card.exit = 0;
-    card.exitKind = choice;
-
-    if (run.done) {
-      this.finishThread(run);
+    if (res.right) {
+      this.audio.resolve(0);
+      this.flash = 0.35;
+      this.createFloatingText(res.x, res.y - 30, `✨ ${res.title}: Right choice (${res.action.toUpperCase()})`, "#00e676");
+      this.createFloatingText(res.x, res.y - 50, res.text, "#e0f2f1");
     } else {
-      run.cooldown = rand(9, 20);
+      this.audio.resolve(2);
+      this.shake = 0.5;
+      this.createFloatingText(res.x, res.y - 30, `⚠️ ${res.title}: Disrupted (${res.action.toUpperCase()})`, "#ff5252");
+      this.createFloatingText(res.x, res.y - 50, res.text, "#ffcdd2");
     }
 
-    this.syncHud();
-    if (this.resources.vitality <= 0) this.collapse();
-  }
-
-  finishThread(run) {
-    const { ending, counterfactual } = finishRun(run);
-    this.world = applyEffects(this.world, ending.effects || {});
-    this.chronicle = recordThread(this.chronicle, {
-      threadTitle: run.thread.title,
-      domain: run.thread.domain,
-      ending,
-      counterfactual,
-      });
-    this.nightReport.push({
-      title: run.thread.title,
-      domain: run.thread.domain,
-      ending,
-      counterfactual,
-      changed: ending.key !== counterfactual.key,
-      better: ending.rank < counterfactual.rank,
+    // Ripple effects
+    this.ripples.push({
+      x: res.x,
+      y: res.y,
+      r: 10,
+      maxR: res.right ? 120 : 60,
+      color: res.right ? "#00e676" : "#ff5252",
+      life: 0.8,
+      maxLife: 0.8,
     });
-    this.runs = this.runs.filter((r) => r.id !== run.id);
-    this.flash = 0.5;
-    this.audio.resolve(ending.rank);
   }
 
-  collapse() {
-    this.chronicle = recordCollapse(this.chronicle);
-    this.world = applyEffects(this.world, { self: -6, work: -3 });
-    this.resources.vitality = Math.round(this.resources.vitalityMax * 0.45);
-    this.resources.collapses += 1;
-    this.audio.collapse();
-    this.flash = 0.9;
-    this.nightReport.push({ collapse: true });
-    this.endDay();
-  }
+  updateParticles(dt) {
+    // Ambient motes
+    for (const m of this.ambientMotes) {
+      m.x += m.driftX * dt;
+      m.y += m.driftY * dt;
+      m.phase += dt * 2;
+      if (m.y < -900) m.y = 900;
+      if (m.y > 900) m.y = -900;
+      if (m.x < -900) m.x = 900;
+      if (m.x > 900) m.x = -900;
+    }
 
-  endDay() {
-    if (this.state !== STATES.DAY) return;
-    this.state = STATES.NIGHT;
+    // Floating text
+    for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+      const ft = this.floatingTexts[i];
+      ft.life -= dt;
+      ft.y -= 18 * dt;
+      if (ft.life <= 0) this.floatingTexts.splice(i, 1);
+    }
 
-    // Anything still open at dusk is not decided tonight. It waits for morning.
-    for (const card of this.cards) {
-      if (card.phase === "settled" || card.phase === "incoming") {
-        card.phase = "resolving";
-        card.exit = 0.4;
-        card.exitKind = "pass";
-        const run = this.runs.find((r) => r.id === card.run.id);
-        if (run) {
-          run.card = null;
-          run.cooldown = rand(3, 12);
-        }
+    // Ripples
+    for (let i = this.ripples.length - 1; i >= 0; i--) {
+      const r = this.ripples[i];
+      r.life -= dt;
+      r.r += (r.maxR - r.r) * 6 * dt;
+      if (r.life <= 0) this.ripples.splice(i, 1);
+    }
+
+    // Action particles
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.life -= dt;
+      if (p.type === "act_shockwave") {
+        p.radius += (p.maxRadius - p.radius) * 12 * dt;
       }
+      if (p.life <= 0) this.particles.splice(i, 1);
     }
 
-    this.resources.fatigue = 0;
-    this.renderNight();
-    this.audio.dusk();
+    this.shake = Math.max(0, this.shake - dt * 2.5);
+    this.flash = Math.max(0, this.flash - dt * 2);
   }
 
-  sleep() {
-    this.ui.nightSheet.hidden = true;
-    this.nightReport = [];
-
-    if (this.world.day >= TOTAL_DAYS) {
-      this.finish();
-      return;
-    }
-
-    this.world = { ...this.world, day: this.world.day + 1 };
-    this.dayTimer = DAY_LENGTH;
-    this.state = STATES.DAY;
-    this.resources.vitality = Math.min(
-      this.resources.vitalityMax,
-      this.resources.vitality + 34,
-    );
-    this.seedDay();
-    this.audio.dawn();
-    const season = seasonFor(this.world.day);
-    this.pushEcho(`Day ${this.world.day}. ${season.name}.`, "#c9dcea");
-    this.syncHud();
+  updateCamera(dt) {
+    this.camera.x += (this.player.x - this.camera.x) * Math.min(1, 8 * dt);
+    this.camera.y += (this.player.y - this.camera.y) * Math.min(1, 8 * dt);
   }
 
-  finish() {
+  createFloatingText(x, y, text, color = "#ffffff") {
+    this.floatingTexts.push({
+      x,
+      y,
+      text,
+      color,
+      life: 2.8,
+    });
+  }
+
+  finishSession() {
     this.state = STATES.ENDED;
-
-    // Threads still running simply run on without you.
-    for (const run of this.runs) {
-      let tail = run;
-      while (!tail.done) {
-        tail = applyChoice(tail, "pass").run;
-      }
-      const { ending, counterfactual } = finishRun(tail);
-      this.world = applyEffects(this.world, ending.effects || {});
-      this.chronicle = recordThread(this.chronicle, {
-        threadTitle: run.thread.title,
-        domain: run.thread.domain,
-        ending,
-        counterfactual,
-      });
-    }
-    this.runs = [];
-
     this.record = mergeRun(this.record, {
       world: this.world,
       chronicle: this.chronicle,
-      peakStillness: this.resources.peakStillness,
+      peakStillness: this.peakStillness,
     });
     saveRecord(this.record);
-    this.renderEnd();
-  }
 
-  // -------------------------------------------------------------------- UI
-
-  renderNight() {
-    const season = seasonFor(this.world.day);
-    this.ui.nightTitle.textContent = `Night of day ${this.world.day}`;
-    this.ui.nightSub.textContent = `${season.name} · ${this.runs.length} ${this.runs.length === 1 ? "story" : "stories"} still running`;
-
-    const rows = this.nightReport.map((entry) => {
-      if (entry.collapse) {
-        return `<p class="night-row collapse">You ran yourself out. The day finished without you in it.</p>`;
-      }
-      const tag = entry.changed
-        ? entry.better
-          ? `<span class="tag good">your doing</span>`
-          : `<span class="tag bad">your doing</span>`
-        : `<span class="tag flat">would have happened anyway</span>`;
-      return `<p class="night-row"><b>${entry.title}: ${entry.ending.title}</b> ${tag}<br /><span class="dim">${entry.ending.text}</span></p>`;
-    });
-
-    this.ui.nightBody.innerHTML = rows.length
-      ? rows.join("")
-      : `<p class="night-row dim">Nothing finished today. Everything is still in motion, which is the usual state of things.</p>`;
-
-    this.ui.nightWorld.innerHTML = DOMAINS.map((domain) => {
-      const value = Math.round(this.world.domains[domain.id]);
-      const condition = conditionOf(this.world, domain.id);
-      return `<div class="meter"><span class="meter-name">${domain.name}</span><div class="meter-track"><div class="meter-fill ${condition.key}" style="width:${value}%"></div></div><span class="meter-state">${condition.name}</span></div>`;
-    }).join("");
-
-    this.ui.sleepBtn.textContent = this.world.day >= TOTAL_DAYS ? "Let the year end" : "Sleep";
-    this.ui.nightSheet.hidden = false;
-  }
-
-  renderEnd() {
     const summary = accounting(this.chronicle);
-    const avg = Math.round(worldAverage(this.world));
-
-    this.ui.endTitle.textContent = "The year, accounted for";
-    this.ui.endWorld.innerHTML = DOMAINS.map((domain) => {
-      const value = Math.round(this.world.domains[domain.id]);
-      const condition = conditionOf(this.world, domain.id);
-      return `<div class="meter"><span class="meter-name">${domain.name}</span><div class="meter-track"><div class="meter-fill ${condition.key}" style="width:${value}%"></div></div><span class="meter-state">${condition.name}</span></div>`;
-    }).join("");
-
+    this.ui.endTitle.textContent = "The Cycle Ends";
     this.ui.endStats.innerHTML = `
-      <p class="stat-row"><span>The valley</span><b>${avg}</b></p>
-      <p class="stat-row"><span>Deepest stillness</span><b>${Math.floor(this.resources.peakStillness)}</b></p>
-      <p class="stat-row"><span>Read of the world</span><b>${attuneLevel(this.resources.attunement).name}</b></p>
+      <p class="stat-row"><span>Deepest Stillness</span><b>${Math.floor(this.peakStillness)}</b></p>
+      <p class="stat-row"><span>Depth Achieved</span><b>${depthFor(this.peakStillness).name}</b></p>
+      <p class="stat-row"><span>Time Lived</span><b>${Math.round(this.elapsed)}s</b></p>
     `;
     this.ui.endLines.innerHTML = summary.lines.map((l) => `<p>${l}</p>`).join("");
-    this.ui.endWorldVerdict.textContent = worldVerdict(this.world);
     this.ui.endVerdict.textContent = summary.verdict;
     this.ui.endSheet.hidden = false;
   }
 
-  openChronicle() {
-    const summary = accounting(this.chronicle);
-    const recent = this.chronicle.entries.slice(-14).reverse();
-    this.ui.chronicleLines.innerHTML = summary.lines.map((l) => `<p>${l}</p>`).join("");
-    this.ui.chronicleLog.innerHTML = recent
-      .map((entry) => {
-        if (entry.kind === "collapse") return `<p class="log-row collapse">${entry.text}</p>`;
-        if (entry.kind === "thread") {
-          return `<p class="log-row"><b>${entry.threadTitle}</b> — ${entry.ending}${
-            entry.changed ? (entry.better ? " <i>(you changed this)</i>" : " <i>(you changed this, for the worse)</i>") : " <i>(unchanged by you)</i>"
-          }</p>`;
-        }
-        const verb = { pass: "let it pass", tend: "tended", act: "acted", watch: "watched" }[entry.choice];
-        return `<p class="log-row dim">${entry.threadTitle} — you ${verb}.</p>`;
-      })
-      .join("");
-    this.ui.chronicleSheet.hidden = false;
-  }
-
-  closeChronicle() {
-    this.ui.chronicleSheet.hidden = true;
-  }
-
   syncHud() {
     if (!this.ui.stillness) return;
-    const depth = depthFor(this.resources.stillness);
-    const next = nextDepth(this.resources.stillness);
-    const streak = this.elapsed - this.lastActionAt;
-    const season = seasonFor(this.world.day);
+    const depth = depthFor(this.stillness);
+    const next = nextDepth(this.stillness);
+    const streak = this.stillnessStreak;
 
-    this.ui.stillness.textContent = String(Math.floor(this.resources.stillness));
+    this.ui.stillness.textContent = String(Math.floor(this.stillness));
     this.ui.multiplier.textContent = `×${streakMultiplier(streak).toFixed(1)}`;
     this.ui.depthName.textContent = depth.name;
     this.ui.depthTrack.style.width = next
-      ? `${clamp(((this.resources.stillness - depth.at) / (next.at - depth.at)) * 100, 0, 100)}%`
+      ? `${clamp(((this.stillness - depth.at) / (next.at - depth.at)) * 100, 0, 100)}%`
       : "100%";
 
-    this.ui.vitality.style.width = `${clamp((this.resources.vitality / this.resources.vitalityMax) * 100, 0, 100)}%`;
-    this.ui.vitalityText.textContent = `${Math.round(this.resources.vitality)}`;
-    this.ui.dayLabel.textContent = `Day ${this.world.day} / ${TOTAL_DAYS}`;
-    this.ui.seasonLabel.textContent = season.name;
-    this.ui.attuneLabel.textContent = attuneLevel(this.resources.attunement).name;
+    this.ui.dayLabel.textContent = `Time: ${Math.ceil(this.dayTimer)}s`;
+    this.ui.seasonLabel.textContent = this.player.standStillTimer > 0.4 ? "🧘 Channelling Stillness" : "🏃 Moving";
     this.ui.tally.textContent = `${this.chronicle.passed} passed · ${this.chronicle.tended} tended · ${this.chronicle.acted} acted`;
   }
-
-  pushEcho(text, color) {
-    this.echoes.unshift({ text, color, life: ECHO_LIFE });
-    this.echoes = this.echoes.slice(0, 2);
-  }
-
-  updateEchoes(dt) {
-    for (const echo of this.echoes) echo.life -= dt;
-    this.echoes = this.echoes.filter((e) => e.life > 0);
-  }
-
-  // ----------------------------------------------------------------- cards
-
-  layoutCards(dt) {
-    const ctx = this.ctx;
-    const sceneRect = this.scene.rect;
-    const cardW = Math.min(this.width - 26, 440);
-    const gap = 10;
-    let stackY = sceneRect.y + sceneRect.h + 64;
-
-    for (const card of this.cards) {
-      const lines = wrapText(ctx, card.beat.text, cardW - 34, "16px 'Cormorant Garamond', Georgia, serif");
-      card.lines = lines;
-      card.w = cardW;
-      // text + optional reveal + a row of verbs + its own row for "let it pass"
-      card.h = 30 + lines.length * 22 + (card.revealed ? 22 : 0) + 76;
-
-      if (card.phase === "resolving") {
-        card.exit = Math.min(1, card.exit + dt * 1.3);
-        stackY += card.h + gap;
-        continue;
-      }
-
-      const targetX = (this.width - cardW) / 2;
-      const targetY = stackY;
-      stackY += card.h + gap;
-
-      if (card.phase === "incoming") {
-        card.x = damp(card.x, targetX, 5.5, dt);
-        card.y = card.y === 0 ? targetY : damp(card.y, targetY, 9, dt);
-        if (Math.abs(card.x - targetX) < 2) {
-          card.x = targetX;
-          card.phase = "settled";
-        }
-      } else {
-        card.x = damp(card.x, targetX, 9, dt);
-        card.y = damp(card.y, targetY, 9, dt);
-      }
-    }
-  }
-
-  // ------------------------------------------------------------------ draw
 
   draw() {
     const { ctx, width, height } = this;
     ctx.clearRect(0, 0, width, height);
 
-    const dayProgress = this.state === STATES.DAY ? 1 - this.dayTimer / DAY_LENGTH : 0.94;
-    const activeDomains = this.cards
-      .filter((c) => c.phase !== "resolving")
-      .map((c) => c.run.thread.domain);
+    const sx = this.shake ? rand(-6, 6) * this.shake : 0;
+    const sy = this.shake ? rand(-6, 6) * this.shake : 0;
 
-    this.scene.draw(ctx, { world: this.world, dayProgress, time: this.time, activeDomains });
+    ctx.save();
+    ctx.translate(width / 2 + sx - this.camera.x, height / 2 + sy - this.camera.y);
 
-    const belowY = this.scene.rect.y + this.scene.rect.h;
-    const grad = ctx.createLinearGradient(0, belowY, 0, height);
-    grad.addColorStop(0, "#080c14");
-    grad.addColorStop(1, "#04060a");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, belowY, width, height - belowY);
+    // 1. Draw World Terrain (Living interactive zen garden)
+    this.drawTerrain(ctx);
 
-    this.drawEchoes(ctx, belowY);
-    this.drawTethers(ctx);
-    this.drawCards(ctx);
+    // 2. Draw Incidents (Whirlwinds, Fires, Crying Strangers, etc.)
+    this.drawIncidents(ctx);
 
+    // 3. Draw Player & Stillness Aura
+    this.drawPlayer(ctx);
+
+    // 4. Draw Ripples & Effects
+    this.drawEffects(ctx);
+
+    ctx.restore();
+
+    // 5. Draw Touch Joystick
+    this.drawJoystick(ctx);
+
+    // 6. Ambient Screen Flash
     if (this.flash > 0) {
-      ctx.fillStyle = `rgba(255, 246, 220, ${this.flash * 0.2})`;
+      ctx.fillStyle = `rgba(255, 255, 255, ${this.flash * 0.3})`;
       ctx.fillRect(0, 0, width, height);
     }
   }
 
-  drawEchoes(ctx, belowY) {
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    let y = belowY + 12;
+  drawTerrain(ctx) {
+    // Deep dark mystical valley lawn
+    const radius = 800;
+    const grad = ctx.createRadialGradient(0, 0, 50, 0, 0, radius);
+    grad.addColorStop(0, "#101d24");
+    grad.addColorStop(0.7, "#081017");
+    grad.addColorStop(1, "#020508");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fill();
 
-    this.echoes.forEach((echo, index) => {
-      const fade = clamp(echo.life / 1.6, 0, 1) * clamp((ECHO_LIFE - echo.life) / 0.3, 0, 1);
-      const alpha = fade * (index === 0 ? 1 : 0.4);
-      const font = index === 0
-        ? "italic 15px 'Cormorant Garamond', Georgia, serif"
-        : "italic 13px 'Cormorant Garamond', Georgia, serif";
-      const lines = wrapText(ctx, echo.text, Math.min(this.width - 44, 430), font);
-      ctx.font = font;
-      ctx.fillStyle = withAlpha(echo.color, alpha);
-      for (const line of lines.slice(0, 3)) {
-        ctx.fillText(line, this.width / 2, y);
-        y += index === 0 ? 20 : 17;
-      }
-      y += 4;
-    });
-  }
+    // Subtle stone ring sanctuary
+    ctx.strokeStyle = "rgba(128, 222, 234, 0.15)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, 780, 0, Math.PI * 2);
+    ctx.stroke();
 
-  drawTethers(ctx) {
-    const counts = {};
-    for (const card of this.cards) {
-      if (card.phase === "resolving") continue;
-      const domain = card.run.thread.domain;
-      const index = (counts[domain] = (counts[domain] || 0) + 1) - 1;
-      const mote = this.scene.motePosition(domain, index);
-      const top = { x: card.x + card.w / 2, y: card.y };
-
-      ctx.strokeStyle = "rgba(255, 232, 176, 0.16)";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([3, 6]);
+    // Ambient floating light motes
+    for (const m of this.ambientMotes) {
+      ctx.fillStyle = `rgba(178, 235, 242, ${m.alpha})`;
       ctx.beginPath();
-      ctx.moveTo(mote.x, mote.y);
-      ctx.bezierCurveTo(mote.x, mote.y + 40, top.x, top.y - 40, top.x, top.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 
-  drawCards(ctx) {
-    for (const card of this.cards) {
-      const thread = card.run.thread;
-      const exiting = card.phase === "resolving";
-      const t = card.exit;
-
-      let alpha = exiting ? 1 - t : card.phase === "incoming" ? 0.6 : 1;
-      let offsetY = 0;
-      let offsetX = 0;
-      let scale = 1;
-
-      if (exiting) {
-        if (card.exitKind === "pass") {
-          offsetY = -t * 58;
-          scale = 1 - t * 0.05;
-        } else {
-          offsetX = Math.sin(t * 30) * (1 - t) * 6;
-          scale = 1 - t * 0.12;
-        }
-      }
-
-      const jitter = thread.loud && !exiting ? Math.sin(this.time * 7 + card.jitter) * 1 : 0;
-      const x = card.x + offsetX + jitter;
-      const y = card.y + offsetY;
-      const accent = thread.loud ? "#d9906f" : "#7fb6bc";
-
+  drawIncidents(ctx) {
+    for (const inc of this.incidents) {
       ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.translate(x + card.w / 2, y + card.h / 2);
-      ctx.scale(scale, scale);
-      ctx.translate(-card.w / 2, -card.h / 2);
+      ctx.translate(inc.x, inc.y);
 
-      roundRect(ctx, 0, 0, card.w, card.h, 13);
-      ctx.fillStyle = thread.loud ? "rgba(36, 24, 24, 0.9)" : "rgba(16, 26, 34, 0.9)";
-      ctx.fill();
-      ctx.strokeStyle = withAlpha(accent, thread.loud ? 0.65 : 0.4);
-      ctx.lineWidth = thread.loud ? 1.7 : 1.1;
+      // Radial timer progress ring
+      const progress = clamp(inc.timer / inc.totalDuration, 0, 1);
+      ctx.strokeStyle = inc.color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, inc.radius, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
       ctx.stroke();
 
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.font = "600 10px Inter, system-ui, sans-serif";
-      ctx.fillStyle = withAlpha(accent, 0.8);
-      ctx.fillText(`${thread.title.toUpperCase()}  ·  ${thread.domain.toUpperCase()}`, 17, 12);
+      // Outer dashed interaction boundary
+      ctx.strokeStyle = `${inc.color}55`;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      ctx.arc(0, 0, inc.radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
 
-      ctx.font = "16px 'Cormorant Garamond', Georgia, serif";
-      ctx.fillStyle = "rgba(234, 242, 248, 0.95)";
-      card.lines.forEach((line, i) => ctx.fillText(line, 17, 30 + i * 22));
-
-      let cursor = 30 + card.lines.length * 22;
-      if (card.revealed) {
-        ctx.font = "italic 13px 'Cormorant Garamond', Georgia, serif";
-        ctx.fillStyle = "rgba(169, 220, 196, 0.9)";
-        ctx.fillText(REVEALS[card.beat.need], 17, cursor + 2);
-        cursor += 22;
+      // Visual animated element inside
+      if (inc.type === "whirlwind") {
+        // Rotating dust spiral
+        ctx.strokeStyle = "#ffcc80";
+        ctx.lineWidth = 2.5;
+        for (let i = 0; i < 3; i++) {
+          const ang = inc.animPhase + (i * Math.PI * 2) / 3;
+          ctx.beginPath();
+          ctx.arc(Math.cos(ang) * 14, Math.sin(ang) * 14, 18, 0, Math.PI);
+          ctx.stroke();
+        }
+      } else if (inc.type === "wildfire") {
+        // Flickering fire core
+        ctx.fillStyle = "#ff7043";
+        ctx.beginPath();
+        ctx.arc(0, Math.sin(inc.animPhase) * 4, 22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#ffe082";
+        ctx.beginPath();
+        ctx.arc(0, -4, 12, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (inc.type === "crying_stranger") {
+        // Person sitting quietly
+        ctx.fillStyle = "#80deea";
+        ctx.beginPath();
+        ctx.arc(0, -10, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(-6, 0, 12, 14);
+      } else {
+        // General glowing incident orb
+        ctx.fillStyle = inc.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, 16, 0, Math.PI * 2);
+        ctx.fill();
       }
 
-      // The things you can do, sharing the full width of the card so that a long
-      // verb can never grow into the tap target of another one.
-      const buttonY = cursor + 8;
-      const hits = [];
-      const gap = 7;
-      const specs = [];
+      // Title & Action prompts
+      ctx.font = "bold 13px Inter, sans-serif";
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.fillText(inc.title, 0, -inc.radius - 12);
 
-      if (!card.revealed) {
-        specs.push({ label: "WATCH", accent: "#9fb8d8", action: "watch", cost: costOf("watch").vitality });
+      // Show Tend progress if player is standing still inside
+      if (inc.tendTimer > 0) {
+        ctx.fillStyle = "#00e676";
+        ctx.fillRect(-30, inc.radius + 8, (inc.tendTimer / 2.0) * 60, 4);
       }
-      specs.push({
-        label: card.beat.tend.label.toUpperCase(),
-        accent: "#8fc9a8",
-        action: "tend",
-        cost: costOf("tend", this.resources.fatigue).vitality,
-      });
-      specs.push({
-        label: card.beat.act.label.toUpperCase(),
-        accent: "#d9a06f",
-        action: "act",
-        cost: costOf("act", this.resources.fatigue).vitality,
-      });
-
-      const available = card.w - 34 - gap * (specs.length - 1);
-      const share = available / specs.length;
-      let bx = 17;
-      for (const spec of specs) {
-        bx = this.drawPill(ctx, { ...spec, x: bx, y: buttonY, maxWidth: share, hits }) + gap;
-      }
-
-      // Declining to act gets its own row, well away from everything else.
-      const passY = buttonY + 32;
-      ctx.font = "11px Inter, system-ui, sans-serif";
-      ctx.fillStyle = "rgba(190, 208, 220, 0.5)";
-      ctx.textAlign = "right";
-      ctx.fillText("let it pass", card.w - 19, passY + 6);
-      hits.push({ action: "pass", x: card.w - 108, y: passY - 3, w: 92, h: 26 });
-
-      // Everything above was laid out card-local; lift it into screen space.
-      card.hits = hits.map((hit) => ({ ...hit, x: hit.x + x, y: hit.y + y }));
-
-      const pct = clamp(card.remaining / card.beat.window, 0, 1);
-      ctx.fillStyle = "rgba(255,255,255,0.07)";
-      ctx.fillRect(17, card.h - 8, card.w - 34, 2);
-      ctx.fillStyle = withAlpha(accent, 0.6);
-      ctx.fillRect(17, card.h - 8, (card.w - 34) * pct, 2);
 
       ctx.restore();
     }
   }
 
-  drawPill(ctx, { x, y, label, accent, hits, action, cost, maxWidth }) {
-    ctx.font = "600 11px Inter, system-ui, sans-serif";
-    const suffix = cost > 0 ? `  ${cost}` : "";
-    const text = ellipsize(ctx, label, suffix, maxWidth - 22);
-    const w = Math.min(maxWidth, ctx.measureText(text).width + 22);
-    const affordable = canAfford(this.resources, action, this.resources.fatigue);
+  drawPlayer(ctx) {
+    ctx.save();
+    ctx.translate(this.player.x, this.player.y);
 
-    roundRect(ctx, x, y, w, 26, 13);
-    ctx.fillStyle = withAlpha(accent, affordable ? 0.16 : 0.05);
+    // 1. Stillness Channeling Aura Ring
+    const auraGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, this.player.auraRadius);
+    auraGrad.addColorStop(0, "rgba(128, 222, 234, 0.45)");
+    auraGrad.addColorStop(0.7, "rgba(128, 222, 234, 0.15)");
+    auraGrad.addColorStop(1, "rgba(128, 222, 234, 0)");
+    ctx.fillStyle = auraGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.player.auraRadius, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = withAlpha(accent, affordable ? 0.6 : 0.18);
-    ctx.lineWidth = 1;
+
+    ctx.strokeStyle = "rgba(128, 222, 234, 0.6)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.player.auraRadius, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = withAlpha(accent, affordable ? 0.95 : 0.3);
-    ctx.fillText(text, x + w / 2, y + 8);
-    ctx.textAlign = "left";
+    // 2. Player Body (Glowing Monk / Wanderer)
+    ctx.fillStyle = "#e0f7fa";
+    ctx.beginPath();
+    ctx.arc(0, 0, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#006064";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
 
-    hits.push({ action, x, y, w, h: 26 });
-    return x + w;
+    // Eyes
+    ctx.fillStyle = "#004d40";
+    ctx.beginPath();
+    ctx.arc(-4, -2, 2, 0, Math.PI * 2);
+    ctx.arc(4, -2, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
   }
-}
 
-// Trim a verb until it fits its share of the card, keeping the cost visible.
-function ellipsize(ctx, label, suffix, maxTextWidth) {
-  if (ctx.measureText(label + suffix).width <= maxTextWidth) return label + suffix;
-  let trimmed = label;
-  while (trimmed.length > 1 && ctx.measureText(`${trimmed}…${suffix}`).width > maxTextWidth) {
-    trimmed = trimmed.slice(0, -1);
-  }
-  return `${trimmed.trimEnd()}…${suffix}`;
-}
+  drawEffects(ctx) {
+    // Ripples
+    for (const r of this.ripples) {
+      ctx.strokeStyle = `${r.color}${Math.round(r.life * 255).toString(16).padStart(2, "0")}`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
-// ---------------------------------------------------------------- helpers
+    // Action Shockwaves
+    for (const p of this.particles) {
+      if (p.type === "act_shockwave") {
+        ctx.strokeStyle = "rgba(255, 138, 101, 0.75)";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
 
-const wrapCache = new Map();
-
-function wrapText(ctx, text, maxWidth, font) {
-  const key = `${font}|${Math.round(maxWidth)}|${text}`;
-  const cached = wrapCache.get(key);
-  if (cached) return cached;
-
-  ctx.font = font;
-  const words = text.split(" ");
-  const lines = [];
-  let line = "";
-  for (const word of words) {
-    const test = line ? `${line} ${word}` : word;
-    if (ctx.measureText(test).width > maxWidth && line) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = test;
+    // Floating text
+    for (const ft of this.floatingTexts) {
+      ctx.font = "bold 13px Inter, sans-serif";
+      ctx.fillStyle = ft.color;
+      ctx.textAlign = "center";
+      ctx.fillText(ft.text, ft.x, ft.y);
     }
   }
-  if (line) lines.push(line);
-  wrapCache.set(key, lines);
-  return lines;
-}
 
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  if (ctx.roundRect) {
-    ctx.roundRect(x, y, w, h, r);
-    return;
+  drawJoystick(ctx) {
+    if (!this.virtualJoystick.active) return;
+    const j = this.virtualJoystick;
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(j.startX, j.startY, 50, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(128, 222, 234, 0.75)";
+    ctx.beginPath();
+    ctx.arc(j.startX + j.dx * 50, j.startY + j.dy * 50, 22, 0, Math.PI * 2);
+    ctx.fill();
   }
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
-function withAlpha(hex, alpha) {
-  const clean = hex.replace("#", "");
-  const full = clean.length === 3 ? clean.split("").map((c) => c + c).join("") : clean;
-  const num = Number.parseInt(full, 16);
-  return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${clamp(alpha, 0, 1)})`;
 }
