@@ -563,7 +563,8 @@ export class Game {
       const lines = wrapText(ctx, card.beat.text, cardW - 34, "16px 'Cormorant Garamond', Georgia, serif");
       card.lines = lines;
       card.w = cardW;
-      card.h = 30 + lines.length * 22 + (card.revealed ? 22 : 0) + 52;
+      // text + optional reveal + a row of verbs + its own row for "let it pass"
+      card.h = 30 + lines.length * 22 + (card.revealed ? 22 : 0) + 76;
 
       if (card.phase === "resolving") {
         card.exit = Math.min(1, card.exit + dt * 1.3);
@@ -718,22 +719,43 @@ export class Game {
         cursor += 22;
       }
 
-      // The three things you can do, and the one you can decline to do.
+      // The things you can do, sharing the full width of the card so that a long
+      // verb can never grow into the tap target of another one.
       const buttonY = cursor + 8;
       const hits = [];
-      let bx = 17;
+      const gap = 7;
+      const specs = [];
 
       if (!card.revealed) {
-        bx = this.drawPill(ctx, { x: bx, y: buttonY, label: "WATCH", accent: "#9fb8d8", card, hits, action: "watch", cost: costOf("watch").vitality });
+        specs.push({ label: "WATCH", accent: "#9fb8d8", action: "watch", cost: costOf("watch").vitality });
       }
-      bx = this.drawPill(ctx, { x: bx, y: buttonY, label: card.beat.tend.label.toUpperCase(), accent: "#8fc9a8", card, hits, action: "tend", cost: costOf("tend", this.resources.fatigue).vitality });
-      bx = this.drawPill(ctx, { x: bx, y: buttonY, label: card.beat.act.label.toUpperCase(), accent: "#d9a06f", card, hits, action: "act", cost: costOf("act", this.resources.fatigue).vitality });
+      specs.push({
+        label: card.beat.tend.label.toUpperCase(),
+        accent: "#8fc9a8",
+        action: "tend",
+        cost: costOf("tend", this.resources.fatigue).vitality,
+      });
+      specs.push({
+        label: card.beat.act.label.toUpperCase(),
+        accent: "#d9a06f",
+        action: "act",
+        cost: costOf("act", this.resources.fatigue).vitality,
+      });
 
+      const available = card.w - 34 - gap * (specs.length - 1);
+      const share = available / specs.length;
+      let bx = 17;
+      for (const spec of specs) {
+        bx = this.drawPill(ctx, { ...spec, x: bx, y: buttonY, maxWidth: share, hits }) + gap;
+      }
+
+      // Declining to act gets its own row, well away from everything else.
+      const passY = buttonY + 32;
       ctx.font = "11px Inter, system-ui, sans-serif";
-      ctx.fillStyle = "rgba(190, 208, 220, 0.42)";
+      ctx.fillStyle = "rgba(190, 208, 220, 0.5)";
       ctx.textAlign = "right";
-      ctx.fillText("let it pass", card.w - 17, buttonY + 9);
-      hits.push({ action: "pass", x: card.w - 90, y: buttonY - 4, w: 80, h: 30 });
+      ctx.fillText("let it pass", card.w - 19, passY + 6);
+      hits.push({ action: "pass", x: card.w - 108, y: passY - 3, w: 92, h: 26 });
 
       // Everything above was laid out card-local; lift it into screen space.
       card.hits = hits.map((hit) => ({ ...hit, x: hit.x + x, y: hit.y + y }));
@@ -748,10 +770,11 @@ export class Game {
     }
   }
 
-  drawPill(ctx, { x, y, label, accent, hits, action, cost }) {
+  drawPill(ctx, { x, y, label, accent, hits, action, cost, maxWidth }) {
     ctx.font = "600 11px Inter, system-ui, sans-serif";
-    const text = cost > 0 ? `${label}  ${cost}` : label;
-    const w = Math.min(150, ctx.measureText(text).width + 22);
+    const suffix = cost > 0 ? `  ${cost}` : "";
+    const text = ellipsize(ctx, label, suffix, maxWidth - 22);
+    const w = Math.min(maxWidth, ctx.measureText(text).width + 22);
     const affordable = canAfford(this.resources, action, this.resources.fatigue);
 
     roundRect(ctx, x, y, w, 26, 13);
@@ -768,8 +791,18 @@ export class Game {
     ctx.textAlign = "left";
 
     hits.push({ action, x, y, w, h: 26 });
-    return x + w + 7;
+    return x + w;
   }
+}
+
+// Trim a verb until it fits its share of the card, keeping the cost visible.
+function ellipsize(ctx, label, suffix, maxTextWidth) {
+  if (ctx.measureText(label + suffix).width <= maxTextWidth) return label + suffix;
+  let trimmed = label;
+  while (trimmed.length > 1 && ctx.measureText(`${trimmed}…${suffix}`).width > maxTextWidth) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  return `${trimmed.trimEnd()}…${suffix}`;
 }
 
 // ---------------------------------------------------------------- helpers
