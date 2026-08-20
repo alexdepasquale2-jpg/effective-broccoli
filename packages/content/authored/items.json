@@ -1,0 +1,23 @@
+[
+  {
+    "id": "apple",
+    "name": "Apple",
+    "namePlural": "Apples",
+    "stackMax": 100,
+    "source": "authored"
+  },
+  {
+    "id": "plank",
+    "name": "Plank",
+    "namePlural": "Planks",
+    "stackMax": 100,
+    "source": "authored"
+  },
+  {
+    "id": "board",
+    "name": "Board",
+    "namePlural": "Boards",
+    "stackMax": 100,
+    "source": "authored"
+  }
+]
