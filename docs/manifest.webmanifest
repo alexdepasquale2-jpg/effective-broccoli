@@ -1,0 +1,19 @@
+{
+  "name": "Let It Pass",
+  "short_name": "Let It Pass",
+  "description": "A year in a valley where most things resolve without you. Watch, tend, act, or leave it alone.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#04060a",
+  "theme_color": "#0b1220",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
