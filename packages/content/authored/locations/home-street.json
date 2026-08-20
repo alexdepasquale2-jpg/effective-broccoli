@@ -1,0 +1,159 @@
+{
+  "id": "home-street",
+  "name": "Groddle Meadow",
+  "width": 2400,
+  "height": 900,
+  "spawn": {
+    "x": 300,
+    "y": 700
+  },
+  "sky": "#7ec8e3",
+  "layers": [
+    {
+      "id": "sky",
+      "parallax": 0.0,
+      "fill": "#a8ddf0",
+      "y": -400,
+      "height": 1400
+    },
+    {
+      "id": "hills-far",
+      "parallax": 0.2,
+      "fill": "#9ccf94",
+      "y": 540,
+      "height": 360
+    },
+    {
+      "id": "hills-near",
+      "parallax": 0.45,
+      "fill": "#7bbb72",
+      "y": 625,
+      "height": 275
+    },
+    {
+      "id": "ground",
+      "parallax": 1.0,
+      "fill": "#4f9a4a",
+      "y": 700,
+      "height": 200
+    }
+  ],
+  "platforms": [
+    {
+      "x1": 0,
+      "x2": 2400,
+      "y": 700
+    },
+    {
+      "x1": 700,
+      "x2": 1000,
+      "y": 610
+    },
+    {
+      "x1": 1300,
+      "x2": 1620,
+      "y": 610
+    },
+    {
+      "x1": 1360,
+      "x2": 1560,
+      "y": 520
+    },
+    {
+      "x1": 1820,
+      "x2": 2100,
+      "y": 610
+    }
+  ],
+  "entities": [
+    {
+      "id": "trant-fruit-a",
+      "kind": "tree",
+      "x": 520,
+      "y": 700,
+      "verbs": ["harvest"],
+      "cooldownMs": 8000,
+      "yield": {
+        "item": "apple",
+        "min": 1,
+        "max": 3,
+        "skill": "light_green_thumb_1",
+        "xp": 8
+      }
+    },
+    {
+      "id": "trant-fruit-b",
+      "kind": "tree",
+      "x": 850,
+      "y": 610,
+      "verbs": ["harvest"],
+      "cooldownMs": 8000,
+      "yield": {
+        "item": "apple",
+        "min": 1,
+        "max": 2,
+        "skill": "light_green_thumb_1",
+        "xp": 8
+      }
+    },
+    {
+      "id": "trant-wood-a",
+      "kind": "tree",
+      "x": 1180,
+      "y": 700,
+      "verbs": ["harvest"],
+      "cooldownMs": 12000,
+      "yield": {
+        "item": "plank",
+        "min": 1,
+        "max": 2,
+        "skill": "woodworking_1",
+        "xp": 12
+      }
+    },
+    {
+      "id": "trant-wood-b",
+      "kind": "tree",
+      "x": 1460,
+      "y": 520,
+      "verbs": ["harvest"],
+      "cooldownMs": 12000,
+      "yield": {
+        "item": "plank",
+        "min": 1,
+        "max": 3,
+        "skill": "woodworking_1",
+        "xp": 12
+      }
+    },
+    {
+      "id": "trant-fruit-c",
+      "kind": "tree",
+      "x": 1950,
+      "y": 610,
+      "verbs": ["harvest"],
+      "cooldownMs": 8000,
+      "yield": {
+        "item": "apple",
+        "min": 2,
+        "max": 4,
+        "skill": "light_green_thumb_1",
+        "xp": 10
+      }
+    },
+    {
+      "id": "rock-a",
+      "kind": "decor",
+      "x": 700,
+      "y": 700,
+      "verbs": []
+    },
+    {
+      "id": "rock-b",
+      "kind": "decor",
+      "x": 1700,
+      "y": 700,
+      "verbs": []
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "light_green_thumb_1",
+    "name": "Light Green Thumb",
+    "level": 1,
+    "description": "The knack of coaxing fruit from a fruit trant without offending it.",
+    "requires": [],
+    "source": "authored"
+  },
+  {
+    "id": "woodworking_1",
+    "name": "Woodworking",
+    "level": 1,
+    "description": "Persuading a wood trant to part with a plank or two.",
+    "requires": [],
+    "source": "authored"
+  }
+]

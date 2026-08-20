@@ -1,0 +1,36 @@
+{
+  "name": "project-glimmer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A modern revival of Tiny Speck's Glitch, built on its CC0 assets and game data.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/shared",
+    "packages/dataforge",
+    "packages/server",
+    "packages/client"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "tsc --build --force",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "npm run build -w @glimmer/shared && vitest run",
+    "dataforge": "npm run start -w @glimmer/dataforge",
+    "db:migrate": "npm run migrate -w @glimmer/server",
+    "dev": "npm run build -w @glimmer/shared && (npm run dev -w @glimmer/server & npm run dev -w @glimmer/client & wait)"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.2.0",
+    "eslint": "^10.8.1",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.1.11"
+  }
+}
