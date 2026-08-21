@@ -218,14 +218,14 @@ export function endTurn(state: GameState): GameState {
 
     const finishing = next.current;
     next.current = opponent(finishing);
-    next.heat = clamp(next.heat - 2, 0, 100);
-    for (const region of Object.values(next.regions)) {
-        if (region.shield > 0) {
-            region.shield -= 1;
-        }
-    }
 
     if (next.current === next.player) {
+        next.heat = clamp(next.heat - 2, 0, 100);
+        for (const region of Object.values(next.regions)) {
+            if (region.shield > 0) {
+                region.shield -= 1;
+            }
+        }
         next.turn += 1;
         if (next.turn >= next.maxTurns) {
             next.over = timedOutcome(next);
