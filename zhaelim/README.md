@@ -81,6 +81,18 @@ impossible puzzle presented as hard is a small cruelty. `npm run verify` inside 
 exactly one cast — the one that is due this breath — and no explanation. There is no separate
 hand-authored hint table to drift out of sync with the rules.
 
+## Hosting it anywhere
+
+```bash
+npm i esbuild        # the only tool this repo ever asks for, and only for this
+npm run build        # → zhaelim/dist/zhaelim.html
+```
+
+One file, about 116 KB, script and styles and icon folded in. It makes no network request of any
+kind — it plays from `file://`, from a USB stick, from any static host that can serve a single
+page. The multi-file version under `zhaelim/` remains the one to develop against; the bundle is
+only for handing the vessel to someone.
+
 ## Checks
 
 ```bash

@@ -47,6 +47,7 @@ export default tseslint.config(
         fetch: 'readonly',
         // tools
         process: 'readonly',
+        Buffer: 'readonly',
       },
     },
     rules: {

@@ -34,7 +34,8 @@ document.addEventListener(
 
 mount(document.getElementById('app'));
 
-if ('serviceWorker' in navigator) {
+// The single-file build has no sibling files to cache, so it skips this.
+if (!globalThis.ZHAELIM_STANDALONE && 'serviceWorker' in navigator) {
   addEventListener('load', () => {
     navigator.serviceWorker
       .register(new URL('../sw.js', import.meta.url), { scope: './' })
