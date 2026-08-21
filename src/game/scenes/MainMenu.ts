@@ -22,15 +22,15 @@ export class MainMenu extends Scene {
         addLabel(this, 512, 198, briefing, 15, '#c5d0e0', 0.5, 0.5).setAlign('center');
 
         this.factionCard(150, 268, 'eu', 'EUROPEAN COALITION', 0x2a3a22, 0xd4a017, [
-            'Hold eight theaters.',
-            'Keep energy above the freeze.',
-            'Flip Ukraine. Guard the Baltics.',
-            'Talk if Heat climbs.',
+            'Hold eight theaters and the pipes.',
+            'Feed the line: supplies, LNG, depots.',
+            'Troops and drones in Ukraine/Baltics.',
+            'STRIKE only if Heat can take it.',
         ]);
         this.factionCard(538, 268, 'ru', 'RUSSIAN FEDERATION', 0x3a1c22, 0xe07070, [
             'Split the map without a hot war.',
-            'Squeeze the European grid.',
-            'Contest Baltics, Balkans, Black Sea.',
+            'Squeeze pipelines. Cut supply lines.',
+            'Missiles and troops on the seam.',
             'Force a bargain before the clock.',
         ]);
 
@@ -38,7 +38,7 @@ export class MainMenu extends Scene {
             this,
             512,
             628,
-            'Each season: 3 operations. SHAPE influence · GRID energy · NET cyber · HOLD defend · POSTURE force · TALK de-escalate',
+            'Each season: 3 ops. SHAPE · GRID (pipes) · NET (cut lines) · HOLD · TROOPS · DRONE · STRIKE · TALK',
             13,
             '#8b9bb4',
             0.5,

@@ -1,6 +1,6 @@
 # Warm War 2026
 
-A turn-based hybrid strategy game: **Russia · Europe · 2026**. You command either the European Coalition or the Russian Federation. The fight is for grids, narratives, pipelines, and the nerve of governments. Win the continent **without** lighting the match.
+A turn-based hybrid strategy game: **Russia · Europe · 2026**. You command either the European Coalition or the Russian Federation. The board now carries **troops, drones, missiles, supplies, supply lines, energy, and pipelines**. Win the continent **without** lighting the match.
 
 This is a strategy game, not a forecast.
 
@@ -11,27 +11,29 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:8080](http://localhost:8080). Works in a desktop or phone browser.
+Open [http://localhost:8080](http://localhost:8080).
 
 ## How to play
 
-Each season you have **3 operations**. Tap a theater, then an action:
+Each season you have **3 operations**. Operations spend **supplies**. Tap a theater, then an action:
 
 | Action | What it does |
 |--------|----------------|
-| SHAPE | Influence campaign. Shifts a theater toward you. |
-| GRID | Energy. Europe stocks LNG; Russia squeezes exports. |
-| NET | Cyber. Moves the map, raises Heat, may cut enemy AP. |
-| HOLD | Harden a theater against the next season of pressure. |
-| POSTURE | Limited force. Strong map effect, sharp Heat spike. |
-| TALK | Back-channel. Lowers Heat. |
+| SHAPE | Influence. Weaker if the theater is off a live supply line. |
+| GRID | Energy and pipelines. Repair or squeeze a hub, restock supplies. |
+| NET | Cyber. Cuts supply lines from that theater for 2 seasons; can nick a pipe. |
+| HOLD | Shield, depot fill, harden a pipe hub. |
+| TROOPS | Deploy one formation from reserve. May clash. Raises Heat. |
+| DRONE | Package from reserve. Interdicts lines, can pick off a troop, nicks pipes. |
+| STRIKE | Expend one missile. Hits troops, drones, depots, pipelines. Sharp Heat spike. |
+| TALK | Lower Heat and reopen cut corridors. |
 
-**Win:** control 8 of 13 theaters (lean past ±22).  
-**Lose together:** Heat hits 100 — the warm war goes hot.  
-**Clock:** 8 seasons, Winter 2026 through Autumn 2027. Most theaters wins.
+**Win:** control 8 of 13 theaters.  
+**Lose together:** Heat hits 100.  
+**Clock:** 8 seasons.
 
-Starting map: Europe holds the west; Russia holds Belarus, Western Russia, and the Black Sea; Baltics, Central Europe, Italy, Balkans, and Ukraine are contested.
+Gold lines are European supply, red are Russian, cyan are pipelines, dark red are cut. Cyan triangles mark pipe hubs. Unsupplied formations take attrition at season end. Live batteries feed missiles; West EU and the Black Sea feed drones.
 
 ## Stack
 
-Phaser 4 + Vite + TypeScript. Same code on desktop Chrome and a phone home screen. Optional later: wrap `dist/` with Capacitor for store builds.
+Phaser 4 + Vite + TypeScript.

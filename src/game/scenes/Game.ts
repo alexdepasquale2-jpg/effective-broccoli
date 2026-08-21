@@ -8,9 +8,10 @@ import {
     createGame,
     endTurn,
     factionName,
-    opponent,
     seasonName,
+    stocksLine,
 } from '../sim/engine';
+import { EDGES, edgeColor, edgePoints, isSupplied, pipelineFlow } from '../sim/logistics';
 import { REGIONS, centroid, regionAt } from '../sim/map';
 import type { ActionType, Faction, GameState } from '../sim/types';
 import { addButton, addLabel, addPanel, controlColor, leanTint } from '../view/ui';
@@ -20,7 +21,9 @@ const ACTIONS: { type: ActionType; fill: number }[] = [
     { type: 'grid', fill: 0x2a4a58 },
     { type: 'net', fill: 0x1f4d4a },
     { type: 'hold', fill: 0x3d3a28 },
-    { type: 'posture', fill: 0x5a2428 },
+    { type: 'troops', fill: 0x4a3420 },
+    { type: 'drone', fill: 0x1f4a3a },
+    { type: 'missile', fill: 0x5a2428 },
     { type: 'talk', fill: 0x2a3350 },
 ];
 
@@ -32,9 +35,9 @@ export class Game extends Scene {
     private labels: GameObjects.Text[] = [];
     private hudSeason!: GameObjects.Text;
     private hudAp!: GameObjects.Text;
-    private hudEnergy!: GameObjects.Text;
     private hudHeat!: GameObjects.Text;
     private hudScore!: GameObjects.Text;
+    private hudStocks!: GameObjects.Text;
     private heatFill!: GameObjects.Rectangle;
     private regionTitle!: GameObjects.Text;
     private regionMeta!: GameObjects.Text;
@@ -60,20 +63,20 @@ export class Game extends Scene {
     }
 
     private drawChrome() {
-        this.add.rectangle(0, 0, 1024, 56, 0x10182a).setOrigin(0, 0);
-        addLabel(this, 16, 16, 'WARM WAR 2026', 18, '#f3efe4');
-        this.hudSeason = addLabel(this, 250, 18, '', 14, '#d4a017');
-        this.hudAp = addLabel(this, 430, 18, '', 14, '#e8eef7');
-        this.hudEnergy = addLabel(this, 530, 18, '', 14, '#7ec8d4');
-        this.hudHeat = addLabel(this, 680, 18, '', 14, '#e07070');
-        this.hudScore = addLabel(this, 820, 18, '', 14, '#e2c36b');
+        this.add.rectangle(0, 0, 1024, 70, 0x10182a).setOrigin(0, 0);
+        addLabel(this, 14, 8, 'WARM WAR 2026', 16, '#f3efe4');
+        this.hudSeason = addLabel(this, 210, 12, '', 13, '#d4a017');
+        this.hudAp = addLabel(this, 390, 12, '', 13, '#e8eef7');
+        this.hudHeat = addLabel(this, 500, 12, '', 13, '#e07070');
+        this.hudScore = addLabel(this, 640, 12, '', 13, '#e2c36b');
+        this.hudStocks = addLabel(this, 14, 40, '', 13, '#7ec8d4');
 
         this.add.rectangle(16, 736, 680, 14, 0x1b2436).setOrigin(0, 0);
         this.heatFill = this.add.rectangle(16, 736, 8, 14, 0xe85d04).setOrigin(0, 0);
         addLabel(this, 16, 718, 'HEAT', 11, '#8b9bb4');
 
-        this.add.rectangle(16, 64, 680, 648, 0x071018, 1).setOrigin(0, 0).setStrokeStyle(1, 0x1e3a5f);
-        addLabel(this, 28, 72, 'THEATER  ·  EUROPE', 12, '#6f829c');
+        this.add.rectangle(16, 76, 680, 636, 0x071018, 1).setOrigin(0, 0).setStrokeStyle(1, 0x1e3a5f);
+        addLabel(this, 28, 82, 'THEATER  ·  EUROPE   gold supply   cyan pipeline   red cut', 11, '#6f829c');
     }
 
     private buildLabels() {
@@ -82,7 +85,7 @@ export class Game extends Scene {
             const text = this.add
                 .text(c.x, c.y, region.short, {
                     fontFamily: 'Arial, Helvetica, sans-serif',
-                    fontSize: '11px',
+                    fontSize: '10px',
                     color: '#f4f7fb',
                     fontStyle: 'bold',
                     align: 'center',
@@ -93,30 +96,31 @@ export class Game extends Scene {
     }
 
     private buildPanel() {
-        addPanel(this, 708, 64, 300, 648);
-        this.regionTitle = addLabel(this, 858, 80, 'NO THEATER', 16, '#f4f7fb', 0.5, 0);
-        this.regionMeta = addLabel(this, 724, 108, 'Tap a region on the map.', 13, '#9aa8bd');
+        addPanel(this, 708, 76, 300, 636);
+        this.regionTitle = addLabel(this, 858, 88, 'NO THEATER', 15, '#f4f7fb', 0.5, 0);
+        this.regionMeta = addLabel(this, 724, 112, 'Tap a region on the map.', 12, '#9aa8bd');
         this.regionMeta.setWordWrapWidth(268);
+        this.regionMeta.setLineSpacing(2);
 
-        this.add.rectangle(724, 168, 268, 10, 0x1b2436).setOrigin(0, 0);
-        this.leanFill = this.add.rectangle(858, 168, 4, 10, 0xe2c36b).setOrigin(0.5, 0);
+        this.add.rectangle(724, 186, 268, 8, 0x1b2436).setOrigin(0, 0);
+        this.leanFill = this.add.rectangle(858, 186, 4, 8, 0xe2c36b).setOrigin(0.5, 0);
 
         ACTIONS.forEach((action, index) => {
             const col = index % 2;
             const row = Math.floor(index / 2);
             const x = 784 + col * 148;
-            const y = 214 + row * 58;
-            addButton(this, x, y, 136, 46, actionLabel(action.type), action.fill, () => this.onAction(action.type));
+            const y = 220 + row * 48;
+            addButton(this, x, y, 136, 40, actionLabel(action.type), action.fill, () => this.onAction(action.type));
         });
 
-        addButton(this, 858, 400, 268, 46, 'END SEASON', 0x243044, () => this.onEndTurn());
+        addButton(this, 858, 418, 268, 40, 'END SEASON', 0x243044, () => this.onEndTurn());
 
-        addLabel(this, 724, 430, 'SITREP LOG', 12, '#6f829c');
-        this.logText = addLabel(this, 724, 450, '', 12, '#c5d0e0');
+        addLabel(this, 724, 444, 'SITREP LOG', 11, '#6f829c');
+        this.logText = addLabel(this, 724, 460, '', 11, '#c5d0e0');
         this.logText.setWordWrapWidth(268);
-        this.logText.setLineSpacing(4);
+        this.logText.setLineSpacing(3);
 
-        this.banner = addLabel(this, 858, 668, '', 13, '#d4a017', 0.5, 0.5);
+        this.banner = addLabel(this, 858, 678, '', 12, '#d4a017', 0.5, 0.5);
         this.banner.setWordWrapWidth(280);
         this.banner.setAlign('center');
     }
@@ -148,8 +152,13 @@ export class Game extends Scene {
             this.banner.setText('No operations left. End the season.');
             return;
         }
+        const ap = this.state.ap;
         this.state = applyOrder(this.state, { type, regionId: this.selected });
         this.renderAll();
+        if (this.state.ap === ap) {
+            this.banner.setText(this.state.log[this.state.log.length - 1] || 'Refused.');
+            return;
+        }
         this.afterAction();
     }
 
@@ -207,7 +216,19 @@ export class Game extends Scene {
             return;
         }
         this.selected = order.regionId;
+        const ap = this.state.ap;
         this.state = applyOrder(this.state, order);
+        if (this.state.ap === ap) {
+            this.state = endTurn(this.state);
+            this.renderAll();
+            this.locked = false;
+            if (this.state.over) {
+                this.finish();
+                return;
+            }
+            this.banner.setText(`${seasonName(this.state.turn)} — your watch.`);
+            return;
+        }
         this.renderAll();
         if (this.state.over) {
             this.finish();
@@ -232,13 +253,15 @@ export class Game extends Scene {
 
     private renderAll() {
         this.drawMap();
-        const you = factionName(this.state.player);
-        const foe = factionName(opponent(this.state.player));
+        const you = this.state.player;
+        const bag = this.state.stocks[you];
         this.hudSeason.setText(seasonName(this.state.turn).toUpperCase());
         this.hudAp.setText(`AP ${this.state.ap}/${this.state.maxAp}`);
-        this.hudEnergy.setText(`NRG EU ${Math.round(this.state.energyEu)}  RU ${Math.round(this.state.energyRu)}`);
         this.hudHeat.setText(`HEAT ${Math.round(this.state.heat)}`);
-        this.hudScore.setText(`EU ${countControlled(this.state, 'eu')}  RU ${countControlled(this.state, 'ru')}  ${you} vs ${foe}`);
+        this.hudScore.setText(`EU ${countControlled(this.state, 'eu')}–${countControlled(this.state, 'ru')} RU`);
+        this.hudStocks.setText(
+            `${factionName(you).toUpperCase()}  ${stocksLine(bag)}   NRG ${Math.round(this.state.energyEu)}/${Math.round(this.state.energyRu)}   PIPE ${Math.round(pipelineFlow(this.state, you))}`,
+        );
         this.heatFill.width = Math.max(8, (680 * this.state.heat) / 100);
         this.heatFill.setFillStyle(this.state.heat > 72 ? 0xe85d04 : 0xd4a017);
 
@@ -246,27 +269,31 @@ export class Game extends Scene {
         const def = REGIONS.find((region) => region.id === this.selected);
         if (selected && def) {
             const control = controlOf(selected.lean);
+            const euLine = isSupplied(this.state, def.id, 'eu');
+            const ruLine = isSupplied(this.state, def.id, 'ru');
             this.regionTitle.setText(def.name.toUpperCase());
             this.regionMeta.setText(
-                `${controlLabel(control)}   lean ${fmt(selected.lean)}\nShield ${selected.shield} · value ${def.value}`,
+                `${controlLabel(control)}  lean ${fmt(selected.lean)}\n` +
+                    `T EU${selected.troopsEu} RU${selected.troopsRu}   D EU${selected.dronesEu} RU${selected.dronesRu}   M ${selected.batteries}\n` +
+                    `Depot ${Math.round(selected.depot)}  Pipe ${Math.round(selected.pipeline)}  Shield ${selected.shield}\n` +
+                    `Line EU ${euLine ? 'LIVE' : 'CUT'}  RU ${ruLine ? 'LIVE' : 'CUT'}`,
             );
             this.regionMeta.setColor(controlColor(control));
-            const width = Math.max(6, (Math.abs(selected.lean) / 100) * 268);
-            this.leanFill.width = width;
+            this.leanFill.width = Math.max(6, (Math.abs(selected.lean) / 100) * 268);
             this.leanFill.setFillStyle(leanTint(selected.lean));
         } else {
             this.regionTitle.setText('NO THEATER');
-            this.regionMeta.setText('Tap a region on the map.');
+            this.regionMeta.setText('Tap a region. TROOPS deploy. DRONE interdicts. STRIKE spends a missile. GRID is pipelines.');
             this.regionMeta.setColor('#9aa8bd');
             this.leanFill.width = 4;
         }
 
-        this.logText.setText(this.state.log.slice(-8).join('\n'));
+        this.logText.setText(this.state.log.slice(-7).join('\n'));
         this.labels.forEach((label, index) => {
             const region = REGIONS[index];
-            const lean = this.state.regions[region.id].lean;
-            const control = controlOf(lean);
-            label.setText(`${region.short}\n${fmt(lean)}`);
+            const local = this.state.regions[region.id];
+            const control = controlOf(local.lean);
+            label.setText(`${region.short}\n${fmt(local.lean)}\nT${local.troopsEu}/${local.troopsRu} D${local.dronesEu}/${local.dronesRu}`);
             label.setColor(control === 'contested' ? '#f4f7fb' : '#0b1220');
         });
     }
@@ -274,15 +301,26 @@ export class Game extends Scene {
     private drawMap() {
         const g = this.mapGfx;
         g.clear();
+        for (const edge of EDGES) {
+            const [a, b] = edgePoints(edge);
+            const cut = (this.state.cuts[`${edge.a}|${edge.b}`] || this.state.cuts[`${edge.b}|${edge.a}`] || 0) > 0;
+            g.lineStyle(cut ? 2.5 : edge.pipe ? 2.2 : 1.4, edgeColor(this.state, edge), cut ? 0.95 : 0.55);
+            g.lineBetween(a.x, a.y, b.x, b.y);
+        }
         for (const region of REGIONS) {
             const lean = this.state.regions[region.id].lean;
             const selected = region.id === this.selected;
-            g.fillStyle(leanTint(lean), selected ? 0.98 : 0.88);
+            g.fillStyle(leanTint(lean), selected ? 0.96 : 0.86);
             g.lineStyle(selected ? 3 : 1, selected ? 0xf4f7fb : 0x0b1220, 1);
             path(g, region.points);
             g.fillPath();
             path(g, region.points);
             g.strokePath();
+            if (region.pipeHub) {
+                const c = centroid(region.points);
+                g.fillStyle(0x2ec4b6, 0.95);
+                g.fillTriangle(c.x, c.y - 16, c.x - 7, c.y - 6, c.x + 7, c.y - 6);
+            }
         }
     }
 }

@@ -1,8 +1,9 @@
 import { REGIONS } from './map';
-import { controlOf, opponent } from './engine';
+import { controlOf, opponent } from './control';
+import { isSupplied } from './logistics';
 import type { ActionType, GameState, Order } from './types';
 
-const ACTIONS: ActionType[] = ['shape', 'grid', 'net', 'hold', 'posture', 'talk'];
+const ACTIONS: ActionType[] = ['shape', 'grid', 'net', 'hold', 'troops', 'drone', 'missile', 'talk'];
 
 export function chooseAiOrder(state: GameState): Order | 'end' {
     if (state.ap <= 0 || state.over) {
@@ -12,7 +13,7 @@ export function chooseAiOrder(state: GameState): Order | 'end' {
     let best: { score: number; order: Order } | undefined;
     for (const type of ACTIONS) {
         for (const region of REGIONS) {
-            const score = scoreOrder(state, type, region.id) + Math.random() * 3.5;
+            const score = scoreOrder(state, type, region.id) + Math.random() * 3.2;
             if (!best || score > best.score) {
                 best = { score, order: { type, regionId: region.id } };
             }
@@ -26,83 +27,98 @@ export function chooseAiOrder(state: GameState): Order | 'end' {
 
 function scoreOrder(state: GameState, type: ActionType, regionId: string): number {
     const side = state.current;
+    const bag = state.stocks[side];
     const region = state.regions[regionId];
     const def = REGIONS.find((item) => item.id === regionId);
     if (!region || !def) {
         return -999;
     }
+    if (type === 'troops' && bag.troops < 1) {
+        return -50;
+    }
+    if (type === 'drone' && bag.drones < 1) {
+        return -50;
+    }
+    if (type === 'missile' && bag.missiles < 1) {
+        return -50;
+    }
+
     const lean = region.lean;
     const control = controlOf(lean);
     const mine = control === side;
     const theirs = control === opponent(side);
-    const toward = side === 'eu' ? 1 : -1;
     const closeness = 40 - Math.min(40, Math.abs(lean));
+    const enemyTroops = side === 'eu' ? region.troopsRu : region.troopsEu;
+    const fed = isSupplied(state, regionId, side);
     let score = def.value;
+    if (bag.supplies < 8 && (type === 'talk' || type === 'grid' || type === 'hold')) {
+        score += type === 'talk' ? 8 : 4;
+    }
 
     switch (type) {
         case 'shape':
-            score += closeness * 0.45;
-            if (!mine) {
-                score += 8;
-            }
-            if (theirs && def.value >= 7) {
-                score += 6;
-            }
-            if (side === 'eu' && state.energyEu < 36) {
-                score -= 5;
-            }
+            score += closeness * 0.45 + (mine ? 0 : 8);
             break;
         case 'grid':
-            if (side === 'ru') {
-                score = 10 + state.energyEu * 0.18 + def.energyDemand * 8;
-                if (['west', 'germany', 'italy'].includes(regionId)) {
-                    score += 6;
-                }
-            } else {
-                score = 12 + (70 - state.energyEu) * 0.25;
-                if (['west', 'germany', 'italy', 'iberia'].includes(regionId)) {
-                    score += 5;
-                }
+            score = 9 + (side === 'ru' ? state.energyEu * 0.12 : (70 - state.energyEu) * 0.2);
+            if (def.pipeHub) {
+                score += 8;
+            }
+            if (bag.supplies < 30) {
+                score += 6;
             }
             break;
         case 'net':
-            score += theirs ? 10 : 4;
-            score += def.value * 0.6;
+            score += theirs ? 8 : 3;
+            if (def.pipeHub || !fed) {
+                score += 5;
+            }
             if (state.heat > 78) {
                 score -= 12;
             }
             break;
         case 'hold':
-            score = mine || control === 'contested' ? 7 + def.value * 0.5 : -4;
+            score = mine || control === 'contested' ? 6 + def.value * 0.4 : -4;
             if (region.shield > 0) {
                 score -= 10;
             }
-            if (mine && def.value >= 7) {
+            break;
+        case 'troops':
+            score = closeness * 0.5 + enemyTroops * 3 + def.value;
+            if (!fed) {
+                score -= 6;
+            }
+            if (state.heat > 72) {
+                score -= 14;
+            }
+            if (['ukraine', 'baltics', 'central', 'balkans'].includes(regionId)) {
+                score += 6;
+            }
+            break;
+        case 'drone':
+            score = 8 + enemyTroops * 2 + (def.pipeHub ? 5 : 0);
+            if (theirs) {
                 score += 4;
             }
-            break;
-        case 'posture':
-            score = closeness * 0.7 + def.value;
-            if (state.heat > 68) {
-                score -= 18;
-            }
-            if (state.heat > 84) {
-                score -= 40;
-            }
-            if (Math.abs(lean) < 28) {
-                score += 8;
-            }
-            break;
-        case 'talk':
-            score = state.heat > 70 ? 16 + (state.heat - 70) * 0.4 : 1;
-            if (state.heat < 50) {
+            if (state.heat > 82) {
                 score -= 8;
             }
             break;
-    }
-
-    if (toward * lean > 70 && type === 'shape') {
-        score -= 8;
+        case 'missile':
+            score = enemyTroops * 4 + (def.pipeHub ? 7 : 2) + closeness * 0.2;
+            if (state.heat > 64) {
+                score -= 16;
+            }
+            if (state.heat > 82) {
+                score -= 40;
+            }
+            break;
+        case 'talk':
+            score = state.heat > 68 ? 18 + (state.heat - 68) * 0.4 : 1;
+            if (state.heat < 48) {
+                score -= 8;
+            }
+            break;
     }
     return score;
 }

@@ -1,6 +1,6 @@
 export type Faction = 'eu' | 'ru';
 
-export type ActionType = 'shape' | 'grid' | 'net' | 'hold' | 'posture' | 'talk';
+export type ActionType = 'shape' | 'grid' | 'net' | 'hold' | 'troops' | 'drone' | 'missile' | 'talk';
 
 export type Control = 'eu' | 'ru' | 'contested';
 
@@ -14,14 +14,31 @@ export interface RegionDef {
     name: string;
     short: string;
     points: Point[];
+    neighbors: string[];
     energyDemand: number;
     value: number;
+    pipeHub: boolean;
+    supplyHub: boolean;
 }
 
 export interface RegionState {
     id: string;
     lean: number;
     shield: number;
+    troopsEu: number;
+    troopsRu: number;
+    dronesEu: number;
+    dronesRu: number;
+    batteries: number;
+    depot: number;
+    pipeline: number;
+}
+
+export interface Stocks {
+    troops: number;
+    drones: number;
+    missiles: number;
+    supplies: number;
 }
 
 export interface Outcome {
@@ -42,6 +59,8 @@ export interface GameState {
     energyRu: number;
     heat: number;
     regions: Record<string, RegionState>;
+    stocks: Record<Faction, Stocks>;
+    cuts: Record<string, number>;
     log: string[];
     lastKinetic: Faction | null;
     apPenalty: Record<Faction, number>;
@@ -51,4 +70,10 @@ export interface GameState {
 export interface Order {
     type: ActionType;
     regionId: string;
+}
+
+export interface Edge {
+    a: string;
+    b: string;
+    pipe: boolean;
 }
