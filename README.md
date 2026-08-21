@@ -13,6 +13,8 @@ npm run dev
 
 Open [http://localhost:8080](http://localhost:8080).
 
+**Hosted build:** [https://alexdepasquale2-jpg.github.io/effective-broccoli/](https://alexdepasquale2-jpg.github.io/effective-broccoli/) (GitHub Pages — enable Pages from the `gh-pages` branch or GitHub Actions in repo settings if the link is not live yet).
+
 ## How to play
 
 Each season you have **3 operations**. Operations spend **supplies**. Tap a theater, then an action:
