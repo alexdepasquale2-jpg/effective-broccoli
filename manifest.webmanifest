@@ -1,0 +1,17 @@
+{
+  "name": "Warm War 2026",
+  "short_name": "Warm War",
+  "description": "Turn-based hybrid strategy: Russia, Europe, 2026. Win the continent without lighting the match.",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "icons": [
+    {
+      "src": "favicon.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    }
+  ]
+}
