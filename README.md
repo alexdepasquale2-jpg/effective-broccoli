@@ -61,6 +61,13 @@ npm run dataforge
 - [Roadmap](docs/20-roadmap.md)
 - [Legal](docs/30-legal-and-credits.md)
 
+## Also in this repository
+
+[`zhaelim/`](zhaelim/README.md) — **Zha'elim**, a self-contained mobile game with no build step and
+no dependencies: a hex-lattice timing puzzle, an invented language with a derived glyph script, and
+a daily breathing rite. It shares nothing with Project Glimmer but the repository. Run it with
+`node zhaelim/serve.mjs`.
+
 ## License
 
 Project Glimmer's own code is MIT ([`LICENSE`](LICENSE)). Imported Glitch assets and game data are
