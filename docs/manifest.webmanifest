@@ -1,19 +1,17 @@
 {
-  "name": "Let It Pass",
-  "short_name": "Let It Pass",
-  "description": "A year in a valley where most things resolve without you. Watch, tend, act, or leave it alone.",
+  "name": "Warm War 2026",
+  "short_name": "Warm War",
+  "description": "Turn-based hybrid strategy: Russia, Europe, 2026. Win the continent without lighting the match.",
   "start_url": "./",
-  "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#04060a",
+  "orientation": "any",
+  "background_color": "#0b1220",
   "theme_color": "#0b1220",
   "icons": [
     {
-      "src": "./icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "favicon.png",
+      "sizes": "32x32",
+      "type": "image/png"
     }
   ]
 }

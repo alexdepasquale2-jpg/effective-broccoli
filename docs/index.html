@@ -1,98 +1,25 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
-    />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link rel="icon" type="image/png" href="./favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1220" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#081017" />
-    <meta
-      name="description"
-      content="Let It Pass — Top-down action game where doing nothing is your greatest power. Explore, observe, and master stillness."
-    />
-    <title>Let It Pass · Action & Stillness</title>
+    <meta name="apple-mobile-web-app-title" content="Warm War 2026" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
-    <link rel="apple-touch-icon" href="./icon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600;800&display=swap"
-      rel="stylesheet"
-    />
-    <script type="module" crossorigin src="./assets/index-B245-4nR.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-xdI_V99J.css">
-  </head>
-  <body>
+    <link rel="apple-touch-icon" href="./favicon.png" />
+    <link rel="stylesheet" href="./style.css">
+    <title>Warm War 2026</title>
+  <script type="module" crossorigin src="./assets/index-DdY2m3gN.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/phaser-DOLMtxKj.js">
+</head>
+
+<body>
     <div id="app">
-      <canvas id="game" aria-label="Let It Pass"></canvas>
-
-      <!-- HUD -->
-      <div id="hud" hidden>
-        <div class="hud-row">
-          <div class="hud-block">
-            <div class="stillness-row">
-              <span id="stillness">0</span>
-              <span id="multiplier" class="multiplier">×1.0</span>
-            </div>
-            <div class="depth-row">
-              <span id="depth-name">Restless</span>
-              <div class="track"><div id="depth-track" class="track-fill"></div></div>
-            </div>
-          </div>
-
-          <div class="hud-block right">
-            <div class="day-row">
-              <span id="day-label">Time: 60s</span>
-            </div>
-            <div class="vitality-row">
-              <span id="season-label" class="season">🧘 Channelling Stillness</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="hud-foot">
-          <span id="tally" class="tally">0 passed · 0 tended · 0 acted</span>
-          <button id="action-btn" type="button" class="btn act-trigger-btn">💥 Strike (Space)</button>
-        </div>
-      </div>
-
-      <!-- Ending -->
-      <div id="end-sheet" class="sheet" hidden>
-        <div class="sheet-box">
-          <p class="eyebrow">The Cycle Ends</p>
-          <h2 id="end-title">The Accounting</h2>
-          <div id="end-stats" class="stats"></div>
-          <div id="end-lines" class="lines"></div>
-          <p id="end-verdict" class="verdict"></p>
-          <button id="again-btn" type="button" class="btn wide">Breathe Again</button>
-        </div>
-      </div>
-
-      <!-- Title Screen -->
-      <div id="overlay" class="sheet">
-        <div class="sheet-box title-box">
-          <p class="eyebrow">ACTION MEETS STILLNESS</p>
-          <h1>Let It Pass</h1>
-          <p class="lead">
-            Move through an interactive world where crises and spectacles unfold in real-time.
-          </p>
-          <div class="verbs">
-            <p>🏃 <b>Move:</b> WASD / Arrow keys or Touch Joystick to navigate.</p>
-            <p>🧘 <b>Stand Still:</b> Stopping expands your <b>Stillness Aura</b> and resolves chaotic storms naturally.</p>
-            <p>🤝 <b>Tend:</b> Stay peacefully beside quiet suffering to comfort them.</p>
-            <p>💥 <b>Strike (Space):</b> Intervene forcefully when an action is truly required.</p>
-          </div>
-          <p class="lead dim">
-            Loud whirlwinds and fires burn themselves out if you leave them alone. Over-reacting causes disruption. Discernment is everything.
-          </p>
-          <button id="play" type="button" class="btn wide gold">Enter the Realm</button>
-        </div>
-      </div>
+        <div id="game-container"></div>
     </div>
-  </body>
+</body>
 </html>
