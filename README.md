@@ -39,3 +39,13 @@ Gold lines are European supply, red are Russian, cyan are pipelines, dark red ar
 ## Stack
 
 Phaser 4 + Vite + TypeScript.
+
+## Also in this repository
+
+[`zhaelim/`](zhaelim/README.md) — **Zha'elim**, a second, unrelated game: a hex-lattice timing
+puzzle with an invented language, a derived glyph script and a daily breathing rite. It shares
+nothing with Warm War but the repository — no build step, no dependencies, no npm install:
+
+```bash
+node zhaelim/serve.mjs
+```

@@ -1,0 +1,21 @@
+{
+  "name": "Zha'elim — the game that plays you back",
+  "short_name": "Zha'elim",
+  "description": "A hex-lattice timing game seeded by the Vel, the Kor and the Sha. Three tongues, one breath.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#07070d",
+  "theme_color": "#07070d",
+  "categories": ["games", "puzzle", "lifestyle"],
+  "icons": [
+    { "src": "./assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    {
+      "src": "./assets/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

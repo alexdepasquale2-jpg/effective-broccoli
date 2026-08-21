@@ -1,0 +1,14 @@
+{
+  "name": "zhaelim",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A hex-lattice timing game seeded by the Vel, the Kor and the Sha. No build step, no dependencies, no network.",
+  "scripts": {
+    "start": "node serve.mjs",
+    "build": "node tools/build-single.mjs",
+    "test": "node --test test/weave.test.js",
+    "verify": "node tools/verify-songs.mjs",
+    "e2e": "node tools/e2e.mjs"
+  }
+}
