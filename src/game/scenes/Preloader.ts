@@ -1,46 +1,30 @@
 import { Scene } from 'phaser';
 
-export class Preloader extends Scene
-{
-    constructor ()
-    {
+export class Preloader extends Scene {
+    constructor() {
         super('Preloader');
     }
 
-    init ()
-    {
-        //  We loaded this image in our Boot Scene, so we can display it here
-        this.add.image(512, 384, 'background');
+    create() {
+        this.cameras.main.setBackgroundColor(0x0b1220);
+        const title = this.add
+            .text(512, 340, 'ESTABLISHING LINK', {
+                fontFamily: 'Arial, Helvetica, sans-serif',
+                fontSize: '18px',
+                color: '#9bb0cc',
+            })
+            .setOrigin(0.5);
+        title.setAlpha(0.85);
 
-        //  A simple progress bar. This is the outline of the bar.
-        this.add.rectangle(512, 384, 468, 32).setStrokeStyle(1, 0xffffff);
+        this.add.rectangle(512, 392, 468, 10, 0x1b2a40).setOrigin(0.5);
+        const bar = this.add.rectangle(278, 392, 4, 10, 0xd4a017).setOrigin(0, 0.5);
 
-        //  This is the progress bar itself. It will increase in size from the left based on the % of progress.
-        const bar = this.add.rectangle(512-230, 384, 4, 28, 0xffffff);
-
-        //  Use the 'progress' event emitted by the LoaderPlugin to update the loading bar
-        this.load.on('progress', (progress: number) => {
-
-            //  Update the progress bar (our bar is 464px wide, so 100% = 464px)
-            bar.width = 4 + (460 * progress);
-
+        this.tweens.add({
+            targets: bar,
+            width: 468,
+            duration: 520,
+            ease: 'Quad.easeInOut',
+            onComplete: () => this.scene.start('MainMenu'),
         });
-    }
-
-    preload ()
-    {
-        //  Load the assets for the game - Replace with your own assets
-        this.load.setPath('assets');
-
-        this.load.image('logo', 'logo.png');
-    }
-
-    create ()
-    {
-        //  When all the assets have loaded, it's often worth creating global objects here that the rest of the game can use.
-        //  For example, you can define global animations here, so we can use them in other scenes.
-
-        //  Move to the MainMenu. You could also swap this for a Scene Transition, such as a camera fade.
-        this.scene.start('MainMenu');
     }
 }

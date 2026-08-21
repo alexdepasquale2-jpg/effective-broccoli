@@ -1,18 +1,8 @@
 {
-  "name": "mobile-game-starter",
-  "description": "Official Phaser Vite TypeScript template, set up to run as a mobile-web game.",
-  "version": "1.4.0",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/phaserjs/template-vite-ts.git"
-  },
-  "author": "Phaser Studio <support@phaser.io> (https://phaser.io/)",
+  "name": "warm-war-2026",
+  "description": "Warm War 2026 — a turn-based hybrid strategy game set in a fictional Russia–Europe theater.",
+  "version": "1.0.0",
   "license": "MIT",
-  "licenseUrl": "http://www.opensource.org/licenses/mit-license.php",
-  "bugs": {
-    "url": "https://github.com/phaserjs/template-vite-ts/issues"
-  },
-  "homepage": "https://github.com/phaserjs/template-vite-ts#readme",
   "scripts": {
     "dev": "vite --config vite/config.dev.mjs",
     "build": "vite build --config vite/config.prod.mjs",
