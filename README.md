@@ -1,68 +1,58 @@
-# Project Glimmer
+# Mobile Game Starter
 
-A modern revival of Tiny Speck's _Glitch_ — the whimsical, non-violent MMO set inside the dreams of
-eleven giants — rebuilt on the game's own public-domain art and game data.
+A playable [Phaser](https://phaser.io/) starter you can run in a browser in about a minute. It is based on the official [`phaserjs/template-vite-ts`](https://github.com/phaserjs/template-vite-ts) template (Phaser 4 + Vite + TypeScript), with mobile-web defaults: responsive scaling, multi-touch, and an installable PWA shell.
 
-> **Status: early.** The vertical slice runs: register, walk around a street, harvest a tree, gain
-> skill XP, and see other players move in real time, with everything persisted. See
-> [`docs/20-roadmap.md`](docs/20-roadmap.md) for what comes next.
+Tap through Main Menu → Game → Game Over, then replace the scenes in `src/game/scenes` with your own game.
 
-## Why this can work
+![screenshot](screenshot.png)
 
-When Tiny Speck closed _Glitch_ they released its art and its complete server-side game logic into
-the public domain under CC0. That release includes every item definition, skill, recipe, quest, and
-achievement the live game shipped with. Project Glimmer treats that as a **content database** and
-builds a modern TypeScript engine around it — so the years of design work that went into Ur don't
-have to be redone. See [`CREDITS.md`](CREDITS.md).
+## Run it
 
-## Quickstart
-
-Requires **Node 22+** and a **PostgreSQL 16** server.
+Requires [Node.js](https://nodejs.org) 18+.
 
 ```bash
 npm install
-
-# Point at your database (defaults to postgres://localhost:5432/glimmer)
-export DATABASE_URL=postgres://localhost:5432/glimmer
-
-npm run db:migrate     # create the schema
-npm run dataforge      # build content into packages/content/generated
-npm run dev            # server on :8080, client on :5173
+npm run dev
 ```
 
-Open <http://localhost:5173> in two browser windows, register two accounts, and you should see both
-avatars in the same street.
+Open [http://localhost:8080](http://localhost:8080). On a phone, use the same URL on your network, or install it to the home screen from the browser share sheet.
 
-Optionally, to import the real Glitch item and skill catalogue rather than the small authored
-bootstrap set:
+| Command | Description |
+|---------|-------------|
+| `npm install` | Install dependencies |
+| `npm run dev` | Dev server with hot reload on port 8080 |
+| `npm run build` | Production build in `dist/` |
+| `npm run preview` | Serve the production build on port 8080 |
+
+## Why this starter
+
+Native Unity / Godot / Xcode projects need heavy SDKs. This one is a **mobile web game**: the same code runs in desktop Chrome, Safari on iPhone, and Chrome on Android. When you want app-store builds, wrap `dist/` with [Capacitor](https://phaser.io/tutorials/bring-your-phaser-game-to-ios-and-android-with-capacitor).
+
+## Project layout
+
+| Path | Description |
+|------|-------------|
+| `index.html` | Page that hosts the game canvas |
+| `public/assets` | Sprites and other files Phaser loads at runtime |
+| `public/manifest.webmanifest` | Add-to-home-screen metadata |
+| `src/main.ts` | Bootstraps the Phaser game |
+| `src/game/main.ts` | Game config (size, scale, scenes) |
+| `src/game/scenes` | `Boot`, `Preloader`, `MainMenu`, `Game`, `GameOver` |
+
+Edit files under `src/` while `npm run dev` is running. Vite reloads the browser automatically.
+
+## Optional: native iOS / Android
+
+After `npm run build`:
 
 ```bash
-./scripts/fetch-cc0-sources.sh   # clones the CC0 GSJS repo into vendor/
-npm run dataforge
+npm install @capacitor/core @capacitor/cli @capacitor/ios @capacitor/android
+npx cap init "Mobile Game Starter" com.example.mobilestarter --web-dir dist
+npx cap add ios      # needs macOS + Xcode
+npx cap add android  # needs Android Studio
+npx cap sync
 ```
-
-## Layout
-
-| Path                 | What it is                                                         |
-| -------------------- | ------------------------------------------------------------------ |
-| `packages/shared`    | Wire protocol (zod schemas), shared types, tick constants          |
-| `packages/server`    | Fastify auth + WebSocket game server, Drizzle/Postgres persistence |
-| `packages/client`    | Vite + PixiJS browser client                                       |
-| `packages/dataforge` | Build-time importer that turns CC0 sources into game content       |
-| `packages/content`   | Authored bootstrap content, plus generated output (gitignored)     |
-| `docs/`              | Vision, scope, architecture, roadmap, ADRs                         |
-
-## Documentation
-
-- [The original concept](docs/00-concept.md) — the long-term vision, preserved as written
-- [Scope and reality](docs/01-scope-reality.md) — what a solo project actually builds, and why
-- [Architecture](docs/10-architecture.md) — the location-room model
-- [Data pipeline](docs/11-data-pipeline.md) — how CC0 sources become content
-- [Roadmap](docs/20-roadmap.md)
-- [Legal](docs/30-legal-and-credits.md)
 
 ## License
 
-Project Glimmer's own code is MIT ([`LICENSE`](LICENSE)). Imported Glitch assets and game data are
-CC0 1.0 (public domain). The Glitch name and logo are trademarks and are **not** used by this
-project.
+MIT. Template copyright [Phaser Studio](https://phaser.io/). See `LICENSE`.

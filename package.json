@@ -1,36 +1,29 @@
 {
-  "name": "project-glimmer",
-  "version": "0.1.0",
-  "private": true,
-  "description": "A modern revival of Tiny Speck's Glitch, built on its CC0 assets and game data.",
-  "license": "MIT",
-  "type": "module",
-  "engines": {
-    "node": ">=22"
+  "name": "mobile-game-starter",
+  "description": "Official Phaser Vite TypeScript template, set up to run as a mobile-web game.",
+  "version": "1.4.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/phaserjs/template-vite-ts.git"
   },
-  "workspaces": [
-    "packages/shared",
-    "packages/dataforge",
-    "packages/server",
-    "packages/client"
-  ],
+  "author": "Phaser Studio <support@phaser.io> (https://phaser.io/)",
+  "license": "MIT",
+  "licenseUrl": "http://www.opensource.org/licenses/mit-license.php",
+  "bugs": {
+    "url": "https://github.com/phaserjs/template-vite-ts/issues"
+  },
+  "homepage": "https://github.com/phaserjs/template-vite-ts#readme",
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "typecheck": "tsc --build --force",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "test": "npm run build -w @glimmer/shared && vitest run",
-    "dataforge": "npm run start -w @glimmer/dataforge",
-    "db:migrate": "npm run migrate -w @glimmer/server",
-    "dev": "npm run build -w @glimmer/shared && (npm run dev -w @glimmer/server & npm run dev -w @glimmer/client & wait)"
+    "dev": "vite --config vite/config.dev.mjs",
+    "build": "vite build --config vite/config.prod.mjs",
+    "preview": "vite preview --host --port 8080 --strictPort --config vite/config.prod.mjs"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@types/node": "^26.2.0",
-    "eslint": "^10.8.1",
-    "prettier": "^3.9.6",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.67.0",
-    "vitest": "^4.1.11"
+    "typescript": "~5.7.2",
+    "vite": "^6.3.1"
+  },
+  "dependencies": {
+    "phaser": "4.0.0",
+    "terser": "^5.39.0"
   }
 }

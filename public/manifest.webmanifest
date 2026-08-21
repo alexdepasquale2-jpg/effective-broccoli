@@ -1,0 +1,17 @@
+{
+  "name": "Mobile Game Starter",
+  "short_name": "Game Starter",
+  "description": "Official Phaser Vite TypeScript template, ready to run in a mobile browser.",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f0f0f",
+  "theme_color": "#028af8",
+  "icons": [
+    {
+      "src": "favicon.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    }
+  ]
+}
