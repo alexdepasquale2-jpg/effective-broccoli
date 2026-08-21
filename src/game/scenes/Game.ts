@@ -301,12 +301,6 @@ export class Game extends Scene {
     private drawMap() {
         const g = this.mapGfx;
         g.clear();
-        for (const edge of EDGES) {
-            const [a, b] = edgePoints(edge);
-            const cut = (this.state.cuts[`${edge.a}|${edge.b}`] || this.state.cuts[`${edge.b}|${edge.a}`] || 0) > 0;
-            g.lineStyle(cut ? 2.5 : edge.pipe ? 2.2 : 1.4, edgeColor(this.state, edge), cut ? 0.95 : 0.55);
-            g.lineBetween(a.x, a.y, b.x, b.y);
-        }
         for (const region of REGIONS) {
             const lean = this.state.regions[region.id].lean;
             const selected = region.id === this.selected;
@@ -316,11 +310,22 @@ export class Game extends Scene {
             g.fillPath();
             path(g, region.points);
             g.strokePath();
-            if (region.pipeHub) {
-                const c = centroid(region.points);
-                g.fillStyle(0x2ec4b6, 0.95);
-                g.fillTriangle(c.x, c.y - 16, c.x - 7, c.y - 6, c.x + 7, c.y - 6);
+        }
+        for (const edge of EDGES) {
+            const [a, b] = edgePoints(edge);
+            const cut = (this.state.cuts[`${edge.a}|${edge.b}`] || this.state.cuts[`${edge.b}|${edge.a}`] || 0) > 0;
+            g.lineStyle(4, 0x071018, 0.85);
+            g.lineBetween(a.x, a.y, b.x, b.y);
+            g.lineStyle(cut ? 3 : edge.pipe ? 3.2 : 2.2, edgeColor(this.state, edge), cut ? 1 : 0.92);
+            g.lineBetween(a.x, a.y, b.x, b.y);
+        }
+        for (const region of REGIONS) {
+            if (!region.pipeHub) {
+                continue;
             }
+            const c = centroid(region.points);
+            g.fillStyle(0x2ec4b6, 1);
+            g.fillTriangle(c.x, c.y - 18, c.x - 8, c.y - 7, c.x + 8, c.y - 7);
         }
     }
 }

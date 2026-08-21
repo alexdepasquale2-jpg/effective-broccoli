@@ -89,10 +89,10 @@ export function pipelineFlow(state: GameState, faction: Faction): number {
 
 export function edgeColor(state: GameState, edge: Edge): number {
     if (isCut(state, edge.a, edge.b)) {
-        return 0x6a2430;
+        return 0xff5a6a;
     }
     if (edge.pipe) {
-        return 0x2ec4b6;
+        return 0x3ef0e0;
     }
     const eu = isSupplied(state, edge.a, 'eu') || isSupplied(state, edge.b, 'eu');
     const ru = isSupplied(state, edge.a, 'ru') || isSupplied(state, edge.b, 'ru');
