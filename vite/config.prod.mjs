@@ -42,11 +42,13 @@ export default defineConfig({
         host: true,
         port: 8080,
         strictPort: true,
+        allowedHosts: true,
     },
     preview: {
         host: true,
         port: 8080,
         strictPort: true,
+        allowedHosts: true,
     },
     plugins: [
         phasermsg()

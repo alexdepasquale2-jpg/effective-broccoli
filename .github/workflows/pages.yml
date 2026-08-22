@@ -2,7 +2,7 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    branches: [main, cursor/mobile-game-starter-85f1]
+    branches: [main, cursor/mobile-game-starter-85f1, cursor/canon-lane-idle-moba-bbcf]
   workflow_dispatch:
 
 permissions:
