@@ -46,7 +46,10 @@ describe('idle moba combat', () => {
         const match = createMatch(0, power);
         tickMatch(match, 8, power, 1);
         const minion = match.units.find((unit) => unit.kind === 'minion' && unit.team === 1);
-        assert.ok(minion);
+        assert.ok(minion, 'expected an enemy minion after a wave');
+        if (!minion) {
+            return;
+        }
         minion.hp = Math.max(0.2, power.clickDamage * 0.4);
         const events = clickTarget(match, minion.lane, power, false);
         assert.ok(events.some((event) => event.kind === 'lastHit' || event.kind === 'damage' || event.kind === 'gold'));

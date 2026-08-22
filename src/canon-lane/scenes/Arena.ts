@@ -67,6 +67,7 @@ export class Arena extends Scene {
     private bulkChips: { bg: GameObjects.Rectangle; text: GameObjects.Text; id: BulkMode }[] = [];
     private laneChips: { bg: GameObjects.Rectangle; text: GameObjects.Text; lane: LaneId }[] = [];
     private pulse = 0;
+    private champGlyph?: GameObjects.Text;
 
     constructor() {
         super('Arena');
@@ -79,6 +80,16 @@ export class Arena extends Scene {
         this.add.rectangle(0, 0, WIDTH, HEIGHT, C.bg).setOrigin(0, 0);
         this.drawChrome();
         this.gfx = this.add.graphics();
+        for (let i = 0; i < 3; i += 1) {
+            this.add
+                .text(LANE_X[i], ARENA_TOP + 18, ['TOP', 'MID', 'BOT'][i], {
+                    fontFamily: SANS,
+                    fontSize: '12px',
+                    color: '#e2c36b',
+                })
+                .setOrigin(0.5)
+                .setAlpha(0.7);
+        }
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => this.onTap(pointer));
         this.input.once('pointerdown', () => this.sfx.unlock());
         if (loaded.offline.seconds >= 8) {
@@ -510,7 +521,7 @@ export class Arena extends Scene {
         const y = this.worldY(unit.pos);
         const ally = unit.team === 0;
         const color = unit.kind === 'camp' ? 0x3d7a4a : ally ? C.ally : C.enemy;
-        const r = unit.kind === 'nexus' ? 22 : unit.kind === 'tower' ? 16 : unit.kind === 'champ' ? 14 : unit.kind === 'camp' ? 12 : 6;
+        const r = unit.kind === 'nexus' ? 22 : unit.kind === 'tower' ? 16 : unit.kind === 'champ' ? 15 : unit.kind === 'camp' ? 13 : 7;
         g.fillStyle(color, 1);
         if (unit.kind === 'tower' || unit.kind === 'nexus') {
             g.fillRect(x - r, y - r, r * 2, r * 2);
@@ -527,19 +538,30 @@ export class Arena extends Scene {
         if (unit.kind === 'champ' && ally) {
             g.lineStyle(2, 0xe2c36b, 1);
             g.strokeCircle(x, y, r + 3);
+            const champ = championById(this.state.selectedChampion);
+            if (!this.champGlyph) {
+                this.champGlyph = this.add
+                    .text(x, y, champ.glyph, { fontFamily: FONT, fontSize: '16px', color: '#0c0a14', fontStyle: 'bold' })
+                    .setOrigin(0.5)
+                    .setDepth(6);
+            }
+            this.champGlyph.setText(champ.glyph).setPosition(x, y);
         }
     }
 
     private floatAt(x: number, y: number, text: string, color: string) {
-        const node = this.add.text(x, y, text, { fontFamily: SANS, fontSize: '15px', color, fontStyle: 'bold' }).setOrigin(0.5).setDepth(15);
-        this.floaters.push({ text: node, life: 0.7 });
+        const node = this.add
+            .text(x, y, text, { fontFamily: SANS, fontSize: '20px', color, fontStyle: 'bold', stroke: '#0c0a14', strokeThickness: 4 })
+            .setOrigin(0.5)
+            .setDepth(15);
+        this.floaters.push({ text: node, life: 1.05 });
     }
 
     private stepFloaters(dt: number) {
         for (const floater of this.floaters) {
             floater.life -= dt;
             floater.text.y -= 28 * dt;
-            floater.text.setAlpha(Math.max(0, floater.life / 0.7));
+            floater.text.setAlpha(Math.max(0, floater.life / 1.05));
         }
         const keep: Floater[] = [];
         for (const floater of this.floaters) {

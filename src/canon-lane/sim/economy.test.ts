@@ -5,7 +5,6 @@ import { LEVELS_PER_TIER } from './constants.ts';
 import {
     columnPower,
     derivePower,
-    emptyColumn,
     levelCost,
     maxAffordableLevels,
     milestoneMultiplier,
@@ -60,7 +59,7 @@ describe('upgrade economy', () => {
         assert.ok(bought >= 1);
         assert.ok(bought <= 10);
         assert.ok(spent <= 40 + 1e-9);
-        const cap = maxAffordableLevels(1e21, 5, 8990, 1, -1);
+        const cap = maxAffordableLevels(Number.MAX_VALUE, 5, 8990, 1, -1);
         assert.equal(cap.bought, 10);
     });
 });

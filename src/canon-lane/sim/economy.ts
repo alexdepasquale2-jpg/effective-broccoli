@@ -1,6 +1,6 @@
 import { LEVEL_COST_RATE, LEVELS_PER_TIER, TIER_POWER_RATE } from './constants.ts';
 import { CHAMPIONS, championById } from './champions.ts';
-import type { ColumnProgress, GameState, MetaProgress, PlayerPower, TreeId } from './types.ts';
+import type { ChampionProgress, ColumnProgress, GameState, MetaProgress, PlayerPower, TreeId } from './types.ts';
 import { TREE_DEFS, TREE_IDS } from './types.ts';
 
 export function clampLevel(level: number): number {
