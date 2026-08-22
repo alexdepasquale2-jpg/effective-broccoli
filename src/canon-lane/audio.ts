@@ -1,6 +1,7 @@
 export class Sfx {
     private ctx: AudioContext | null = null;
     muted = false;
+    richness = 0.2;
 
     unlock() {
         this.ensure();
@@ -42,7 +43,10 @@ export class Sfx {
     }
 
     tap() {
-        this.tone(740, 0.045, 'square', 0.03);
+        this.tone(740, 0.045, this.richness > 0.5 ? 'triangle' : 'square', 0.03);
+        if (this.richness > 0.65) {
+            this.tone(1480, 0.03, 'sine', 0.012, 0.01);
+        }
     }
 
     crit() {

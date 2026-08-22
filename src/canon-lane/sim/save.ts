@@ -22,6 +22,13 @@ export function persistGame(state: GameState) {
     }
 }
 
+export function peekGame(): GameState {
+    if (typeof localStorage === 'undefined') {
+        return createGame();
+    }
+    return deserialize(localStorage.getItem(SAVE_KEY)) ?? createGame();
+}
+
 export function resetGame(): GameState {
     if (typeof localStorage !== 'undefined') {
         localStorage.removeItem(SAVE_KEY);

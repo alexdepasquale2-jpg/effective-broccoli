@@ -1,4 +1,5 @@
 export type TreeId =
+    | 'gui'
     | 'strike'
     | 'fury'
     | 'aegis'
@@ -16,7 +17,7 @@ export type LaneId = 0 | 1 | 2;
 
 export type BulkMode = 1 | 10 | 100 | 1000 | 'max';
 
-export type ShopTab = 'trees' | 'tiers' | 'roster' | 'lanes' | 'meta';
+export type ShopTab = 'screen' | 'trees' | 'tiers' | 'roster' | 'lanes' | 'meta';
 
 export interface ColumnProgress {
     level: number;
@@ -126,6 +127,7 @@ export interface TreeDef {
 }
 
 export const TREE_IDS: TreeId[] = [
+    'gui',
     'strike',
     'fury',
     'aegis',
@@ -141,6 +143,15 @@ export const TREE_IDS: TreeId[] = [
 ];
 
 export const TREE_DEFS: Record<TreeId, TreeDef> = {
+    gui: {
+        id: 'gui',
+        title: 'Screen',
+        greek: 'Aegle',
+        blurb: 'Upgrade the game itself — cathode to the Perfect Game.',
+        color: 0xf4d88a,
+        baseCost: 6,
+        basePower: 0.05,
+    },
     strike: {
         id: 'strike',
         title: 'Strike',

@@ -108,6 +108,7 @@ export function derivePower(state: GameState): PlayerPower {
     const costMult = costMultiplier(state.meta);
     const relic = 1 + columnPower(TREE_DEFS.relic.basePower, state.trees.relic);
     const idle = 1 + columnPower(TREE_DEFS.idle.basePower, state.trees.idle);
+    const vessel = 1 + columnPower(TREE_DEFS.gui.basePower, state.trees.gui ?? { level: 0, tier: 1 });
     const champ = championById(state.selectedChampion);
     const progress = state.champions[state.selectedChampion];
     const champLevel = progress?.level ?? 0;
@@ -128,16 +129,16 @@ export function derivePower(state: GameState): PlayerPower {
     const lane = state.lanes[state.selectedLane];
     const laneMult = 1 + columnPower(0.02, lane);
 
-    const clickDamage = (1 + strike) * champ.click * champScale * relic * laneMult;
+    const clickDamage = (1 + strike) * champ.click * champScale * relic * laneMult * (1 + (vessel - 1) * 0.15);
     const dps = (0.35 + fury) * champ.idle * champScale * relic * idle * laneMult;
     const champHp = (40 + aegis) * champScale * relic;
     const minionDamage = (1.2 + wave) * relic;
     const minionHp = (8 + wave * 4) * relic;
     const towerDamage = (2.2 + siege) * relic;
     const towerHp = (80 + siege * 18) * relic;
-    const goldPerClick = (0.35 + harvest * 0.35) * champ.gold * relic;
-    const goldPerSecond = (0.12 + harvest) * champ.gold * relic * idle;
-    const lastHitBonus = (2 + harvest * 2.4) * champ.gold * relic;
+    const goldPerClick = (0.35 + harvest * 0.35) * champ.gold * relic * vessel;
+    const goldPerSecond = (0.12 + harvest) * champ.gold * relic * idle * vessel;
+    const lastHitBonus = (2 + harvest * 2.4) * champ.gold * relic * vessel;
     const critChance = Math.min(0.72, 0.06 + fate * 0.015 + hapticCritBonus(state.meta.haptic) + (champ.crit - 1) * 0.08);
     const critDamage = 2 + fate * 0.04 + (champ.crit - 1);
     const jungleGold = (0.8 + wilds) * relic;

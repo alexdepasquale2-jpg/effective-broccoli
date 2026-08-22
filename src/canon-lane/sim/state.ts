@@ -45,7 +45,7 @@ export function createGame(now = Date.now()): GameState {
         selectedLane: 1,
         meta: { efficiency: 0, autoBuy: false, haptic: 1, insight: 0 },
         bulk: 1,
-        tab: 'trees',
+        tab: 'screen',
         match: createMatch(0, {
             clickDamage: 1,
             dps: 0.4,
