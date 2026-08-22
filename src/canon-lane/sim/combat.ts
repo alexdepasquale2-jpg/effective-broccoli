@@ -174,7 +174,9 @@ function nearestFoe(match: MatchState, unit: CombatUnit): CombatUnit | null {
 
 function spawnWave(match: MatchState, power: PlayerPower) {
     const scale = enemyScale(match.index, power);
-    const perLane = living(match).filter((unit) => unit.kind === 'minion').length > 36 ? 2 : 3;
+    const extra = Math.max(0, power.chorus ?? 0);
+    const cap = living(match).filter((unit) => unit.kind === 'minion').length > 42 ? 2 : 3;
+    const perLane = cap + extra;
     for (const lane of [0, 1, 2] as LaneId[]) {
         for (let i = 0; i < perLane; i += 1) {
             spawn(match, {
@@ -186,7 +188,7 @@ function spawnWave(match: MatchState, power: PlayerPower) {
                 maxHp: power.minionHp,
                 dmg: power.minionDamage,
                 range: 5,
-                speed: 6.4,
+                speed: 6.4 * Math.min(1.6, power.tempo ?? 1),
                 gold: 0,
                 attackCd: i * 0.15,
             });
@@ -199,7 +201,7 @@ function spawnWave(match: MatchState, power: PlayerPower) {
                 maxHp: 7.5 * scale,
                 dmg: 0.9 * scale,
                 range: 5,
-                speed: 6.1,
+                speed: 6.1 * Math.min(1.45, power.tempo ?? 1),
                 gold: 1.6 * (1 + match.index * 0.08),
                 attackCd: i * 0.15,
             });
@@ -246,8 +248,9 @@ export function clickTarget(match: MatchState, lane: LaneId, power: PlayerPower,
     const foes = living(match)
         .filter((unit) => unit.team === ENEMY && inLane(unit, lane) && unit.kind !== 'camp')
         .sort((a, b) => {
-            const lastHitA = a.kind === 'minion' && a.hp <= power.clickDamage * 1.35 ? 0 : 1;
-            const lastHitB = b.kind === 'minion' && b.hp <= power.clickDamage * 1.35 ? 0 : 1;
+            const window = power.focusWindow ?? 1.2;
+            const lastHitA = a.kind === 'minion' && a.hp <= power.clickDamage * (window + 0.15) ? 0 : 1;
+            const lastHitB = b.kind === 'minion' && b.hp <= power.clickDamage * (window + 0.15) ? 0 : 1;
             if (lastHitA !== lastHitB) {
                 return lastHitA - lastHitB;
             }
@@ -270,11 +273,15 @@ export function clickTarget(match: MatchState, lane: LaneId, power: PlayerPower,
 function clickTargetOn(match: MatchState, target: CombatUnit, power: PlayerPower, crit: boolean): MatchEvent[] {
     const events: MatchEvent[] = [];
     const raw = power.clickDamage * (crit ? power.critDamage : 1);
-    const wasLastHit = target.kind === 'minion' && target.hp <= raw * 1.2;
+    const window = power.focusWindow ?? 1.2;
+    const wasLastHit = target.kind === 'minion' && target.hp <= raw * window;
     strike(match, target, raw, events, crit ? 'crit' : 'damage');
     if (target.hp <= 0 && wasLastHit) {
         match.goldBanked += power.lastHitBonus;
         events.push({ kind: 'lastHit', lane: target.lane, amount: power.lastHitBonus, x: target.pos });
+    }
+    if ((power.echoRatio ?? 0) > 0 && target.hp > 0) {
+        strike(match, target, raw * power.echoRatio, events, 'damage');
     }
     return events;
 }
@@ -307,7 +314,7 @@ export function tickMatch(match: MatchState, dt: number, power: PlayerPower, foc
 
     if (match.waveTimer <= 0) {
         spawnWave(match, power);
-        match.waveTimer = WAVE_PERIOD;
+        match.waveTimer = WAVE_PERIOD / Math.max(0.55, power.tempo ?? 1);
     }
     if (match.omenTimer <= 0 && power.omenBurst > 0) {
         const foes = living(match).filter((unit) => unit.team === ENEMY && inLane(unit, focus) && unit.kind !== 'camp');
@@ -336,7 +343,7 @@ export function tickMatch(match: MatchState, dt: number, power: PlayerPower, foc
                 });
             }
         }
-        match.campTimer = 22;
+        match.campTimer = 22 / Math.max(0.65, power.tempo ?? 1);
     }
 
     const units = living(match);

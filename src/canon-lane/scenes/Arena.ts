@@ -36,12 +36,23 @@ import {
 import type { BulkMode, CombatUnit, GameState, LaneId, MatchEvent, ShopTab, TreeId } from '../sim/types.ts';
 import { LANE_GREEK, LANE_NAMES, TREE_DEFS, TREE_IDS } from '../sim/types.ts';
 import { chip, label, restyleChip } from '../view/chrome';
+import {
+    COCKPIT,
+    attachCockpitText,
+    createCockpit,
+    createRoster,
+    refreshCockpit,
+    setCockpitVisible,
+    slotBlurb,
+    type Cockpit,
+    type DeckSlot,
+} from '../view/cockpit.ts';
 import { eraProgress, nextEra, resolveEra, type Era } from '../view/era.ts';
 import { blit, paletteFor, roundRect, scanlines, spawnBurst, stepSparks, strokeRect, type Spark } from '../view/paint.ts';
 import { CAMP, FOE, MINION, NEXUS, TOWER, attackSheet, champSheet, shiftSheet } from '../view/sprites.ts';
 
-const ARENA_TOP = 86;
-const ARENA_BOTTOM = 688;
+const CLASSIC_TOP = 86;
+const CLASSIC_BOTTOM = 688;
 const LANE_X = [128, 360, 592];
 
 interface Floater {
@@ -79,6 +90,10 @@ export class Arena extends Scene {
     private laneChips: { bg: GameObjects.Rectangle; text: GameObjects.Text; lane: LaneId }[] = [];
     private pulse = 0;
     private eraId = '';
+    private cockpit!: Cockpit;
+    private picked: DeckSlot | null = null;
+    private arrowLeft!: { bg: GameObjects.Rectangle; text: GameObjects.Text };
+    private arrowRight!: { bg: GameObjects.Rectangle; text: GameObjects.Text };
 
     constructor() {
         super('Arena');
@@ -130,11 +145,11 @@ export class Arena extends Scene {
         });
 
         this.shopPanel = this.add.rectangle(12, 792, 696, 328, era.panel, 0.97).setOrigin(0, 0);
-        chip(this, 22, 804, 60, 42, era.ink, '◀', () => {
+        this.arrowLeft = chip(this, 22, 804, 60, 42, era.ink, '◀', () => {
             this.shopIndex = Math.max(0, this.shopIndex - 1);
             rumble(PATTERNS.tap, this.state.meta.haptic);
         }, era);
-        chip(this, 638, 804, 60, 42, era.ink, '▶', () => {
+        this.arrowRight = chip(this, 638, 804, 60, 42, era.ink, '▶', () => {
             this.shopIndex += 1;
             rumble(PATTERNS.tap, this.state.meta.haptic);
         }, era);
@@ -176,6 +191,12 @@ export class Arena extends Scene {
             .setAlpha(0)
             .setDepth(22);
 
+        this.cockpit = createCockpit(this, era, (slot) => this.pickDeck(slot));
+        this.cockpit.roster = createRoster(this, era, CHAMPIONS.map((champion) => champion.id), (id) => this.pickRoster(id));
+        for (const chip of this.cockpit.roster) {
+            this.cockpit.roots.push(chip.bg, chip.mark);
+        }
+        attachCockpitText(this, era, this.cockpit);
         this.gfx = this.add.graphics();
         this.shopArt = this.add.graphics();
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => this.onTap(pointer));
@@ -224,9 +245,13 @@ export class Arena extends Scene {
         this.shopDirty += dt;
         if (this.shopDirty > 0.18) {
             this.shopDirty = 0;
-            this.refreshShop();
-            this.refreshChips();
-            this.applySkin(false);
+        this.refreshShop();
+        this.refreshChips();
+        this.applySkin(false);
+        if (this.era().sleek) {
+            refreshCockpit(this.cockpit, this.state, this.era(), this.picked);
+            this.cockpit.intel.setText(this.laneIntel());
+        }
         }
         this.drawArena();
         this.drawHud();
@@ -235,6 +260,14 @@ export class Arena extends Scene {
 
     private era(): Era {
         return resolveEra(this.state.trees.gui);
+    }
+
+    private arenaTop(): number {
+        return this.era().sleek ? COCKPIT.arenaTop : CLASSIC_TOP;
+    }
+
+    private arenaBottom(): number {
+        return this.era().sleek ? COCKPIT.arenaBottom : CLASSIC_BOTTOM;
     }
 
     private applySkin(force: boolean) {
@@ -262,6 +295,88 @@ export class Arena extends Scene {
         restyleChip(this.buyChip, era, era.wine);
         restyleChip(this.autoChip, era, era.sea);
         this.sfx.richness = era.perfect ? 1 : era.sleek ? 0.7 : era.frames > 1 ? 0.4 : 0.15;
+        const classic = !era.sleek;
+        this.shopPanel.setVisible(classic);
+        this.shopTitle.setVisible(classic);
+        this.shopBody.setVisible(classic);
+        this.shopHint.setVisible(classic);
+        this.shopArt.setVisible(classic);
+        this.buyChip.bg.setVisible(classic);
+        this.buyChip.text.setVisible(classic);
+        this.arrowLeft.bg.setVisible(classic);
+        this.arrowLeft.text.setVisible(classic);
+        this.arrowRight.bg.setVisible(classic);
+        this.arrowRight.text.setVisible(classic);
+        for (const tab of this.tabChips) {
+            tab.bg.setVisible(classic);
+            tab.text.setVisible(classic);
+        }
+        for (const lane of this.laneChips) {
+            lane.bg.setVisible(classic);
+            lane.text.setVisible(classic);
+        }
+        const dock = era.sleek ? 1024 : 1204;
+        this.bulkChips.forEach((entry, i) => {
+            entry.bg.setPosition(16 + i * 104, dock);
+            entry.text.setPosition(16 + i * 104 + 48, dock + 20);
+        });
+        this.autoChip.bg.setPosition(536, dock);
+        this.autoChip.text.setPosition(620, dock + 20);
+        setCockpitVisible(this.cockpit, era.sleek);
+        if (era.sleek) {
+            refreshCockpit(this.cockpit, this.state, era, this.picked);
+            this.cockpit.context.setText(this.picked ? slotBlurb(this.picked, this.state) : 'Tap a cell to buy it. Every column is on this glass.');
+            this.cockpit.intel.setText(this.laneIntel());
+        }
+    }
+
+    private laneIntel(): string {
+        const units = this.state.match.units.filter((unit) => unit.hp > 0);
+        const pct = (kind: 'tower' | 'nexus', team: 0 | 1, lane?: LaneId) => {
+            const unit = units.find((entry) => entry.kind === kind && entry.team === team && (lane === undefined || entry.lane === lane));
+            return unit ? `${Math.round((unit.hp / unit.maxHp) * 100)}%` : '--';
+        };
+        return `TOP ${pct('tower', 0, 0)}/${pct('tower', 1, 0)}   MID ${pct('tower', 0, 1)}/${pct('tower', 1, 1)}   BOT ${pct('tower', 0, 2)}/${pct('tower', 1, 2)}   NX ${pct('nexus', 0)}/${pct('nexus', 1)}`;
+    }
+
+    private pickDeck(slot: DeckSlot) {
+        this.picked = slot;
+        if (slot.kind === 'tree' && slot.tree) {
+            this.state.tab = slot.tree === 'gui' ? 'screen' : 'trees';
+            this.shopIndex = TREE_IDS.indexOf(slot.tree);
+            buyTreeLevels(this.state, slot.tree);
+        } else if (slot.kind === 'lane' && slot.lane !== undefined) {
+            setLane(this.state, slot.lane);
+            buyLaneLevels(this.state, slot.lane);
+        } else if (slot.meta === 'efficiency') {
+            buyEfficiency(this.state);
+        } else if (slot.meta === 'haptic') {
+            buyHaptic(this.state);
+        } else if (slot.meta === 'insight') {
+            buyInsight(this.state);
+        }
+        this.sfx.upgrade();
+        rumble(PATTERNS.upgrade, this.state.meta.haptic);
+        refreshCockpit(this.cockpit, this.state, this.era(), this.picked);
+        this.cockpit.context.setText(slotBlurb(slot, this.state));
+        if (this.era().id !== this.eraId) {
+            this.onEraUp();
+        }
+    }
+
+    private pickRoster(id: string) {
+        const progress = this.state.champions[id];
+        if (!progress?.unlocked) {
+            unlockChampion(this.state, id);
+        } else if (this.state.selectedChampion !== id) {
+            selectChampion(this.state, id);
+            this.flash(`${championById(id).name} as ${championById(id).greek}`);
+        } else {
+            buyChampionLevels(this.state, id);
+        }
+        this.sfx.tap();
+        rumble(PATTERNS.tap, this.state.meta.haptic);
+        refreshCockpit(this.cockpit, this.state, this.era(), this.picked);
     }
 
     private onEraUp() {
@@ -524,7 +639,7 @@ export class Arena extends Scene {
 
     private onTap(pointer: Phaser.Input.Pointer) {
         this.sfx.unlock();
-        if (pointer.y < ARENA_TOP || pointer.y > ARENA_BOTTOM) {
+        if (pointer.y < this.arenaTop() || pointer.y > this.arenaBottom()) {
             return;
         }
         const era = this.era();
@@ -576,27 +691,31 @@ export class Arena extends Scene {
     }
 
     private worldY(pos: number): number {
-        return ARENA_TOP + 16 + (pos / 100) * (ARENA_BOTTOM - ARENA_TOP - 32);
+        const top = this.arenaTop();
+        const bottom = this.arenaBottom();
+        return top + 16 + (pos / 100) * (bottom - top - 32);
     }
 
     private drawArena() {
         const era = this.era();
         const g = this.gfx;
         g.clear();
+        const top = this.arenaTop();
+        const bottom = this.arenaBottom();
         g.fillStyle(era.bg, 1);
-        g.fillRect(0, ARENA_TOP, WIDTH, ARENA_BOTTOM - ARENA_TOP);
+        g.fillRect(0, top, WIDTH, bottom - top);
         for (let i = 0; i < 3; i += 1) {
             const hot = this.state.selectedLane === i;
-            roundRect(g, LANE_X[i] - 48, ARENA_TOP + 8, 96, ARENA_BOTTOM - ARENA_TOP - 16, era.rounded, hot ? era.laneHot : era.lane);
-            strokeRect(g, LANE_X[i] - 48, ARENA_TOP + 8, 96, ARENA_BOTTOM - ARENA_TOP - 16, era.rounded, hot ? era.gold : era.ink, hot ? 0.9 : 0.4);
+            roundRect(g, LANE_X[i] - 48, top + 8, 96, bottom - top - 16, era.rounded, hot ? era.laneHot : era.lane);
+            strokeRect(g, LANE_X[i] - 48, top + 8, 96, bottom - top - 16, era.rounded, hot ? era.gold : era.ink, hot ? 0.9 : 0.4);
             if (era.trails && hot) {
                 g.fillStyle(era.gold, 0.05 + Math.sin(this.pulse * 5) * 0.03);
-                g.fillRect(LANE_X[i] - 6, ARENA_TOP + 16, 12, ARENA_BOTTOM - ARENA_TOP - 32);
+                g.fillRect(LANE_X[i] - 6, top + 16, 12, bottom - top - 32);
             }
         }
         if (era.perfect) {
             g.lineStyle(2, era.gold, 0.25 + Math.sin(this.pulse * 2) * 0.08);
-            g.strokeRect(8, ARENA_TOP + 4, WIDTH - 16, ARENA_BOTTOM - ARENA_TOP - 8);
+            g.strokeRect(8, top + 4, WIDTH - 16, bottom - top - 8);
         }
         for (const unit of this.state.match.units) {
             if (unit.hp > 0) {
@@ -604,11 +723,11 @@ export class Arena extends Scene {
             }
         }
         stepSparks(g, this.sparks, 1 / 30);
-        scanlines(g, 0, ARENA_TOP, WIDTH, ARENA_BOTTOM - ARENA_TOP, era.scanlines);
+        scanlines(g, 0, top, WIDTH, bottom - top, era.scanlines);
         if (era.perfect) {
             g.fillStyle(era.gold, 0.035);
             for (let i = 0; i < 6; i += 1) {
-                const y = ARENA_TOP + ((this.pulse * 40 + i * 90) % (ARENA_BOTTOM - ARENA_TOP));
+                const y = top + ((this.pulse * 40 + i * 90) % (bottom - top));
                 g.fillRect(20 + i * 120, y, 2, 8);
             }
         }

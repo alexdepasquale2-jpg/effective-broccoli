@@ -98,5 +98,8 @@ describe('reasonable grind', () => {
         assert.ok(power.clickDamage > 1);
         assert.ok(power.dps > 0);
         assert.ok(power.costMult <= 1);
+        assert.ok(power.tempo >= 1);
+        assert.ok(power.focusWindow >= 1.2);
+        assert.ok(power.echoRatio >= 0);
     });
 });

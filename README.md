@@ -30,7 +30,7 @@ npm run build
 2. The match idles: minions, towers, your champion, jungle camps.
 3. Spend gold on a **tree** (Strike, Fury, Harvest…). Each level is a unique blessing.
 4. Win the enemy nexus for **Glory**. Spend Glory to **raise the tier** of any column.
-5. Open **SCREEN**. Buy the GUI. Watch the era plaque jump: CATHODE → VCS → 8-BIT → TEMPLE → PERFECT GAME.
+5. Open **SCREEN**. Buy the GUI. At **16-BIT / TEMPLE** the shop becomes a cockpit — every tree, lane, and champion on one glass.
 6. Unlock the roster. Field David as Apollo, Ruth as Demeter, Moses as Zeus…
 7. Turn on **AUTO** when you pocket the phone. Offline gains cap at eight hours.
 
@@ -40,8 +40,9 @@ npm run build
 | Aegis / Wave / Siege | Champion, minions, towers |
 | Harvest / Wilds / Idle | Gold, camps, offline |
 | Omen / Relic / Nexus | Lane burst, global multiplier, match spoils |
-| Screen | The GUI itself — Atari cathode to the Perfect Game |
-| Lanes / Roster / Meta | Corridor focus, champions, shop efficiency and haptics |
+| Screen | The GUI itself — Atari cathode to a high-tech cockpit, then the Perfect Game |
+| Echo / Tempo / Focus / Chorus | Aftershock taps, faster waves, last-hit window, extra minions |
+| Lanes / Roster / Meta | Corridor focus, champions, shop lens / rite / sight |
 
 Costs are geometric (`×1.07` per level) with milestone multipliers every 25 / 100 / 1000 / 9,000 so the next buy stays in a reasonable grind band. Bulk `x1 / x10 / x100 / x1000 / MAX`. Tactile feedback: press squash, floating numbers, Web Audio blips, and `navigator.vibrate` patterns that deepen with the haptic rite.
 

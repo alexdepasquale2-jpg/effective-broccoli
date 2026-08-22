@@ -125,6 +125,10 @@ export function derivePower(state: GameState): PlayerPower {
     const wilds = columnPower(TREE_DEFS.wilds.basePower, state.trees.wilds);
     const omen = columnPower(TREE_DEFS.omen.basePower, state.trees.omen);
     const nexus = columnPower(TREE_DEFS.nexus.basePower, state.trees.nexus);
+    const echo = columnPower(TREE_DEFS.echo.basePower, state.trees.echo ?? { level: 0, tier: 1 });
+    const tempo = columnPower(TREE_DEFS.tempo.basePower, state.trees.tempo ?? { level: 0, tier: 1 });
+    const focus = columnPower(TREE_DEFS.focus.basePower, state.trees.focus ?? { level: 0, tier: 1 });
+    const chorus = columnPower(TREE_DEFS.chorus.basePower, state.trees.chorus ?? { level: 0, tier: 1 });
 
     const lane = state.lanes[state.selectedLane];
     const laneMult = 1 + columnPower(0.02, lane);
@@ -138,7 +142,7 @@ export function derivePower(state: GameState): PlayerPower {
     const towerHp = (80 + siege * 18) * relic;
     const goldPerClick = (0.35 + harvest * 0.35) * champ.gold * relic * vessel;
     const goldPerSecond = (0.12 + harvest) * champ.gold * relic * idle * vessel;
-    const lastHitBonus = (2 + harvest * 2.4) * champ.gold * relic * vessel;
+    const lastHitBonus = (2 + harvest * 2.4) * champ.gold * relic * vessel * (1 + focus * 0.8);
     const critChance = Math.min(0.72, 0.06 + fate * 0.015 + hapticCritBonus(state.meta.haptic) + (champ.crit - 1) * 0.08);
     const critDamage = 2 + fate * 0.04 + (champ.crit - 1);
     const jungleGold = (0.8 + wilds) * relic;
@@ -166,6 +170,10 @@ export function derivePower(state: GameState): PlayerPower {
         matchGold,
         matchGlory,
         costMult,
+        echoRatio: Math.min(1.4, echo),
+        tempo: 1 + Math.min(1.8, tempo),
+        focusWindow: 1.2 + focus * 0.9,
+        chorus: Math.floor(chorus),
     };
 }
 

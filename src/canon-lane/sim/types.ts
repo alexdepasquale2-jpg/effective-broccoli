@@ -11,7 +11,11 @@ export type TreeId =
     | 'omen'
     | 'idle'
     | 'relic'
-    | 'nexus';
+    | 'nexus'
+    | 'echo'
+    | 'tempo'
+    | 'focus'
+    | 'chorus';
 
 export type LaneId = 0 | 1 | 2;
 
@@ -57,6 +61,10 @@ export interface PlayerPower {
     matchGold: number;
     matchGlory: number;
     costMult: number;
+    echoRatio: number;
+    tempo: number;
+    focusWindow: number;
+    chorus: number;
 }
 
 export interface CombatUnit {
@@ -121,6 +129,7 @@ export interface TreeDef {
     title: string;
     greek: string;
     blurb: string;
+    job: string;
     color: number;
     baseCost: number;
     basePower: number;
@@ -140,6 +149,10 @@ export const TREE_IDS: TreeId[] = [
     'idle',
     'relic',
     'nexus',
+    'echo',
+    'tempo',
+    'focus',
+    'chorus',
 ];
 
 export const TREE_DEFS: Record<TreeId, TreeDef> = {
@@ -148,6 +161,7 @@ export const TREE_DEFS: Record<TreeId, TreeDef> = {
         title: 'Screen',
         greek: 'Aegle',
         blurb: 'Upgrade the game itself — cathode to the Perfect Game.',
+        job: 'gui',
         color: 0xf4d88a,
         baseCost: 6,
         basePower: 0.05,
@@ -157,6 +171,7 @@ export const TREE_DEFS: Record<TreeId, TreeDef> = {
         title: 'Strike',
         greek: 'Harpe',
         blurb: 'Tap damage. The bow of David, the bolt of Zeus.',
+        job: 'tap dmg',
         color: 0xe2c36b,
         baseCost: 5,
         basePower: 1.15,
@@ -166,6 +181,7 @@ export const TREE_DEFS: Record<TreeId, TreeDef> = {
         title: 'Fury',
         greek: 'Ares',
         blurb: 'Idle attacks. The lane fights while you look away.',
+        job: 'auto dps',
         color: 0xc45c4a,
         baseCost: 12,
         basePower: 0.55,
@@ -175,6 +191,7 @@ export const TREE_DEFS: Record<TreeId, TreeDef> = {
         title: 'Aegis',
         greek: 'Athena',
         blurb: 'Champion vitality. The shield that does not split.',
+        job: 'champ hp',
         color: 0x8fb4d4,
         baseCost: 18,
         basePower: 8,
@@ -184,6 +201,7 @@ export const TREE_DEFS: Record<TreeId, TreeDef> = {
         title: 'Wave',
         greek: 'Phalanx',
         blurb: 'Minion steel. Three hundred in every spawn.',
+        job: 'minions',
         color: 0x6a8f6a,
         baseCost: 15,
         basePower: 0.45,
@@ -193,6 +211,7 @@ export const TREE_DEFS: Record<TreeId, TreeDef> = {
         title: 'Siege',
         greek: 'Hoplon',
         blurb: 'Tower fire. Horns against the wall.',
+        job: 'towers',
         color: 0x9a7a4a,
         baseCost: 22,
         basePower: 0.7,
@@ -202,6 +221,7 @@ export const TREE_DEFS: Record<TreeId, TreeDef> = {
         title: 'Harvest',
         greek: 'Cornucopia',
         blurb: 'Gold from clicks, last-hits, and the idle glean.',
+        job: 'gold',
         color: 0xd4a017,
         baseCost: 8,
         basePower: 0.22,
@@ -211,6 +231,7 @@ export const TREE_DEFS: Record<TreeId, TreeDef> = {
         title: 'Fate',
         greek: 'Moirae',
         blurb: 'Crit chance and crit wounds.',
+        job: 'crits',
         color: 0xb56b9a,
         baseCost: 28,
         basePower: 0.12,
@@ -220,6 +241,7 @@ export const TREE_DEFS: Record<TreeId, TreeDef> = {
         title: 'Wilds',
         greek: 'Artemis',
         blurb: 'Jungle camps. Extra gold on the edges of the map.',
+        job: 'jungle',
         color: 0x3d7a4a,
         baseCost: 35,
         basePower: 1.4,
@@ -229,6 +251,7 @@ export const TREE_DEFS: Record<TreeId, TreeDef> = {
         title: 'Omen',
         greek: 'Keraunos',
         blurb: 'A timed burst down the focused lane.',
+        job: 'burst',
         color: 0x7a6ad4,
         baseCost: 40,
         basePower: 4,
@@ -238,6 +261,7 @@ export const TREE_DEFS: Record<TreeId, TreeDef> = {
         title: 'Idle',
         greek: 'Hypnos',
         blurb: 'Offline gains and match tempo while you rest.',
+        job: 'offline',
         color: 0x5a6a8a,
         baseCost: 25,
         basePower: 0.08,
@@ -247,6 +271,7 @@ export const TREE_DEFS: Record<TreeId, TreeDef> = {
         title: 'Relic',
         greek: 'Omphalos',
         blurb: 'A global multiplier on every other column.',
+        job: 'global',
         color: 0xc9a227,
         baseCost: 60,
         basePower: 0.04,
@@ -256,9 +281,50 @@ export const TREE_DEFS: Record<TreeId, TreeDef> = {
         title: 'Nexus',
         greek: 'Hestia',
         blurb: 'Match spoils — gold and glory when the crystal falls.',
+        job: 'spoils',
         color: 0xd98ba0,
         baseCost: 48,
         basePower: 0.15,
+    },
+    echo: {
+        id: 'echo',
+        title: 'Echo',
+        greek: 'Mnemosyne',
+        blurb: 'A second strike after each tap. Clicks should chain.',
+        job: 'aftershock',
+        color: 0x7ec8d4,
+        baseCost: 14,
+        basePower: 0.08,
+    },
+    tempo: {
+        id: 'tempo',
+        title: 'Tempo',
+        greek: 'Kairos',
+        blurb: 'Faster waves, faster camps, a quicker match clock.',
+        job: 'speed',
+        color: 0xd4c07a,
+        baseCost: 24,
+        basePower: 0.06,
+    },
+    focus: {
+        id: 'focus',
+        title: 'Focus',
+        greek: 'Lyre',
+        blurb: 'A wider last-hit window and richer gleam gold.',
+        job: 'last-hit',
+        color: 0xc8b4e0,
+        baseCost: 16,
+        basePower: 0.1,
+    },
+    chorus: {
+        id: 'chorus',
+        title: 'Chorus',
+        greek: 'Muses',
+        blurb: 'Extra allied minions each wave. More bodies on the stone.',
+        job: '+minions',
+        color: 0x6a9e7a,
+        baseCost: 20,
+        basePower: 0.35,
     },
 };
 
