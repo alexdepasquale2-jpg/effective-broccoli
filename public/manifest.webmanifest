@@ -1,12 +1,12 @@
 {
-  "name": "Warm War 2026",
-  "short_name": "Warm War",
-  "description": "Turn-based hybrid strategy: Russia, Europe, 2026. Win the continent without lighting the match.",
+  "name": "Canon Lane",
+  "short_name": "Canon Lane",
+  "description": "Idle MOBA clicker: biblical names, Greek domains, 9000 blessings per upgrade tier.",
   "start_url": "./",
   "display": "standalone",
-  "orientation": "any",
-  "background_color": "#0b1220",
-  "theme_color": "#0b1220",
+  "orientation": "portrait",
+  "background_color": "#0c0a14",
+  "theme_color": "#0c0a14",
   "icons": [
     {
       "src": "favicon.png",
