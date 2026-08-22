@@ -1,0 +1,353 @@
+<title>Foley &amp; Fable Stall Kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400&family=Karla:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --ink:#0B0A0C;
+  --ink-2:#131117;
+  --ink-3:#1B1820;
+  --oxblood:#6E1F2A;
+  --gold:#C9A227;
+  --rose:#B4626F;
+  --parch:#E9E0D0;
+  --parch-dim:#A79E90;
+  --hair:rgba(233,224,208,.14);
+  --hair-strong:rgba(201,162,39,.38);
+  --serif:"Cormorant Garamond",Georgia,"Times New Roman",serif;
+  --sans:"Karla","Helvetica Neue",Arial,sans-serif;
+  --goth:"Pirata One","Cormorant Garamond",Georgia,serif;
+  --measure:64ch;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:
+    radial-gradient(120% 70% at 50% -10%, rgba(201,162,39,.13), transparent 60%),
+    radial-gradient(90% 55% at 12% 40%, rgba(110,31,42,.18), transparent 65%),
+    var(--ink);
+  color:var(--parch);
+  font-family:var(--sans);
+  font-size:16.5px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1040px;margin:0 auto;padding:0 22px}
+h1,h2,h3{text-wrap:balance;margin:0}
+a{color:var(--gold)}
+p{margin:0 0 1em}
+p,li{max-width:var(--measure)}
+
+/* ---------- eyebrows ---------- */
+.eyebrow{
+  font-family:var(--sans);font-size:.68rem;font-weight:700;
+  letter-spacing:.24em;text-transform:uppercase;color:var(--gold);
+  display:flex;align-items:center;gap:.8rem;margin:0 0 1.1rem;max-width:none;
+}
+.eyebrow::after{content:"";flex:1;height:1px;background:var(--hair)}
+
+/* ---------- hero ---------- */
+header.hero{padding:clamp(56px,10vw,110px) 0 clamp(40px,6vw,72px);text-align:center;position:relative}
+.mark{font-family:var(--goth);font-size:clamp(2.9rem,9vw,5.6rem);line-height:.98;color:var(--parch);letter-spacing:.01em}
+.mark .amp{color:var(--gold);display:inline-block;padding:0 .12em}
+.rule-orn{display:flex;align-items:center;justify-content:center;gap:1rem;margin:1.4rem auto 1.2rem;max-width:420px}
+.rule-orn span{height:1px;flex:1;background:linear-gradient(90deg,transparent,var(--hair-strong))}
+.rule-orn span:last-child{background:linear-gradient(270deg,transparent,var(--hair-strong))}
+.rule-orn b{color:var(--gold);font-size:.8rem;letter-spacing:.3em}
+.tagline{font-family:var(--serif);font-style:italic;font-size:clamp(1.25rem,3.4vw,1.85rem);color:var(--parch);opacity:.92;margin:0 auto;max-width:26ch}
+.thesis{margin:2.2rem auto 0;max-width:56ch;color:var(--parch-dim);font-size:1rem}
+.thesis strong{color:var(--parch);font-weight:500}
+
+/* ---------- sections ---------- */
+section{padding:clamp(38px,6vw,64px) 0;border-top:1px solid var(--hair)}
+h2{font-family:var(--serif);font-weight:600;font-size:clamp(1.7rem,4.4vw,2.5rem);letter-spacing:.005em;line-height:1.12;margin-bottom:.5rem}
+h2 em{font-style:italic;color:var(--gold)}
+.lede{color:var(--parch-dim);font-size:1.02rem;margin-bottom:2rem}
+h3{font-family:var(--serif);font-size:1.35rem;font-weight:600}
+
+/* ---------- tier cards ---------- */
+.tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:20px}
+.tier{background:linear-gradient(180deg,var(--ink-3),var(--ink-2));border:1px solid var(--hair);padding:26px 24px 24px;display:flex;flex-direction:column;gap:14px;position:relative}
+.tier::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,var(--oxblood),var(--gold))}
+.tier .who{font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--parch-dim);font-weight:700}
+.price{font-family:var(--serif);font-size:2.7rem;line-height:1;color:var(--gold);font-variant-numeric:tabular-nums}
+.price small{font-family:var(--sans);font-size:.8rem;letter-spacing:.08em;color:var(--parch-dim);display:block;margin-top:.5rem;font-weight:500}
+.tier ul{margin:0;padding-left:1.1rem;color:var(--parch);font-size:.95rem}
+.tier li{margin-bottom:.35rem}
+.tier .note{margin:0;font-size:.85rem;color:var(--parch-dim);border-top:1px solid var(--hair);padding-top:12px}
+
+/* ---------- wrap anatomy ---------- */
+.anatomy{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:34px;align-items:start}
+@media(max-width:720px){.anatomy{grid-template-columns:1fr}}
+.parcel{
+  background:linear-gradient(155deg,#C9B292,#A98F6D 55%,#8E7454);
+  color:#241B12;padding:26px 22px 30px;position:relative;
+  box-shadow:0 22px 50px rgba(0,0,0,.55);
+  border-radius:2px;
+}
+.parcel::after{content:"";position:absolute;left:0;right:0;top:38%;height:12px;background:repeating-linear-gradient(90deg,rgba(60,40,25,.55) 0 6px,rgba(90,66,44,.35) 6px 12px);box-shadow:0 1px 0 rgba(255,255,255,.15)}
+.parcel .seal{position:absolute;right:16px;top:calc(38% - 14px);width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#8E2836,#5A1620);color:#E4C97E;display:grid;place-items:center;font-family:var(--goth);font-size:1.1rem;box-shadow:0 3px 8px rgba(0,0,0,.5)}
+.parcel h4{font-family:var(--goth);font-size:1.5rem;margin:0 0 .5rem;color:#2B1E14}
+.parcel .tropes{font-family:var(--serif);font-size:1.06rem;line-height:1.5;margin:0 0 14px}
+.parcel .meta{font-family:var(--sans);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;border-top:1px solid rgba(43,30,20,.35);padding-top:10px;margin:0}
+.parcel .meta b{color:#5A1620}
+.spice{display:inline-flex;gap:3px;vertical-align:-1px}
+.spice i{width:7px;height:7px;background:#5A1620;border-radius:50%;display:block}
+.spice i.off{background:rgba(43,30,20,.25)}
+.steps{counter-reset:s;list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:16px}
+.steps li{counter-increment:s;padding-left:44px;position:relative;max-width:var(--measure)}
+.steps li::before{content:counter(s);position:absolute;left:0;top:-2px;width:28px;height:28px;border:1px solid var(--hair-strong);color:var(--gold);display:grid;place-items:center;font-family:var(--serif);font-size:1rem;border-radius:50%}
+.steps b{display:block;font-family:var(--serif);font-size:1.15rem;font-weight:600;color:var(--parch)}
+.steps span{color:var(--parch-dim);font-size:.94rem}
+
+/* ---------- trope library ---------- */
+.shelf{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px}
+.card{border:1px solid var(--hair);background:var(--ink-2);padding:20px}
+.card h3{margin-bottom:.15rem}
+.card .sub{font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--rose);font-weight:700;margin-bottom:.9rem}
+.card ul{list-style:none;margin:0 0 .9rem;padding:0;display:flex;flex-direction:column;gap:.55rem}
+.card li{font-family:var(--serif);font-size:1.06rem;line-height:1.35;color:var(--parch);padding-left:.9rem;border-left:2px solid rgba(201,162,39,.35)}
+.card .cw{font-size:.8rem;color:var(--parch-dim);border-top:1px solid var(--hair);padding-top:10px;margin:0}
+
+/* ---------- table plan ---------- */
+.tableplan{display:grid;grid-template-columns:2.6fr 1fr;gap:18px;align-items:stretch}
+@media(max-width:760px){.tableplan{grid-template-columns:1fr}}
+.cloth{background:linear-gradient(180deg,#241017,#170A0F);border:1px solid var(--hair-strong);padding:18px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:560px){.cloth{grid-template-columns:repeat(2,1fr)}}
+.crate{background:rgba(233,224,208,.04);border:1px dashed rgba(233,224,208,.22);padding:14px 12px;text-align:center;min-height:104px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.crate strong{font-family:var(--serif);font-size:1.1rem;color:var(--parch);line-height:1.15}
+.crate span{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--parch-dim)}
+.crate.hot{border-color:var(--hair-strong);background:rgba(201,162,39,.07)}
+.cloth .full{grid-column:1/-1;min-height:0;padding:10px}
+.aside-crate{border:1px solid var(--hair);background:var(--ink-2);padding:18px;display:flex;flex-direction:column;gap:10px}
+.aside-crate h3{font-size:1.15rem}
+.aside-crate p{font-size:.9rem;color:var(--parch-dim);margin:0}
+
+/* ---------- checklists ---------- */
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:28px}
+.check{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.75rem}
+.check li{position:relative;padding-left:30px;font-size:.96rem;max-width:var(--measure)}
+.check li::before{content:"";position:absolute;left:0;top:.36em;width:13px;height:13px;border:1px solid var(--hair-strong)}
+.check b{color:var(--parch)}
+.check em{color:var(--parch-dim);font-style:normal}
+.cost{font-variant-numeric:tabular-nums;color:var(--gold)}
+
+/* ---------- captions ---------- */
+.caps{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.cap{border-left:2px solid var(--oxblood);background:var(--ink-2);padding:16px 18px}
+.cap p{font-family:var(--serif);font-size:1.08rem;color:var(--parch);margin:0 0 .6rem}
+.cap span{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--parch-dim)}
+
+/* ---------- ledger ---------- */
+.scroller{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:460px;font-size:.94rem}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--hair)}
+th{font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);font-weight:700}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+tfoot td{border-bottom:none;border-top:1px solid var(--hair-strong);font-weight:700;color:var(--parch)}
+
+/* ---------- closer ---------- */
+.closer{text-align:center;padding:clamp(48px,8vw,90px) 0 clamp(60px,9vw,110px)}
+.closer p{margin-left:auto;margin-right:auto}
+.closer .big{font-family:var(--serif);font-style:italic;font-size:clamp(1.3rem,3.6vw,2rem);color:var(--parch);max-width:30ch}
+.closer .kit{font-size:.78rem;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin-top:1.6rem}
+footer{border-top:1px solid var(--hair);padding:22px 0 40px;text-align:center;color:var(--parch-dim);font-size:.8rem}
+@media (prefers-reduced-motion:no-preference){
+  header.hero .mark,header.hero .tagline,header.hero .rule-orn{animation:rise .9s cubic-bezier(.2,.7,.2,1) both}
+  header.hero .rule-orn{animation-delay:.12s}
+  header.hero .tagline{animation-delay:.2s}
+  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+}
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+</style>
+
+<div class="wrap">
+
+<header class="hero">
+  <h1 class="mark">Foley<span class="amp">&amp;</span>Fable</h1>
+  <div class="rule-orn"><span></span><b>&#10022;</b><span></span></div>
+  <p class="tagline">Books worth taking a chance on</p>
+  <p class="thesis">This is the stall kit — the part a customer actually touches. <strong>The book is the gift. The wrap is the product.</strong> Everything below is built to be made this month, from books you already own, for under $80.</p>
+</header>
+
+<section>
+  <p class="eyebrow">Two products, not twenty</p>
+  <h2>Price for the <em>table</em>, not for the algorithm</h2>
+  <p class="lede">One tier for people walking past a farmers market with $20 in their pocket. One tier for people buying a present. Nothing in between — a third option only makes both harder to choose.</p>
+  <div class="tiers">
+    <article class="tier">
+      <p class="who">The Stall Copy</p>
+      <p class="price">$16<small>or two for $28</small></p>
+      <ul>
+        <li>Used or shelf-read paperback you'd genuinely recommend</li>
+        <li>Kraft paper, twine, hand-lettered trope tag</li>
+        <li>Spice level and content warnings on the front</li>
+      </ul>
+      <p class="note">The impulse buy. $28 for one used book at a Sunday market will sit on the table all day; $16 walks away in a tote.</p>
+    </article>
+    <article class="tier">
+      <p class="who">The Gift Parcel</p>
+      <p class="price">$28<small>Instagram &amp; local pickup</small></p>
+      <ul>
+        <li>Same wrap, better paper, wax seal, ribbon</li>
+        <li>Matching bookmark + one small extra (tea, mini journal, sticker)</li>
+        <li>Handwritten card: why <em>this</em> book, from you</li>
+      </ul>
+      <p class="note">This is the listing price you screenshotted. It works because someone is buying a moment for a friend — not a paperback.</p>
+    </article>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">Anatomy of a wrapped book</p>
+  <h2>The tag is the <em>whole</em> sales pitch</h2>
+  <p class="lede">Nobody picks up a brown paper brick. They pick up four lines of handwriting that describe a feeling they already want. Write these with a fine liner, in your own hand, every time.</p>
+  <div class="anatomy">
+    <div class="parcel" role="img" aria-label="A kraft-wrapped book with a hand-lettered trope tag reading: enemies to lovers, morally grey heroine, slow burn to ruin, HEA promised. Spice level four of five. Content warnings: violence, grief, on-page death.">
+      <div class="seal">F</div>
+      <h4>Blind Date</h4>
+      <p class="tropes">enemies to lovers<br>morally grey heroine<br>slow burn &rarr; ruin<br><em>HEA promised</em></p>
+      <p class="meta">Spice <span class="spice" aria-hidden="true"><i></i><i></i><i></i><i></i><i class="off"></i></span> &nbsp;&middot;&nbsp; <b>CW:</b> violence, grief, on-page death</p>
+    </div>
+    <ol class="steps">
+      <li><b>Four tropes, no plot</b><span>Never summarize the story — you'd spoil the date. Name the flavors: found family, one bed, touch her and die, rivals with a deadline.</span></li>
+      <li><b>Spice level, always</b><span>Five dots, filled to taste. It's the single most-asked question at a romance table and it saves you having the conversation forty times.</span></li>
+      <li><b>Content warnings, always</b><span>Non-negotiable on dark romance. Someone unwrapping something they weren't warned about is how you get a bad day, not a brand.</span></li>
+      <li><b>Page count and ending</b><span>"HEA promised" or "bring tissues." People choose an ending the way they choose a movie on a Friday night.</span></li>
+      <li><b>Seal it and leave it shut</b><span>Wax seal, twine, no peeking window. The unwrap is the thing you're actually selling.</span></li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">Tag library</p>
+  <h2>Lines to steal for the <em>first fifteen</em></h2>
+  <p class="lede">Sorted by the crate they'll sit in. Mix and match — four lines per parcel, then the spice dots and the warnings underneath.</p>
+  <div class="shelf">
+    <article class="card">
+      <h3>Dark Romance</h3>
+      <p class="sub">Your loudest seller</p>
+      <ul>
+        <li>he'd burn the city, she'd hand him the match</li>
+        <li>morally grey &rarr; morally gone</li>
+        <li>obsession dressed as devotion</li>
+        <li>touch her and die</li>
+        <li>slow burn, ugly ending, worth it</li>
+      </ul>
+      <p class="cw">Always tag spice and warnings. Keep this crate front-left, where hands land first.</p>
+    </article>
+    <article class="card">
+      <h3>Romantasy</h3>
+      <p class="sub">The gateway crate</p>
+      <ul>
+        <li>fae bargain, terrible terms</li>
+        <li>chosen one, unchosen heart</li>
+        <li>one bed, two swords</li>
+        <li>enemies to allies to ruin</li>
+        <li>court intrigue with teeth</li>
+      </ul>
+      <p class="cw">Buyers here often haven't read dark romance yet. This is the crate that upsells them.</p>
+    </article>
+    <article class="card">
+      <h3>Cozy Mystery</h3>
+      <p class="sub">The Sunday morning crate</p>
+      <ul>
+        <li>small town, large secret</li>
+        <li>murder, but make it charming</li>
+        <li>tea, cats, and a body</li>
+        <li>the vicar knows something</li>
+        <li>solved by page 240, no nightmares</li>
+      </ul>
+      <p class="cw">Sells to the person who came for tomatoes. Price these at the $16 tier and keep the wrap lighter.</p>
+    </article>
+    <article class="card">
+      <h3>Thriller</h3>
+      <p class="sub">The buy-for-him crate</p>
+      <ul>
+        <li>unreliable narrator, unreliable everyone</li>
+        <li>the twist is on page 300</li>
+        <li>one night, four suspects</li>
+        <li>she's lying and so are you</li>
+        <li>do not start this at 11pm</li>
+      </ul>
+      <p class="cw">Smallest crate at first. Let the table tell you whether it grows.</p>
+    </article>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">The six-foot table</p>
+  <h2>Sort by <em>vibe</em>, never by author</h2>
+  <p class="lede">Nobody browses a wrapped book by title. They browse by mood. Crates, letter board, candle, one raven, done — the display you already photographed is right, so just keep going that direction.</p>
+  <div class="tableplan">
+    <div class="cloth">
+      <div class="crate full"><span>Letter board &mdash; "Blind date with a book &middot; $16 or 2 for $28"</span></div>
+      <div class="crate hot"><strong>Dark Romance</strong><span>Front left</span></div>
+      <div class="crate hot"><strong>Romantasy</strong><span>Front centre</span></div>
+      <div class="crate"><strong>Cozy Mystery</strong><span>Front right</span></div>
+      <div class="crate"><strong>Thriller</strong><span>Back right</span></div>
+      <div class="crate full"><span>Candle &middot; raven &middot; dried roses &middot; tap-to-pay sign &middot; sample unwrapped parcel</span></div>
+    </div>
+    <aside class="aside-crate">
+      <h3>Cozy / YA crate</h3>
+      <p>Off to the side, on its own stool. Never on the same cloth as the dark romance.</p>
+      <p>One sample parcel stays unwrapped so people can see what they're buying. It costs you one book and it doubles the pick-up rate.</p>
+    </aside>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">Before the first paid market</p>
+  <h2>Massachusetts, in <em>two errands</em></h2>
+  <div class="two">
+    <ul class="check">
+      <li><b>File a DBA at the Wilmington town clerk</b> &mdash; "doing business as Foley and Fable." <span class="cost">$25&ndash;$65</span>, good for four years. <em>This is what lets you take payment under the name and open a business account later.</em></li>
+      <li><b>Register on MassTaxConnect</b> &mdash; free. Craft goods are taxable at <span class="cost">6.25%</span>. Collect it, don't eat it: either build it into $16 / $28 or add it at checkout, but pick one and stay consistent.</li>
+      <li><b>Skip the LLC.</b> Sole prop plus DBA is enough until there's money you'd be upset to lose.</li>
+      <li><b>Skip the website, skip the terminal upgrade.</b> Square's free card reader and Instagram DMs cover the first twenty sales.</li>
+      <li><b>Resale is legal</b> &mdash; used books are yours to sell. No library discards, and nothing you wouldn't defend to the person who unwraps it.</li>
+    </ul>
+    <div>
+      <h3 style="margin-bottom:.8rem">The whole start-up cost</h3>
+      <div class="scroller">
+        <table>
+          <thead><tr><th>Line</th><th class="num">Cost</th></tr></thead>
+          <tbody>
+            <tr><td>Books (already on your shelves)</td><td class="num">$0</td></tr>
+            <tr><td>Kraft paper roll + twine</td><td class="num">$18</td></tr>
+            <tr><td>Fine liners + tags</td><td class="num">$14</td></tr>
+            <tr><td>Wax seal kit (gift tier)</td><td class="num">$16</td></tr>
+            <tr><td>Bookmarks / printed cards</td><td class="num">$12</td></tr>
+            <tr><td>DBA filing</td><td class="num">$45</td></tr>
+          </tbody>
+          <tfoot><tr><td>Total experiment</td><td class="num">$105</td></tr></tfoot>
+        </table>
+      </div>
+      <p style="margin-top:1rem;color:var(--parch-dim);font-size:.9rem">Eight stall copies pays it back. That's the entire risk you are being scared of.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">Ready to post</p>
+  <h2>Six captions, in the <em>brand's voice</em></h2>
+  <p class="lede">Post the unwrap, not the shelf. People buy the feeling of the paper tearing.</p>
+  <div class="caps">
+    <div class="cap"><p>Fifteen books, wrapped, warned, and waiting. You don't get to know which one until it's yours.</p><span>Launch post</span></div>
+    <div class="cap"><p>Enemies to lovers, morally grey, slow burn to ruin. That's all you're getting. $16.</p><span>Single parcel</span></div>
+    <div class="cap"><p>Every tag carries a spice level and content warnings. A surprise should be a gift, not an ambush.</p><span>Trust post</span></div>
+    <div class="cap"><p>Sunday on the Town Common. Candle lit, raven watching, crates sorted by exactly how badly you want to be ruined.</p><span>Market announcement</span></div>
+    <div class="cap"><p>The unwrap, in real time. Sound on for the wax seal cracking.</p><span>Reel</span></div>
+    <div class="cap"><p>Tell me your last five-star read and I'll wrap you something worse for you.</p><span>Comment bait</span></div>
+  </div>
+</section>
+
+<div class="closer">
+  <p class="big">You don't need to feel ready. You need fifteen books, kraft paper, a fine liner, twine, and one table.</p>
+  <p class="kit">Wilmington &middot; Sundays &middot; June to October</p>
+</div>
+
+<footer>Foley &amp; Fable &mdash; stall kit, first season</footer>
+
+</div>
