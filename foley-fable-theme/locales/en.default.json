@@ -37,8 +37,21 @@
       "title": "Your cart",
       "empty": "Your cart is empty",
       "subtotal": "Subtotal",
-      "checkout": "Checkout",
+      "checkout": "Request this order",
       "continue_shopping": "Continue shopping"
+    },
+    "request": {
+      "intro": "Send your request to Foley & Fable. We reply to close the sale and arrange payment — no card is charged here.",
+      "name": "Full name",
+      "email": "Email",
+      "phone": "Phone",
+      "address": "Street address",
+      "city": "City",
+      "state": "State",
+      "zip": "ZIP",
+      "notes": "Notes for Ashley",
+      "submit": "Send request to Foley & Fable",
+      "drawer_note": "We close the sale by email — no card required yet."
     }
   },
   "footer": {

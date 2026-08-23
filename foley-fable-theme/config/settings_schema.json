@@ -39,5 +39,17 @@
         "label": "Favicon"
       }
     ]
+  },
+  {
+    "name": "Email checkout",
+    "settings": [
+      {
+        "type": "text",
+        "id": "order_email",
+        "label": "Order request email",
+        "default": "slashleyx06@gmail.com",
+        "info": "Customer order requests are sent here so you can close the sale."
+      }
+    ]
   }
 ]

@@ -1,0 +1,74 @@
+{%- assign order_email = settings.order_email | default: 'slashleyx06@gmail.com' -%}
+{%- capture order_details -%}
+New Foley & Fable order request
+
+CUSTOMER
+Name: {{ customer.name | default: '' }}
+Email: {{ customer.email | default: '' }}
+
+ORDER
+{%- for item in cart.items -%}
+- {{ item.product.title }}{% unless item.product.has_only_default_variant %} ({{ item.variant.title }}){% endunless %} × {{ item.quantity }} — {{ item.final_line_price | money }}
+{%- endfor -%}
+Subtotal: {{ cart.total_price | money }}
+
+Please reply to close the sale and arrange payment.
+{%- endcapture -%}
+
+<form
+  class="checkout-form"
+  action="https://formsubmit.co/{{ order_email }}"
+  method="POST"
+>
+  <input type="hidden" name="_subject" value="New Foley & Fable order request">
+  <input type="hidden" name="_template" value="box">
+  <input type="hidden" name="_captcha" value="false">
+  <input type="hidden" name="_next" value="{{ shop.url }}{{ routes.root_url }}">
+  <input type="hidden" name="order" value="{{ order_details | escape }}">
+
+  <p class="checkout__note">{{ 'cart.request.intro' | t }}</p>
+
+  <div class="form-row">
+    <div class="form-field">
+      <label for="OrderName">{{ 'cart.request.name' | t }}</label>
+      <input id="OrderName" name="name" required value="{{ customer.name }}">
+    </div>
+    <div class="form-field">
+      <label for="OrderEmail">{{ 'cart.request.email' | t }}</label>
+      <input id="OrderEmail" name="email" type="email" required value="{{ customer.email }}">
+    </div>
+  </div>
+
+  <div class="form-field">
+    <label for="OrderPhone">{{ 'cart.request.phone' | t }}</label>
+    <input id="OrderPhone" name="phone" type="tel">
+  </div>
+
+  <div class="form-field">
+    <label for="OrderAddress">{{ 'cart.request.address' | t }}</label>
+    <input id="OrderAddress" name="address" required>
+  </div>
+
+  <div class="form-row">
+    <div class="form-field">
+      <label for="OrderCity">{{ 'cart.request.city' | t }}</label>
+      <input id="OrderCity" name="city" required>
+    </div>
+    <div class="form-field">
+      <label for="OrderState">{{ 'cart.request.state' | t }}</label>
+      <input id="OrderState" name="state" required>
+    </div>
+  </div>
+
+  <div class="form-field">
+    <label for="OrderZip">{{ 'cart.request.zip' | t }}</label>
+    <input id="OrderZip" name="zip" required>
+  </div>
+
+  <div class="form-field">
+    <label for="OrderNotes">{{ 'cart.request.notes' | t }}</label>
+    <textarea id="OrderNotes" name="notes"></textarea>
+  </div>
+
+  <button type="submit" class="btn btn--primary">{{ 'cart.request.submit' | t }}</button>
+</form>

@@ -26,6 +26,7 @@
       <span>{{ 'cart.general.subtotal' | t }}</span>
       <span>{{ cart.total_price | money }}</span>
     </div>
-    <a href="{{ routes.cart_url }}" class="btn btn--primary cart-drawer__checkout">{{ 'cart.general.checkout' | t }}</a>
+    <a href="{{ routes.cart_url }}" class="btn btn--primary cart-drawer__checkout">{{ 'cart.request.submit' | t }}</a>
+    <p style="margin:1rem 0 0;font-size:0.85rem;color:rgba(244,239,230,0.55);text-align:center;">{{ 'cart.request.drawer_note' | t }}</p>
   </div>
 {%- endif -%}
