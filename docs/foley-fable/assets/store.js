@@ -302,10 +302,45 @@
     status.classList.toggle('is-error', Boolean(isError));
   }
 
-  function mailtoFallback(subject, body) {
-    window.location.href = 'mailto:' + ORDER_EMAIL +
-      '?subject=' + encodeURIComponent(subject) +
-      '&body=' + encodeURIComponent(body);
+  function composeLinks(subject, body) {
+    return {
+      mailto: 'mailto:' + ORDER_EMAIL +
+        '?subject=' + encodeURIComponent(subject) +
+        '&body=' + encodeURIComponent(body),
+      gmail: 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(ORDER_EMAIL) +
+        '&su=' + encodeURIComponent(subject) +
+        '&body=' + encodeURIComponent(body)
+    };
+  }
+
+  function fillHiddenOrderFields(form, subject, orderText) {
+    var subjectInput = document.getElementById('OrderSubject');
+    var nextInput = document.getElementById('OrderNext');
+    var replyInput = document.getElementById('OrderReplyTo');
+    var detailsInput = document.getElementById('OrderDetails');
+    if (subjectInput) subjectInput.value = subject;
+    if (replyInput) replyInput.value = form.email.value;
+    if (detailsInput) detailsInput.value = orderText;
+    if (nextInput) {
+      nextInput.value = window.location.origin + window.location.pathname + '?success=1';
+    }
+  }
+
+  function finishOrder(form, subject, orderText, openComposer) {
+    var links = composeLinks(subject, orderText);
+    var gmailBtn = document.getElementById('SuccessGmail');
+    var mailtoBtn = document.getElementById('SuccessMailto');
+    if (gmailBtn) gmailBtn.href = links.gmail;
+    if (mailtoBtn) mailtoBtn.href = links.mailto;
+    saveCart([]);
+    render();
+    form.reset();
+    showView('success');
+    if (openComposer === 'gmail') {
+      window.open(links.gmail, '_blank', 'noopener');
+    } else if (openComposer === 'mailto') {
+      window.location.href = links.mailto;
+    }
   }
 
   function submitOrder(event) {
@@ -313,15 +348,27 @@
     var form = event.target;
     var cart = loadCart();
     var button = form.querySelector('[type="submit"]');
+    var via = (event.submitter && event.submitter.getAttribute('data-send-via')) || 'form';
 
     if (cart.length === 0) {
       setStatus('Add a book date to your cart first.', true);
       return;
     }
 
+    var subject = 'New Foley & Fable order from ' + form.name.value;
     var orderText = buildOrderText(form);
+    fillHiddenOrderFields(form, subject, orderText);
+
+    if (via === 'gmail' || via === 'mailto') {
+      finishOrder(form, subject, orderText, via);
+      return;
+    }
+
+    button.disabled = true;
+    setStatus('Sending your request…');
+
     var payload = {
-      _subject: 'New Foley & Fable order from ' + form.name.value,
+      _subject: subject,
       _template: 'box',
       _captcha: 'false',
       _replyto: form.email.value,
@@ -337,9 +384,6 @@
       message: orderText
     };
 
-    button.disabled = true;
-    setStatus('Sending your request…');
-
     fetch(FORMSUBMIT_URL, {
       method: 'POST',
       headers: {
@@ -349,9 +393,11 @@
       body: JSON.stringify(payload)
     })
       .then(function (response) {
-        return response.json().catch(function () {
-          return { success: response.ok };
-        }).then(function (data) {
+        var contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error('form-blocked');
+        }
+        return response.json().then(function (data) {
           if (!response.ok && !data.success) {
             throw new Error(data.message || 'Could not send request');
           }
@@ -359,15 +405,12 @@
         });
       })
       .then(function () {
-        saveCart([]);
-        render();
-        form.reset();
-        showView('success');
+        finishOrder(form, subject, orderText);
         setStatus('');
       })
       .catch(function () {
-        setStatus('Opening your email app as a backup…', true);
-        mailtoFallback('New Foley & Fable order from ' + form.name.value, orderText);
+        setStatus('Opening Gmail so you can send the request…');
+        finishOrder(form, subject, orderText, 'gmail');
       })
       .finally(function () {
         button.disabled = false;
@@ -451,7 +494,11 @@
   if (form) form.addEventListener('submit', submitOrder);
 
   render();
-  showView('home');
+  if (/[?&]success=1/.test(window.location.search) || window.location.hash === '#success') {
+    showView('success');
+  } else {
+    showView('home');
+  }
 
   window.FoleyFable = {
     openCart: openCart,
