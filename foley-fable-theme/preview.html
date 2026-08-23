@@ -120,7 +120,13 @@
               <h1 class="display-heading display-heading--md" style="margin-top: 0.6rem;">Request your order</h1>
               <p class="checkout__note">Tell us where to send your book date. Your request goes to Foley &amp; Fable at slashleyx06@gmail.com — we reply to close the sale and arrange payment. No card is charged on this page.</p>
             </div>
-            <form id="CheckoutForm" class="checkout-form">
+            <form id="CheckoutForm" class="checkout-form" action="https://formsubmit.co/slashleyx06@gmail.com" method="POST">
+              <input type="hidden" name="_subject" id="OrderSubject" value="New Foley &amp; Fable order request">
+              <input type="hidden" name="_template" value="box">
+              <input type="hidden" name="_captcha" value="false">
+              <input type="hidden" name="_next" id="OrderNext">
+              <input type="hidden" name="_replyto" id="OrderReplyTo">
+              <input type="hidden" name="order" id="OrderDetails">
               <div class="form-row">
                 <div class="form-field">
                   <label for="name">Full name</label>
@@ -159,6 +165,7 @@
               </div>
               <p class="form-status" id="CheckoutStatus" aria-live="polite"></p>
               <button type="submit" class="btn btn--primary">Send request to Foley &amp; Fable</button>
+              <button type="submit" class="btn btn--gold" data-send-via="gmail">Send with Gmail</button>
               <button type="button" class="btn btn--secondary" data-go-home>Keep browsing</button>
             </form>
           </div>
@@ -179,8 +186,12 @@
         <div class="checkout-success__seal">✓</div>
         <p class="eyebrow">Request received</p>
         <h1 class="display-heading display-heading--md" style="margin: 0.75rem 0 1rem;">Your letter is on its way</h1>
-        <p class="lead" style="margin: 0 auto 2rem;">Ashley will email you to confirm the books, arrange payment, and close the sale. Watch your inbox.</p>
-        <button type="button" class="btn btn--primary" data-go-home>Return to the shop</button>
+        <p class="lead" style="margin: 0 auto 2rem;">If a Gmail or mail window opened, press Send so Ashley receives the request at slashleyx06@gmail.com. She will reply to confirm the books, arrange payment, and close the sale.</p>
+        <div class="hero__actions" style="justify-content: center;">
+          <a class="btn btn--gold" id="SuccessGmail" href="https://mail.google.com/mail/?view=cm&fs=1&to=slashleyx06@gmail.com" target="_blank" rel="noopener">Open Gmail</a>
+          <a class="btn btn--primary" id="SuccessMailto" href="mailto:slashleyx06@gmail.com">Open email app</a>
+          <button type="button" class="btn btn--secondary" data-go-home>Return to the shop</button>
+        </div>
       </section>
     </div>
   </main>
