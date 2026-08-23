@@ -171,15 +171,15 @@
           (product.deluxe ? '<span class="product-card__badge">Deluxe</span>' : '') +
           '<div class="product-card__media">' +
             '<img class="product-card__image" src="' + product.image + '" alt="' + product.title + '">' +
+            '<div class="product-card__actions">' +
+              '<button type="button" class="btn btn--primary" data-add="' + product.id + '">Add to cart</button>' +
+            '</div>' +
           '</div>' +
           '<div class="product-card__body">' +
             '<span class="product-card__mood">' + product.mood + '</span>' +
             '<h3 class="product-card__title">' + product.title + '</h3>' +
             '<p style="margin:0 0 0.75rem;color:rgba(244,239,230,0.62);font-size:0.92rem;">' + product.blurb + '</p>' +
             '<span class="product-card__price">' + money(product.price) + '</span>' +
-            '<div class="product-card__actions">' +
-              '<button type="button" class="btn btn--primary" data-add="' + product.id + '">Add to cart</button>' +
-            '</div>' +
           '</div>' +
         '</article>'
       );
