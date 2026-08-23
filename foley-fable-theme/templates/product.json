@@ -1,0 +1,33 @@
+{
+  "sections": {
+    "main": {
+      "type": "product-main",
+      "settings": {
+        "eyebrow": "Blind Book Date",
+        "details_heading": "What's included"
+      },
+      "blocks": {
+        "detail-1": {
+          "type": "detail",
+          "settings": {
+            "text": "Hand-selected book wrapped in elegant paper"
+          }
+        },
+        "detail-2": {
+          "type": "detail",
+          "settings": {
+            "text": "Finished with a wax seal"
+          }
+        },
+        "detail-3": {
+          "type": "detail",
+          "settings": {
+            "text": "Includes a hint card about the genre"
+          }
+        }
+      },
+      "block_order": ["detail-1", "detail-2", "detail-3"]
+    }
+  },
+  "order": ["main"]
+}

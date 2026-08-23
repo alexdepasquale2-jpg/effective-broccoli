@@ -1,0 +1,66 @@
+<footer class="site-footer">
+  <div class="page-width">
+    <div class="site-footer__grid">
+      <div class="site-footer__brand">
+        <span class="site-header__logo-text">{{ shop.name }}</span>
+        <p>{{ section.settings.brand_text }}</p>
+      </div>
+
+      <div>
+        <h3 class="site-footer__heading">{{ 'footer.shop' | t }}</h3>
+        <ul class="site-footer__links">
+          {%- for link in section.settings.footer_menu.links -%}
+            <li><a href="{{ link.url }}">{{ link.title }}</a></li>
+          {%- endfor -%}
+        </ul>
+      </div>
+
+      <div>
+        <h3 class="site-footer__heading">{{ 'footer.connect' | t }}</h3>
+        <ul class="site-footer__links">
+          {%- if section.settings.instagram != blank -%}
+            <li><a href="{{ section.settings.instagram }}" target="_blank" rel="noopener">Instagram</a></li>
+          {%- endif -%}
+          {%- if section.settings.email != blank -%}
+            <li><a href="mailto:{{ section.settings.email }}">{{ section.settings.email }}</a></li>
+          {%- endif -%}
+        </ul>
+      </div>
+    </div>
+
+    <div class="site-footer__bottom">
+      <span>&copy; {{ 'now' | date: '%Y' }} {{ shop.name }}. {{ 'footer.rights' | t }}</span>
+      <span>{{ powered_by_link }}</span>
+    </div>
+  </div>
+</footer>
+
+{% schema %}
+{
+  "name": "Footer",
+  "settings": [
+    {
+      "type": "textarea",
+      "id": "brand_text",
+      "label": "Brand description",
+      "default": "Born from a passion for the written word, we curate spaces where curiosity and nostalgia meet across worn pages and treasured finds."
+    },
+    {
+      "type": "link_list",
+      "id": "footer_menu",
+      "label": "Footer menu",
+      "default": "footer"
+    },
+    {
+      "type": "url",
+      "id": "instagram",
+      "label": "Instagram URL"
+    },
+    {
+      "type": "text",
+      "id": "email",
+      "label": "Contact email"
+    }
+  ]
+}
+{% endschema %}
