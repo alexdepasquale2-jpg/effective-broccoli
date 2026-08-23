@@ -448,7 +448,7 @@ textarea {
 
 .product-card__media {
   position: relative;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 4 / 3;
   overflow: hidden;
   background: var(--ink-muted);
 }
@@ -1120,14 +1120,18 @@ textarea {
 
 /* Product card actions */
 .product-card__actions {
-  position: relative;
+  position: absolute;
+  left: 0.85rem;
+  right: 0.85rem;
+  bottom: 0.85rem;
   z-index: 2;
-  margin-top: 1rem;
+  margin: 0;
 }
 
 .product-card__actions .btn {
   width: 100%;
   min-height: 2.75rem;
+  box-shadow: 0 10px 24px rgba(20, 16, 28, 0.45);
 }
 
 .product-card__mood {
