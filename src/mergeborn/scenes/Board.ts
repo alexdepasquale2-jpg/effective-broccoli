@@ -1,4 +1,4 @@
-import { GameObjects, Scene } from 'phaser';
+import { Display, GameObjects, Scene } from 'phaser';
 import { ERA_STAGE, BOARD_SIZE, BOARD_STRIDE, KILLS_PER_STAGE, POWER_TILE, WIDTH } from '../sim/constants.ts';
 import { loadGame, persistGame } from '../sim/save.ts';
 import { sfx, unlockAudio } from '../audio.ts';
@@ -24,6 +24,7 @@ import {
     ascend,
     canAscend,
     enemyElement,
+    heroOnBoard,
     ERAS,
     canEra,
     isHex,
@@ -122,6 +123,9 @@ export class Board extends Scene {
     private ascendArmed = 0;
     private hex = false;
     private boardSig = '';
+    private wasBoss = false;
+    private comboFire: GameObjects.Particles.ParticleEmitter;
+    private hitFlash: GameObjects.Rectangle;
     private eraBtn: Button;
     private eraArmed = 0;
     private heroPanel: GameObjects.Container;
@@ -145,6 +149,7 @@ export class Board extends Scene {
         const { state, offline } = loadGame();
         this.state = state;
         this.cameras.main.setBackgroundColor(BG);
+        this.makeFxTextures();
 
         this.drawHud();
         this.drawEnemy();
@@ -200,11 +205,17 @@ export class Board extends Scene {
         this.enemyLabel = this.add.text(0, -20, '', { fontFamily: DISPLAY, fontSize: '28px', color: FG, align: 'center' }).setOrigin(0.5);
         this.traitText = this.add.text(0, 50, '', { fontFamily: FONT, fontSize: '14px', color: hex(GOLD), align: 'center', wordWrap: { width: 180 } }).setOrigin(0.5);
         const hint = this.add.text(0, 100, 'TAP', { fontFamily: FONT, fontSize: '15px', color: MUTED }).setOrigin(0.5);
-        this.enemy = this.add.container(ENEMY_X, ENEMY_Y, [this.enemyFrame, this.enemyLabel, this.traitText, hint]);
+        this.hitFlash = this.add.rectangle(0, 0, 200, 250, 0xffffff, 0);
+        this.enemy = this.add.container(ENEMY_X, ENEMY_Y, [this.enemyFrame, this.hitFlash, this.enemyLabel, this.traitText, hint]);
         this.enemy.setSize(200, 250).setInteractive({ useHandCursor: true });
         this.enemy.on('pointerdown', (p: Phaser.Input.Pointer) => this.onTap(p));
 
         this.comboText = this.add.text(ENEMY_X + 190, ENEMY_Y + 50, '', { fontFamily: DISPLAY, fontSize: '32px', color: hex(GREEN) }).setOrigin(0.5);
+        this.comboFire = this.add.particles(ENEMY_X + 190, ENEMY_Y + 70, 'glow', {
+            speedY: { min: -160, max: -60 }, speedX: { min: -30, max: 30 }, scale: { start: 0.9, end: 0 },
+            alpha: { start: 0.9, end: 0 }, lifespan: 600, blendMode: 'ADD', tint: [0xffe08a, 0xff7a2a, 0xff3a1a], frequency: 60,
+            emitting: false,
+        });
         this.timerText = this.add.text(ENEMY_X + 190, ENEMY_Y - 40, '', { fontFamily: DISPLAY, fontSize: '32px', color: hex(GOLD) }).setOrigin(0.5);
         this.add.rectangle(ENEMY_X, 440, 400, 18, LINE);
         this.hpBar = this.add.rectangle(ENEMY_X - 200, 440, 400, 18, PINK).setOrigin(0, 0.5);
@@ -389,6 +400,14 @@ export class Board extends Scene {
         this.timerText.setText(boss ? `${Math.ceil(s.bossTimer)}s` : '');
         const combo = comboMult(s);
         this.comboText.setText(combo > 1 ? `×${combo.toFixed(1)}` : '');
+        // Combo fire: hotter and faster as the chain grows.
+        this.comboFire.emitting = combo > 1;
+        this.comboFire.frequency = Math.max(12, 80 - s.combo * 6);
+        this.comboText.setScale(1 + Math.max(0, combo - 1) * 0.6 + (combo > 1 ? Math.sin(this.time.now / 60) * 0.04 : 0));
+        if (boss && !this.wasBoss) {
+            this.bossEntrance();
+        }
+        this.wasBoss = boss;
 
         this.dpsText.setText(`Board ${formatNum(boardDps(s))} dps · tap ${formatNum(tapDamage(s))}`);
 
@@ -410,10 +429,20 @@ export class Board extends Scene {
     }
 
     private onTap(p: Phaser.Input.Pointer) {
+        const dmg = tapDamage(this.state);
         const kill = tap(this.state);
         sfx.tap();
-        this.float(p.x, p.y - 20, `-${formatNum(tapDamage(this.state))}`, FG);
-        this.tweens.add({ targets: this.enemy, scale: 0.95, duration: 50, yoyo: true });
+        // Ifrit Duelist's 10th tap is a real ×10 crit; show it like one.
+        const crit = heroOnBoard(this.state, 'ifrit-duelist') && this.state.taps % 10 === 0;
+        this.damageNumber(p.x, p.y - 20, dmg * (crit ? 10 : 1), crit);
+        this.hitFlash.setAlpha(crit ? 0.8 : 0.35);
+        this.tweens.add({ targets: this.hitFlash, alpha: 0, duration: crit ? 220 : 90 });
+        this.tweens.add({ targets: this.enemy, scale: crit ? 0.85 : 0.95, angle: (Math.random() - 0.5) * (crit ? 8 : 3), duration: 50, yoyo: true });
+        this.burstFx(p.x, p.y, crit ? GOLD : 0xffffff, crit ? 30 : 5, crit ? 420 : 180, 380);
+        if (crit) {
+            this.cameras.main.shake(120, 0.008);
+            sfx.merge(8);
+        }
         if (kill) {
             this.onKill(kill);
         }
@@ -425,7 +454,10 @@ export class Board extends Scene {
             this.renderCards();
             this.burst(kill.turncoat, PINK);
         }
-        this.sparks(ENEMY_X, ENEMY_Y, kill.boss ? GOLD : PINK, kill.boss ? 24 : 8);
+        this.shatter(kill.boss ? GOLD : PINK, kill.boss ? 18 : 9);
+        this.burstFx(ENEMY_X, ENEMY_Y, kill.boss ? GOLD : PINK, kill.boss ? 70 : 22, kill.boss ? 520 : 320, kill.boss ? 1000 : 600);
+        this.enemy.setScale(0.5).setAlpha(0);
+        this.tweens.add({ targets: this.enemy, scale: 1, alpha: 1, duration: 260, ease: 'Back.Out', delay: 80 });
         if (kill.boss) {
             sfx.fanfare();
         } else {
@@ -446,8 +478,16 @@ export class Board extends Scene {
         this.tweens.add({ targets: card, scale: 1.25, duration: 90, yoyo: true, ease: 'Quad.Out' });
         this.cameras.main.shake(60 + tier * 15, 0.002 + tier * 0.0008);
         this.burst(slot, tierColor(tier));
+        this.time.delayedCall(90, () => this.burst(slot, 0xffffff));
         const c = this.slotCenter(slot);
-        this.sparks(c.x, c.y, tierColor(tier), 6 + tier * 2);
+        this.burstFx(c.x, c.y, tierColor(tier), 14 + tier * 6, 200 + tier * 40, 500 + tier * 40);
+        const pop = this.add.text(c.x, c.y, `T${tier}!`, { fontFamily: DISPLAY, fontSize: `${30 + tier * 4}px`, color: hex(tierColor(tier)), stroke: '#000', strokeThickness: 6 })
+            .setOrigin(0.5).setDepth(56).setScale(0.3);
+        this.tweens.add({ targets: pop, scale: 1.2, duration: 160, ease: 'Back.Out', yoyo: true, hold: 200, onComplete: () => pop.destroy() });
+        if (tier >= 5) {
+            const col = Display.Color.IntegerToColor(tierColor(tier));
+            this.cameras.main.flash(180 + tier * 20, col.red, col.green, col.blue);
+        }
         sfx.merge(tier);
         if (gold > 0) {
             const { x, y } = this.slotCenter(slot);
@@ -456,15 +496,85 @@ export class Board extends Scene {
     }
 
     private sparks(x: number, y: number, color: number, count: number) {
+        this.burstFx(x, y, color, count * 2, 420, 900);
+    }
+
+    /** Soft glow dot and shard textures, drawn once. */
+    private makeFxTextures() {
+        if (this.textures.exists('glow')) {
+            return;
+        }
+        const g = this.add.graphics();
+        for (let r = 16; r > 0; r -= 2) {
+            g.fillStyle(0xffffff, 0.12 + (1 - r / 16) * 0.5).fillCircle(16, 16, r);
+        }
+        g.generateTexture('glow', 32, 32).clear();
+        g.fillStyle(0xffffff, 1).fillTriangle(0, 0, 22, 6, 6, 26);
+        g.generateTexture('shard', 22, 26).destroy();
+    }
+
+    /** Additive glowing particle burst. */
+    private burstFx(x: number, y: number, color: number, count: number, speed = 300, life = 600) {
+        const e = this.add.particles(0, 0, 'glow', {
+            speed: { min: speed * 0.25, max: speed }, angle: { min: 0, max: 360 }, scale: { start: 0.9, end: 0 },
+            alpha: { start: 1, end: 0 }, lifespan: { min: life * 0.5, max: life }, blendMode: 'ADD', tint: [color, 0xffffff],
+            gravityY: 220, emitting: false,
+        }).setDepth(55);
+        e.explode(count, x, y);
+        this.time.delayedCall(life + 100, () => e.destroy());
+    }
+
+    /** The enemy card breaks into spinning shards. */
+    private shatter(color: number, count: number) {
         for (let i = 0; i < count; i++) {
-            const a = Math.random() * Math.PI * 2;
-            const d = 50 + Math.random() * 90;
-            const p = this.add.rectangle(x, y, 8, 8, color).setDepth(55).setAngle(45);
+            const sh = this.add.image(ENEMY_X + (Math.random() - 0.5) * 160, ENEMY_Y + (Math.random() - 0.5) * 200, 'shard')
+                .setTint(i % 3 ? 0x1f2330 : color).setDepth(54).setScale(1 + Math.random() * 1.5);
+            const a = Math.atan2(sh.y - ENEMY_Y, sh.x - ENEMY_X);
             this.tweens.add({
-                targets: p, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, alpha: 0, scale: 0.3,
-                duration: 400 + Math.random() * 250, ease: 'Quad.Out', onComplete: () => p.destroy(),
+                targets: sh, x: sh.x + Math.cos(a) * (120 + Math.random() * 160), y: sh.y + Math.sin(a) * 120 + 180,
+                angle: (Math.random() - 0.5) * 720, alpha: 0, duration: 650 + Math.random() * 300, ease: 'Quad.In',
+                onComplete: () => sh.destroy(),
             });
         }
+    }
+
+    /** Boss arrives: card slams down, red flash, warning banner sweeps across. */
+    private bossEntrance() {
+        this.enemy.setY(ENEMY_Y - 320).setScale(1.3);
+        this.tweens.add({ targets: this.enemy, y: ENEMY_Y, scale: 1, duration: 420, ease: 'Bounce.Out' });
+        this.time.delayedCall(260, () => {
+            this.cameras.main.shake(260, 0.014);
+            this.burstFx(ENEMY_X, ENEMY_Y + 120, GOLD, 40, 380, 700);
+        });
+        this.cameras.main.flash(300, 160, 20, 40);
+        const banner = this.add.text(-300, ENEMY_Y - 150, '⚠  BOSS  ⚠', {
+            fontFamily: DISPLAY, fontSize: '54px', color: '#ff5a8a', stroke: '#000', strokeThickness: 8,
+        }).setOrigin(0.5).setDepth(58);
+        this.tweens.chain({
+            targets: banner,
+            tweens: [
+                { x: WIDTH / 2, duration: 280, ease: 'Cubic.Out' },
+                { scale: 1.12, duration: 120, yoyo: true, repeat: 2 },
+                { x: WIDTH + 300, duration: 260, ease: 'Cubic.In' },
+            ],
+            onComplete: () => banner.destroy(),
+        });
+        sfx.fanfare();
+    }
+
+    /** Damage number: arcs up and away; crits are big, gold and punchy. */
+    private damageNumber(x: number, y: number, amount: number, crit: boolean) {
+        const combo = this.state.combo;
+        const size = crit ? 54 : 24 + Math.min(combo, 15) * 1.5;
+        const t = this.add.text(x, y, (crit ? 'CRIT ' : '') + formatNum(amount), {
+            fontFamily: DISPLAY, fontSize: `${size}px`, color: crit ? hex(GOLD) : combo > 5 ? '#ffb347' : FG,
+            stroke: '#000', strokeThickness: crit ? 8 : 5,
+        }).setOrigin(0.5).setDepth(57).setScale(crit ? 0.4 : 1.4);
+        const dx = (Math.random() - 0.5) * 120;
+        this.tweens.add({ targets: t, scale: 1, duration: 140, ease: 'Back.Out' });
+        this.tweens.add({ targets: t, x: x + dx, duration: 750, ease: 'Sine.Out' });
+        this.tweens.add({ targets: t, y: y - (crit ? 130 : 90), duration: 750, ease: 'Quad.Out' });
+        this.tweens.add({ targets: t, alpha: 0, delay: 450, duration: 300, onComplete: () => t.destroy() });
     }
 
     /** Goal ladder: the next three goals with progress bars, left of the enemy. */
