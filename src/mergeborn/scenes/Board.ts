@@ -96,8 +96,8 @@ export function formatNum(n: number): string {
 }
 
 /** The pieces of one board card, back to front. */
+/** Off-screen pieces of one card, baked into the shared card texture whenever the card changes. */
 interface CardParts {
-    glow: GameObjects.Image;
     face: GameObjects.Rectangle;
     wash: GameObjects.Rectangle;
     art: GameObjects.Image;
@@ -105,8 +105,12 @@ interface CardParts {
     label: GameObjects.Text;
     name: GameObjects.Text;
     badge: GameObjects.Text;
-    shine: GameObjects.Rectangle;
 }
+
+/** Cards are baked at this multiple of their on-screen size, so they stay sharp at 2× rendering. */
+const BAKE = 2;
+/** One atlas tile per slot in the shared card texture (fits the largest 4×4 card at BAKE). */
+const TILE = 248;
 
 interface Button {
     box: GameObjects.Rectangle;
@@ -120,6 +124,11 @@ export class Board extends Scene {
     private slots: GameObjects.Rectangle[] = [];
     private cards: GameObjects.Container[] = [];
     private parts: CardParts[] = [];
+    private bakers: GameObjects.Container[] = [];
+    private bakedSig: string[] = [];
+    private atlas: Phaser.Textures.DynamicTexture;
+    private glows: GameObjects.Image[] = [];
+    private shines: GameObjects.Rectangle[] = [];
     private goldText: GameObjects.Text;
     private stageText: GameObjects.Text;
     private pips: GameObjects.Rectangle[] = [];
@@ -136,6 +145,11 @@ export class Board extends Scene {
     private summonOne: Button;
     private summonMany: Button;
     private saveClock = 0;
+    private emitters = new Map<string, GameObjects.Particles.ParticleEmitter>();
+    private textPool: GameObjects.Text[] = [];
+    private fpsFrames = 0;
+    private fpsStart = 0;
+    private renderScale = RENDER_SCALE;
     private ladder: { text: GameObjects.Text; track: GameObjects.Rectangle; bar: GameObjects.Rectangle }[] = [];
     private shopPanel: GameObjects.Container;
     private shopTitle: GameObjects.Text;
@@ -224,6 +238,7 @@ export class Board extends Scene {
             this.onKill(kill);
         }
         this.pulseCards();
+        this.governFrameRate();
         this.saveClock += dt;
         if (this.saveClock > 5) {
             this.saveClock = 0;
@@ -283,26 +298,36 @@ export class Board extends Scene {
     private drawBoard() {
         this.dpsText = this.add.text(GRID_X, GRID_Y - 18, '', { fontFamily: FONT, fontSize: '17px', color: MUTED }).setOrigin(0, 0.5);
         this.add.text(WIDTH - GRID_X, GRID_Y - 18, 'drag equal cards to merge', { fontFamily: FONT, fontSize: '14px', color: MUTED }).setOrigin(1, 0.5);
+        // Draw-call budget: every card is one image cut from a shared texture, so the whole board
+        // draws in a few batches (slots, glows, cards, sweeps) instead of ~9 objects per card.
+        this.atlas = this.textures.exists('cardAtlas')
+            ? (this.textures.get('cardAtlas') as Phaser.Textures.DynamicTexture)
+            : this.textures.addDynamicTexture('cardAtlas', TILE * BOARD_STRIDE, TILE * BOARD_STRIDE)!;
         for (let i = 0; i < BOARD_SIZE; i++) {
-            this.slots.push(this.add.rectangle(0, 0, 10, 10, BG));
+            this.slots.push(this.add.rectangle(0, 0, 10, 10, BG).setDepth(0));
+            this.glows.push(this.add.image(0, 0, 'glow').setBlendMode('ADD').setDepth(1).setVisible(false));
+            // Built with `new` so they stay off the display list; they are only ever drawn into the atlas.
             const parts: CardParts = {
-                glow: this.add.image(0, 0, 'glow').setBlendMode('ADD'),
-                face: this.add.rectangle(0, 0, 10, 10, CARD),
-                wash: this.add.rectangle(0, 0, 10, 10, CARD, 0),
-                art: this.add.image(0, 0, 'glow'),
-                shade: this.add.rectangle(0, 0, 10, 10, 0x000000, 0.6),
-                label: this.add.text(0, 0, '', { fontFamily: DISPLAY, fontSize: '32px', color: FG, stroke: '#000', strokeThickness: 5 }).setOrigin(0.5),
-                name: this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '13px', color: FG, fontStyle: 'bold' }).setOrigin(0.5),
-                badge: this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '16px', color: FG }).setOrigin(0, 0),
-                shine: this.add.rectangle(0, 0, 10, 10, 0xffffff, 0).setBlendMode('ADD'),
+                face: new GameObjects.Rectangle(this, 0, 0, 10, 10, CARD),
+                wash: new GameObjects.Rectangle(this, 0, 0, 10, 10, CARD, 0),
+                art: new GameObjects.Image(this, 0, 0, 'glow'),
+                shade: new GameObjects.Rectangle(this, 0, 0, 10, 10, 0x000000, 0.6),
+                label: new GameObjects.Text(this, 0, 0, '', { fontFamily: DISPLAY, fontSize: '32px', color: FG, stroke: '#000', strokeThickness: 10 }).setOrigin(0.5),
+                name: new GameObjects.Text(this, 0, 0, '', { fontFamily: FONT, fontSize: '26px', color: FG, fontStyle: 'bold' }).setOrigin(0.5),
+                badge: new GameObjects.Text(this, 0, 0, '', { fontFamily: FONT, fontSize: '32px', color: FG }).setOrigin(0, 0),
             };
             this.parts.push(parts);
-            const card = this.add.container(0, 0, Object.values(parts));
+            this.bakers.push(new GameObjects.Container(this, 0, 0, Object.values(parts)));
+            this.bakedSig.push('');
+            this.atlas.add(`s${i}`, 0, (i % BOARD_STRIDE) * TILE, Math.floor(i / BOARD_STRIDE) * TILE, TILE, TILE);
+            const card = this.add.container(0, 0, [this.add.image(0, 0, 'cardAtlas', `s${i}`)]).setDepth(2);
             card.setData('slot', i);
             this.cards.push(card);
+            this.shines.push(this.add.rectangle(0, 0, 10, 10, 0xffffff, 0).setBlendMode('ADD').setDepth(3));
         }
         this.input.on('dragstart', (_p: Phaser.Input.Pointer, card: GameObjects.Container) => {
             card.setDepth(10);
+            this.glows[card.getData('slot') as number].setDepth(9);
             this.tweens.add({ targets: card, scale: 1.14, angle: -3, duration: 110, ease: 'Back.Out' });
             rumble(PATTERNS.tap);
         });
@@ -314,7 +339,8 @@ export class Board extends Scene {
             const from = card.getData('slot') as number;
             const home = this.slotCenter(from);
             this.highlightTarget(from, -1);
-            card.setDepth(0);
+            card.setDepth(2);
+            this.glows[from].setDepth(1);
             // Snap back home with a little spring rather than teleporting.
             this.tweens.add({ targets: card, x: home.x, y: home.y, scale: 1, angle: 0, duration: 140, ease: 'Back.Out' });
             const to = this.slotAt(p.worldX, p.worldY);
@@ -348,15 +374,18 @@ export class Board extends Scene {
             this.slots[i].setStrokeStyle(tile ? 4 : 2, tile ? GOLD : LINE);
             const card = this.cards[i];
             const p = this.parts[i];
-            const w = this.cell - 10;
-            p.glow.setDisplaySize(this.cell * 1.7, this.cell * 1.7);
+            // Baked size: on-screen card size × BAKE.
+            const w = (this.cell - 10) * BAKE;
+            const c = this.cell * BAKE;
+            this.glows[i].setDisplaySize(this.cell * 1.35, this.cell * 1.35).setPosition(x, y);
+            this.shines[i].setSize((this.cell - 10) * 0.16, this.cell - 14).setPosition(x, y);
             p.face.setSize(w, w);
-            p.wash.setSize(w - 12, w - 12);
-            p.art.setPosition(0, 0);
-            p.shade.setSize(w - 8, w * 0.26).setPosition(0, w / 2 - w * 0.13 - 4);
-            p.name.setPosition(0, w / 2 - w * 0.13 - 4).setFontSize(Math.max(11, Math.round(this.cell * 0.12)));
-            p.badge.setPosition(-w / 2 + 6, -w / 2 + 4).setFontSize(Math.round(this.cell * 0.15));
-            p.shine.setSize(w * 0.16, w - 4);
+            p.wash.setSize(w - 12 * BAKE, w - 12 * BAKE);
+            p.shade.setSize(w - 8 * BAKE, w * 0.26).setPosition(0, w / 2 - w * 0.13 - 4 * BAKE);
+            p.name.setPosition(0, w / 2 - w * 0.13 - 4 * BAKE).setFontSize(Math.max(22, Math.round(c * 0.12)));
+            p.badge.setPosition(-w / 2 + 6 * BAKE, -w / 2 + 4 * BAKE).setFontSize(Math.round(c * 0.15));
+            this.bakedSig[i] = '';
+            (card.list[0] as GameObjects.Image).setDisplaySize(this.cell - 10, this.cell - 10);
             card.setPosition(x, y).setSize(this.cell - 10, this.cell - 10);
             card.removeInteractive();
             if (open) {
@@ -448,37 +477,55 @@ export class Board extends Scene {
     }
 
     private renderCards() {
+        let dirty = false;
         this.state.board.forEach((tier, i) => {
             const card = this.cards[i];
-            card.setVisible(tier > 0 && isOpen(this.state, i));
+            const shown = tier > 0 && isOpen(this.state, i);
+            card.setVisible(shown);
             const chi = this.state.chi[i];
             this.slots[i].setFillStyle(chi ? ELEM_COLORS[chi] : BG, chi ? 0.14 : 1);
-            if (tier > 0) {
+            const hero = heroById(this.state.hero[i]);
+            this.glows[i].setVisible(shown && (tier >= 4 || !!hero));
+            const sig = `${tier}|${this.state.elem[i]}|${this.state.hero[i]}`;
+            if (tier > 0 && sig !== this.bakedSig[i]) {
+                this.bakedSig[i] = sig;
+                dirty = true;
                 const p = this.parts[i];
                 const el = this.state.elem[i];
-                const hero = heroById(this.state.hero[i]);
-                const w = this.cell - 10;
+                const w = (this.cell - 10) * BAKE;
+                const cell = this.cell * BAKE;
                 const tc = tierColor(tier);
-                p.glow.setTint(hero ? GOLD : tc).setVisible(tier >= 3 || !!hero);
-                p.face.setFillStyle(CARD).setStrokeStyle(hero ? 6 : 3 + Math.min(tier, 6) * 0.5, hero ? GOLD : tc);
+                this.glows[i].setTint(hero ? GOLD : tc);
+                p.face.setFillStyle(CARD).setStrokeStyle((hero ? 6 : 3 + Math.min(tier, 6) * 0.5) * BAKE, hero ? GOLD : tc);
                 // Element wash: a coloured inner panel with a thin element-coloured frame.
-                p.wash.setFillStyle(el ? ELEM_COLORS[el] : tc, el ? 0.28 : 0.08).setStrokeStyle(2, el ? ELEM_COLORS[el] : tc, el ? 0.8 : 0.25);
+                p.wash.setFillStyle(el ? ELEM_COLORS[el] : tc, el ? 0.28 : 0.08).setStrokeStyle(2 * BAKE, el ? ELEM_COLORS[el] : tc, el ? 0.8 : 0.25);
                 p.art.setVisible(!!hero);
                 p.shade.setVisible(!!hero);
                 p.name.setVisible(!!hero).setText(hero ? hero.name.toUpperCase() : '').setScale(1);
-                if (p.name.width > w - 12) {
-                    p.name.setScale((w - 12) / p.name.width);
+                if (p.name.width > w - 12 * BAKE) {
+                    p.name.setScale((w - 12 * BAKE) / p.name.width);
                 }
                 if (hero) {
-                    p.art.setTexture(`hero-${hero.id}`, 'art').setDisplaySize(w - 8, w - 8);
-                    p.label.setText(`T${tier}`).setFontSize(Math.round(this.cell * 0.17)).setPosition(w / 2 - this.cell * 0.17, -w / 2 + this.cell * 0.13);
+                    p.art.setTexture(`hero-${hero.id}`, 'art').setDisplaySize(w - 8 * BAKE, w - 8 * BAKE);
+                    p.label.setText(`T${tier}`).setFontSize(Math.round(cell * 0.17)).setPosition(w / 2 - cell * 0.17, -w / 2 + cell * 0.13);
                 } else {
-                    p.label.setText(`T${tier}`).setFontSize(Math.round(this.cell * (0.22 + Math.min(tier, 8) * 0.012))).setPosition(0, 0);
+                    p.label.setText(`T${tier}`).setFontSize(Math.round(cell * (0.22 + Math.min(tier, 8) * 0.012))).setPosition(0, 0);
                 }
                 p.label.setColor(hex(tc));
                 p.badge.setText(ELEM_GLYPH[el] + (hero ? '★' : ''));
+                // Bake: clear this slot's tile and draw the card into it, centred.
+                const tx = (i % BOARD_STRIDE) * TILE;
+                const ty = Math.floor(i / BOARD_STRIDE) * TILE;
+                this.atlas.clear(tx, ty, TILE, TILE);
+                this.atlas.draw(this.bakers[i], tx + TILE / 2, ty + TILE / 2);
+                const frame = this.atlas.get(`s${i}`);
+                frame.setSize(w, w, tx + (TILE - w) / 2, ty + (TILE - w) / 2);
+                (card.list[0] as GameObjects.Image).setFrame(`s${i}`).setDisplaySize(this.cell - 10, this.cell - 10);
             }
         });
+        if (dirty) {
+            this.atlas.render();
+        }
     }
 
     private refresh() {
@@ -624,12 +671,40 @@ export class Board extends Scene {
         }
     }
 
+    /**
+     * Dynamic resolution: if the game can't hold 45 fps, drop the canvas from 2× to 1.5× to 1×.
+     * Only steps down, so it never oscillates.
+     */
+    private governFrameRate() {
+        // Count real frames against wall time: Phaser's own fps figure is smoothed and hides slowdowns.
+        const now = performance.now();
+        this.fpsFrames += 1;
+        if (!this.fpsStart) {
+            this.fpsStart = now;
+        }
+        const elapsed = (now - this.fpsStart) / 1000;
+        if (elapsed < 3 || this.renderScale <= 1) {
+            return;
+        }
+        const fps = this.fpsFrames / elapsed;
+        this.fpsFrames = 0;
+        this.fpsStart = now;
+        if (fps < 45) {
+            this.renderScale = Math.max(1, this.renderScale - 0.5);
+            this.scale.setGameSize(WIDTH * this.renderScale, 1280 * this.renderScale);
+            this.cameras.main.setZoom(this.renderScale).centerOn(WIDTH / 2, 640);
+        }
+    }
+
     /** High-tier and hero cards breathe a soft glow in their tier colour. */
     private pulseCards() {
         const t = this.time.now / 320;
         this.state.board.forEach((tier, i) => {
-            const glow = this.parts[i].glow;
+            const glow = this.glows[i];
             if (glow.visible) {
+                // Follow the card (it may be dragged or tweened).
+                const card = this.cards[i];
+                glow.setPosition(card.x, card.y).setScale((this.cell * 1.35 / 32) * card.scale);
                 glow.setAlpha((0.12 + Math.min(tier, 10) * 0.035) * (0.75 + 0.25 * Math.sin(t + i)));
             }
         });
@@ -644,10 +719,11 @@ export class Board extends Scene {
             return;
         }
         const { i } = pick[Math.floor(Math.random() * pick.length)];
-        const shine = this.parts[i].shine;
+        const shine = this.shines[i];
         const w = this.cell - 10;
-        shine.setPosition(-w / 2 + w * 0.08, 0).setAlpha(0);
-        this.tweens.add({ targets: shine, x: w / 2 - w * 0.08, duration: 520, ease: 'Sine.InOut' });
+        const { x, y } = this.cards[i];
+        shine.setPosition(x - w / 2 + w * 0.08, y).setAlpha(0);
+        this.tweens.add({ targets: shine, x: x + w / 2 - w * 0.08, duration: 520, ease: 'Sine.InOut' });
         this.tweens.add({ targets: shine, alpha: 0.35, duration: 260, yoyo: true });
     }
 
@@ -657,7 +733,7 @@ export class Board extends Scene {
 
     /**
      * Atmosphere, behind everything: a dark painted backdrop, slow fog banks and rising embers
-     * tinted by the current Era, a pulsing aura behind the enemy, and a vignette over the play area.
+     * tinted by the current Era, a pulsing aura behind the enemy, and a vignette baked into the backdrop.
      */
     private drawAtmosphere() {
         if (!this.textures.exists('backdrop')) {
@@ -677,6 +753,12 @@ export class Board extends Scene {
                     c.strokeRect(x + 1, y + 1, 88, 34);
                 }
             }
+            // Vignette baked into the backdrop: one full-screen layer instead of two.
+            const vig = c.createRadialGradient(WIDTH / 2, 600, 260, WIDTH / 2, 600, 900);
+            vig.addColorStop(0, 'rgba(0,0,0,0)');
+            vig.addColorStop(1, 'rgba(0,0,0,0.75)');
+            c.fillStyle = vig;
+            c.fillRect(0, 0, WIDTH, 1280);
             const img = c.getImageData(0, 0, WIDTH, 1280);
             for (let i = 0; i < img.data.length; i += 4) {
                 const n = (Math.random() - 0.5) * 10;
@@ -686,20 +768,12 @@ export class Board extends Scene {
             }
             c.putImageData(img, 0, 0);
             bd.refresh();
-
-            const vg = this.textures.createCanvas('vignette', WIDTH, 1280)!;
-            const v = vg.getContext();
-            const r = v.createRadialGradient(WIDTH / 2, 600, 260, WIDTH / 2, 600, 900);
-            r.addColorStop(0, 'rgba(0,0,0,0)');
-            r.addColorStop(1, 'rgba(0,0,0,0.75)');
-            v.fillStyle = r;
-            v.fillRect(0, 0, WIDTH, 1280);
-            vg.refresh();
         }
         this.backdrop = this.add.image(WIDTH / 2, 640, 'backdrop').setDepth(-10);
-        for (let i = 0; i < 6; i++) {
-            const f = this.add.image(Math.random() * WIDTH, 200 + Math.random() * 900, 'glow')
-                .setDisplaySize(500 + Math.random() * 400, 160 + Math.random() * 120).setAlpha(0.07).setBlendMode('ADD').setDepth(-9);
+        // Two drifting fog banks: large additive quads are the costliest thing to draw.
+        for (let i = 0; i < 2; i++) {
+            const f = this.add.image(Math.random() * WIDTH, 300 + i * 500, 'glow')
+                .setDisplaySize(480, 150).setAlpha(0.07).setBlendMode('ADD').setDepth(-9);
             this.tweens.add({
                 targets: f, x: f.x + (Math.random() > 0.5 ? 1 : -1) * (150 + Math.random() * 200), y: f.y + (Math.random() - 0.5) * 80,
                 alpha: 0.03 + Math.random() * 0.06, duration: 9000 + Math.random() * 9000, yoyo: true, repeat: -1, ease: 'Sine.InOut',
@@ -713,7 +787,6 @@ export class Board extends Scene {
         }).setDepth(-8);
         this.embers.fastForward(14000); // start with embers already in the air
         this.enemyAura = this.add.image(ENEMY_X, ENEMY_Y, 'glow').setDisplaySize(520, 620).setBlendMode('ADD').setDepth(-7);
-        this.add.image(WIDTH / 2, 640, 'vignette').setDepth(45);
     }
 
     /** Re-tints the atmosphere for the current Era, and the enemy aura for its element or boss state. */
@@ -746,13 +819,29 @@ export class Board extends Scene {
 
     /** Additive glowing particle burst. */
     private burstFx(x: number, y: number, color: number, count: number, speed = 300, life = 600) {
-        const e = this.add.particles(0, 0, 'glow', {
-            speed: { min: speed * 0.25, max: speed }, angle: { min: 0, max: 360 }, scale: { start: 0.9, end: 0 },
-            alpha: { start: 1, end: 0 }, lifespan: { min: life * 0.5, max: life }, blendMode: 'ADD', tint: [color, 0xffffff],
-            gravityY: 220, emitting: false,
-        }).setDepth(55);
+        // One emitter per look, created once and reused: no allocation per tap.
+        const key = `${color}|${speed}|${life}`;
+        let e = this.emitters.get(key);
+        if (!e) {
+            e = this.add.particles(0, 0, 'glow', {
+                speed: { min: speed * 0.25, max: speed }, angle: { min: 0, max: 360 }, scale: { start: 0.9, end: 0 },
+                alpha: { start: 1, end: 0 }, lifespan: { min: life * 0.5, max: life }, blendMode: 'ADD', tint: [color, 0xffffff],
+                gravityY: 220, emitting: false,
+            }).setDepth(55);
+            this.emitters.set(key, e);
+        }
         e.explode(count, x, y);
-        this.time.delayedCall(life + 100, () => e.destroy());
+    }
+
+    /** Reuses floating texts (damage numbers, gold pops) instead of creating a texture per tap. */
+    private pooledText(x: number, y: number, text: string, style: Phaser.Types.GameObjects.Text.TextStyle, depth: number) {
+        let t = this.textPool.find((p) => !p.visible);
+        if (!t) {
+            t = this.textPool.length < 24 ? this.add.text(0, 0, '').setOrigin(0.5) : this.textPool.shift()!;
+            this.textPool.push(t);
+        }
+        this.tweens.killTweensOf(t);
+        return t.setStyle(style).setText(text).setPosition(x, y).setAlpha(1).setScale(1).setDepth(depth).setVisible(true);
     }
 
     /** The enemy card breaks into spinning shards. */
@@ -798,15 +887,15 @@ export class Board extends Scene {
     private damageNumber(x: number, y: number, amount: number, crit: boolean) {
         const combo = this.state.combo;
         const size = crit ? 54 : 24 + Math.min(combo, 15) * 1.5;
-        const t = this.add.text(x, y, (crit ? 'CRIT ' : '') + formatNum(amount), {
+        const t = this.pooledText(x, y, (crit ? 'CRIT ' : '') + formatNum(amount), {
             fontFamily: DISPLAY, fontSize: `${size}px`, color: crit ? hex(GOLD) : combo > 5 ? '#ffb347' : FG,
             stroke: '#000', strokeThickness: crit ? 8 : 5,
-        }).setOrigin(0.5).setDepth(57).setScale(crit ? 0.4 : 1.4);
+        }, 57).setScale(crit ? 0.4 : 1.4);
         const dx = (Math.random() - 0.5) * 120;
         this.tweens.add({ targets: t, scale: 1, duration: 140, ease: 'Back.Out' });
         this.tweens.add({ targets: t, x: x + dx, duration: 750, ease: 'Sine.Out' });
         this.tweens.add({ targets: t, y: y - (crit ? 130 : 90), duration: 750, ease: 'Quad.Out' });
-        this.tweens.add({ targets: t, alpha: 0, delay: 450, duration: 300, onComplete: () => t.destroy() });
+        this.tweens.add({ targets: t, alpha: 0, delay: 450, duration: 300, onComplete: () => t.setVisible(false) });
     }
 
     /** Goal ladder: the next three goals with progress bars, left of the enemy. */
@@ -1143,8 +1232,8 @@ export class Board extends Scene {
     }
 
     private float(x: number, y: number, text: string, color: string) {
-        const t = this.add.text(x, y, text, { fontFamily: DISPLAY, fontSize: '28px', color }).setOrigin(0.5).setDepth(20);
-        this.tweens.add({ targets: t, y: y - 70, alpha: 0, duration: 700, onComplete: () => t.destroy() });
+        const t = this.pooledText(x, y, text, { fontFamily: DISPLAY, fontSize: '28px', color, stroke: '#000', strokeThickness: 0 }, 20);
+        this.tweens.add({ targets: t, y: y - 70, alpha: 0, duration: 700, onComplete: () => t.setVisible(false) });
     }
 
     private toast(text: string, ms = 2200) {

@@ -10,7 +10,8 @@ const StartMergeborn = (parent: string) =>
         parent,
         backgroundColor: '#11131a',
         scale: { mode: Scale.FIT, autoCenter: Scale.CENTER_BOTH },
-        render: { antialias: true },
+        // Smooth texture filtering, but no MSAA on the canvas: at 2× the edges are already smooth and MSAA multiplies fill cost.
+        render: { antialias: true, antialiasGL: false, powerPreference: 'high-performance' },
         scene: [Board],
     });
 
