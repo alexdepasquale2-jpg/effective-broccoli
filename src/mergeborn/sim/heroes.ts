@@ -32,25 +32,23 @@ export interface Hero {
     name: string;
     element: Element;
     skill: string;
-    /** False until its skill is wired into the sim; still collectable. */
-    live: boolean;
 }
 
-const h = (id: string, name: string, element: Element, skill: string, live = false): Hero => ({ id, name, element, skill, live });
+const h = (id: string, name: string, element: Element, skill: string): Hero => ({ id, name, element, skill });
 
 export const HEROES: Hero[] = [
-    h('fire-bellows', 'Fire Bellows', 'fire', 'Cards next to it +25% power', true),
-    h('magma-turtle', 'Magma Turtle', 'fire', 'Bosses take 5 s longer to escape', true),
-    h('flare-sprite', 'Flare Sprite', 'fire', 'Summons: 25% free card +1 tier, 10% burn', true),
-    h('ifrit-duelist', 'Ifrit Duelist', 'fire', 'Every 10th tap deals ×10', true),
-    h('smelter', 'Smelter', 'fire', 'Merging two Smelters pays 3× merge gold', true),
-    h('wildfire-hound', 'Wildfire Hound', 'fire', 'Board ×1.5 vs Earth enemies', true),
-    h('drowned-bellringer', 'Drowned Bellringer', 'water', 'After a boss kill, next 3 foes -30% HP', true),
-    h('tide-clerk', 'Tide Clerk', 'water', 'Offline gold +50%', true),
-    h('mirror-eel', 'Mirror Eel', 'water', 'Merges next to it: 10% leave a T1 copy', true),
-    h('rain-smuggler', 'Rain Smuggler', 'water', 'Summon cost -15%', true),
-    h('undertow-siren', 'Undertow Siren', 'water', 'Shields no longer reduce board damage', true),
-    h('abyss-diver', 'Abyss Diver', 'water', 'Board ×1.5 vs Fire enemies', true),
+    h('fire-bellows', 'Fire Bellows', 'fire', 'Cards next to it +25% power'),
+    h('magma-turtle', 'Magma Turtle', 'fire', 'Bosses take 5 s longer to escape'),
+    h('flare-sprite', 'Flare Sprite', 'fire', 'Summons: 25% free card +1 tier, 10% burn'),
+    h('ifrit-duelist', 'Ifrit Duelist', 'fire', 'Every 10th tap deals ×10'),
+    h('smelter', 'Smelter', 'fire', 'Merging two Smelters pays 3× merge gold'),
+    h('wildfire-hound', 'Wildfire Hound', 'fire', 'Board ×1.5 vs Earth enemies'),
+    h('drowned-bellringer', 'Drowned Bellringer', 'water', 'After a boss kill, next 3 foes -30% HP'),
+    h('tide-clerk', 'Tide Clerk', 'water', 'Offline gold +50%'),
+    h('mirror-eel', 'Mirror Eel', 'water', 'Merges next to it: 10% leave a T1 copy'),
+    h('rain-smuggler', 'Rain Smuggler', 'water', 'Summon cost -15%'),
+    h('undertow-siren', 'Undertow Siren', 'water', 'Shields no longer reduce board damage'),
+    h('abyss-diver', 'Abyss Diver', 'water', 'Board ×1.5 vs Fire enemies'),
     h('quarry-golem', 'Quarry Golem', 'earth', 'Board +10% per Earth card'),
     h('root-weaver', 'Root Weaver', 'earth', 'Neighbours +1 tier every 5 min'),
     h('moss-hermit', 'Moss Hermit', 'earth', 'No taps for 10 s: board ×2'),

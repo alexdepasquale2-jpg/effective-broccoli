@@ -73,6 +73,11 @@ export interface GameState {
     /** Per-slot latent chi: element id stamped on cards summoned there. Re-rolled each run. */
     chi: number[];
     taps: number;
+    /** Hero timers (seconds): run clock, time since last tap, auto-tap and Thunder Hawk accumulators. */
+    clock: number;
+    idle: number;
+    autoTap: number;
+    hawk: number;
     /** Bellringer: foes left to spawn weakened. */
     weakened: number;
     /** Layer 2 (Ascend): kept across Ascends. */
@@ -141,6 +146,10 @@ export function createGame(now = Date.now()): GameState {
         hero: new Array(BOARD_SIZE).fill(''),
         chi: new Array(BOARD_SIZE).fill(0),
         taps: 0,
+        clock: 0,
+        idle: 0,
+        autoTap: 0,
+        hawk: 0,
         weakened: 0,
         ascends: 0,
         heroes: [],
@@ -178,7 +187,11 @@ export const slotPower = (s: GameState, slot: number) =>
     cardPower(s.board[slot]) *
     (slot === POWER_TILE && has(s, 'board5') ? POWER_TILE_MULT : 1) *
     (nextTo(s, slot, 'fire-bellows') ? 1.25 : 1) *
-    counterMult(s.elem[slot], enemyElement(s));
+    counterMult(s.elem[slot], enemyElement(s)) +
+    prismShare(s, slot);
+/** Prism Knight: each adjacent knight lends 30% of its card power. */
+const prismShare = (s: GameState, slot: number) =>
+    s.board[slot] ? neighbours(slot).reduce((sum, n) => sum + (s.hero[n] === 'prism-knight' && s.board[n] ? 0.3 * cardPower(s.board[n]) : 0), 0) : 0;
 export const mightMult = (s: GameState) => 1.5 ** s.shop.might;
 export const fortuneMult = (s: GameState) => 1.25 ** s.shop.fortune;
 /** Whole-board multiplier from hunter heroes against the current enemy's element. */
@@ -187,10 +200,22 @@ const huntMult = (s: GameState) => {
     let m = 1;
     if (e === elementId('earth') && heroOnBoard(s, 'wildfire-hound')) m *= 1.5;
     if (e === elementId('fire') && heroOnBoard(s, 'abyss-diver')) m *= 1.5;
+    if (e === elementId('air') && heroOnBoard(s, 'stone-warden')) m *= 1.5;
+    if (e === elementId('water') && heroOnBoard(s, 'cyclone-dervish')) m *= 1.5;
+    if (e === elementId('void') && heroOnBoard(s, 'radiant-judge')) m *= 2;
+    if (e === elementId('light') && heroOnBoard(s, 'abyssal-seer')) m *= 2;
+    return m;
+};
+/** Whole-board multiplier from support heroes. */
+const supportMult = (s: GameState) => {
+    let m = 1;
+    if (heroOnBoard(s, 'quarry-golem')) m *= 1 + 0.1 * s.elem.filter((e, i) => e === elementId('earth') && s.board[i] > 0).length;
+    if (heroOnBoard(s, 'moss-hermit') && s.idle >= 10) m *= 2;
+    if (heroOnBoard(s, 'lantern-saint')) m *= 1.1;
     return m;
 };
 export const boardDps = (s: GameState) =>
-    s.board.reduce((sum, _t, i) => sum + slotPower(s, i), 0) * (1 + 0.1 * s.upgrades.battle) * mightMult(s) * huntMult(s);
+    s.board.reduce((sum, _t, i) => sum + slotPower(s, i), 0) * (1 + 0.1 * s.upgrades.battle) * mightMult(s) * huntMult(s) * supportMult(s);
 export const comboMult = (s: GameState) => (has(s, 'combo') ? 1 + COMBO_STEP * Math.max(0, s.combo - 1) : 1);
 export const tapDamage = (s: GameState) => (1 + s.upgrades.tap) * comboMult(s) * mightMult(s) + TAP_DPS_SHARE * boardDps(s);
 export const summonCost = (s: GameState, count = 1) => {
@@ -209,15 +234,21 @@ export const canUpgrade = (s: GameState, key: UpgradeKey) => {
 
 export const isBoss = (s: GameState) => s.kills === KILLS_PER_STAGE - 1;
 export const enemyMaxHp = (s: GameState) =>
-    ENEMY_BASE_HP * ENEMY_HP_RATE ** (s.stage - 1) * (isBoss(s) ? BOSS_HP_MULT : 1);
+    ENEMY_BASE_HP * ENEMY_HP_RATE ** (s.stage - 1) * (isBoss(s) ? BOSS_HP_MULT * (heroOnBoard(s, 'tremor-ram') ? 0.8 : 1) : 1);
 export const killGold = (s: GameState) =>
     Math.ceil(KILL_BASE_GOLD * KILL_GOLD_RATE ** (s.stage - 1) * fortuneMult(s)) * (isBoss(s) ? BOSS_GOLD_MULT : 1);
 const TRAIT_CYCLE: Trait[] = ['none', 'shield', 'regen', 'split'];
-export const enemyTrait = (s: GameState): Trait =>
-    has(s, 'traits') ? TRAIT_CYCLE[(s.stage + s.kills) % TRAIT_CYCLE.length] : 'none';
+export const enemyTrait = (s: GameState): Trait => {
+    const t = has(s, 'traits') ? TRAIT_CYCLE[(s.stage + s.kills) % TRAIT_CYCLE.length] : 'none';
+    // Eclipse Widow: bosses can't regen or split.
+    return isBoss(s) && heroOnBoard(s, 'eclipse-widow') && (t === 'regen' || t === 'split') ? 'none' : t;
+};
 
 function spawnEnemy(s: GameState) {
     s.enemyHp = enemyMaxHp(s);
+    if (s.kills === 0 && heroOnBoard(s, 'dawn-herald')) {
+        s.enemyHp = 1;
+    }
     if (s.weakened > 0) {
         s.enemyHp *= 0.7;
         s.weakened -= 1;
@@ -232,7 +263,7 @@ function addGold(s: GameState, amount: number) {
 }
 
 /** Deals damage to the current enemy. Overkill does not carry over. */
-export function damageEnemy(s: GameState, amount: number): Kill | null {
+export function damageEnemy(s: GameState, amount: number, rng: Rng = Math.random): Kill | null {
     s.enemyHp -= amount;
     if (s.enemyHp > 0) {
         return null;
@@ -242,7 +273,10 @@ export function damageEnemy(s: GameState, amount: number): Kill | null {
         s.enemyHp = enemyMaxHp(s) * SPLIT_HP;
         return null;
     }
-    const kill: Kill = { gold: killGold(s), boss: isBoss(s) };
+    let gold = killGold(s);
+    if (heroOnBoard(s, 'gem-miner') && rng() < 0.05) gold *= 10;
+    if (heroOnBoard(s, 'null-jester')) gold = rng() < 0.5 ? gold * 3 : 0;
+    const kill: Kill = { gold, boss: isBoss(s) };
     addGold(s, kill.gold);
     if (kill.boss) {
         s.stage += 1;
@@ -260,11 +294,14 @@ export function damageEnemy(s: GameState, amount: number): Kill | null {
 }
 
 export function tap(s: GameState): Kill | null {
-    s.combo = s.comboTimer > 0 ? Math.min(COMBO_CAP, s.combo + 1) : 1;
+    s.combo = s.comboTimer > 0 ? Math.min(COMBO_CAP + (heroOnBoard(s, 'storm-bard') ? 5 : 0), s.combo + 1) : 1;
     s.comboTimer = COMBO_WINDOW;
     s.taps += 1;
+    s.idle = 0;
     const duel = heroOnBoard(s, 'ifrit-duelist') && s.taps % 10 === 0 ? 10 : 1;
-    return damageEnemy(s, tapDamage(s) * duel);
+    const dmg = tapDamage(s) * duel;
+    if (heroOnBoard(s, 'kite-thief')) addGold(s, dmg * 0.02);
+    return damageEnemy(s, dmg);
 }
 
 /** Summons up to `count` cards into free slots. Returns the filled slots. */
@@ -278,7 +315,7 @@ export function summon(s: GameState, count = 1, rng: Rng = Math.random): number[
         }
         s.gold -= cost;
         s.summons += 1;
-        const pity = has(s, 'multi') && s.summons % PITY_EVERY === 0;
+        const pity = has(s, 'multi') && s.summons % (heroOnBoard(s, 'mirror-oracle') ? 7 : PITY_EVERY) === 0;
         const tier = 1 + s.shop.headstart + (pity || rng() < summonLuck(s) ? 1 : 0);
         placeCard(s, slot, tier, rng);
         slots.push(slot);
@@ -321,8 +358,11 @@ export function moveCard(s: GameState, from: number, to: number, rng: Rng = Math
     }
     const ea = s.elem[from];
     const eb = s.elem[to];
-    if (a === b && (!ea || !eb || ea === eb)) {
-        const lucky = has(s, 'bounty') && rng() < LUCKY_MERGE_CHANCE;
+    const rift = s.hero[from] === 'rift-walker' || s.hero[to] === 'rift-walker';
+    if (a === b && (!ea || !eb || ea === eb || rift)) {
+        const chance = (has(s, 'bounty') ? LUCKY_MERGE_CHANCE : 0) + (heroOnBoard(s, 'feather-monk') ? 0.03 : 0) +
+            (s.hero[to] === 'hollow-king' ? 0.15 : 0);
+        const lucky = rng() < chance;
         const smelt = s.hero[from] === 'smelter' && s.hero[to] === 'smelter';
         const eel = nextTo(s, to, 'mirror-eel') || nextTo(s, from, 'mirror-eel');
         s.board[to] = a + (lucky ? 2 : 1);
@@ -362,6 +402,20 @@ export function buyUpgrade(s: GameState, key: UpgradeKey): boolean {
 /** Advances auto-battle by dt seconds. Returns kills that happened. */
 export function tick(s: GameState, dt: number): Kill[] {
     const kills: Kill[] = [];
+    const before = s.clock;
+    s.clock += dt;
+    s.idle += dt;
+    if (heroOnBoard(s, 'root-weaver') && Math.floor(s.clock / 300) > Math.floor(before / 300)) {
+        s.board.forEach((_t, i) => s.hero[i] === 'root-weaver' && s.board[i] &&
+            neighbours(i).forEach((n) => s.board[n] && isOpen(s, n) && (s.board[n] += 1)));
+    }
+    if (heroOnBoard(s, 'gale-courier')) {
+        s.autoTap += dt * 2;
+        for (; s.autoTap >= 1; s.autoTap -= 1) {
+            const k = tap(s);
+            if (k) kills.push(k);
+        }
+    }
     s.comboTimer = Math.max(0, s.comboTimer - dt);
     if (s.comboTimer === 0) {
         s.combo = 0;
@@ -379,7 +433,16 @@ export function tick(s: GameState, dt: number): Kill[] {
         s.enemyHp = Math.min(enemyMaxHp(s), s.enemyHp + enemyMaxHp(s) * REGEN_PER_SEC * dt);
     }
     const shield = trait === 'shield' && !heroOnBoard(s, 'undertow-siren') ? SHIELD_MULT : 1;
-    const kill = damageEnemy(s, boardDps(s) * dt * shield);
+    let dmg = boardDps(s) * dt * shield;
+    if (heroOnBoard(s, 'ink-wraith')) dmg += enemyMaxHp(s) * 0.01 * dt;
+    if (heroOnBoard(s, 'thunder-hawk')) {
+        s.hawk += dt;
+        if (s.hawk >= 5) {
+            s.hawk -= 5;
+            dmg += boardDps(s) * 5 * shield;
+        }
+    }
+    const kill = damageEnemy(s, dmg);
     if (kill) {
         kills.push(kill);
     }
@@ -426,7 +489,7 @@ export function deserialize(raw: string | null): GameState | null {
 
 export const canShuffle = (s: GameState) => s.stage >= SHUFFLE_STAGE;
 export const essenceGain = (s: GameState) =>
-    canShuffle(s) ? Math.floor(((s.stage - ESSENCE_OFFSET) / ESSENCE_SCALE) ** ESSENCE_POW) : 0;
+    canShuffle(s) ? Math.floor(((s.stage - ESSENCE_OFFSET) / ESSENCE_SCALE) ** ESSENCE_POW * (heroOnBoard(s, 'sun-forger') ? 1.2 : 1)) : 0;
 
 /** Layer 1 reset: trade the run for Essence. Keeps Essence, shop, and records. */
 export function shuffle(s: GameState): number {

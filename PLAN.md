@@ -59,8 +59,8 @@ Each layer also automates the one below (auto-Shuffle at X Essence, auto-Ascend�
 6. Balance pass: headless sim script that plays optimally and prints time-to-each-unlock vs the pacing targets.
 
 ## Status
-Done: Phases 1–3; Phase 4 core: Ascend (after 1st Shuffle; wipes run+Essence+shop; +1 element, +1 random hero), chi tiles, element merges, counter wheel, hero summons (4%), Fire+Water hero skills live.
-Next: wire Earth/Air/Light/Void hero skills (data exists, `live: false` in sim/heroes.ts); hero collection view; then Phase 5.
+Done: Phases 1–3; Phase 4 core: Ascend (after 1st Shuffle; wipes run+Essence+shop; +1 element, +1 random hero), chi tiles, element merges, counter wheel, hero summons (4%), all 36 hero skills live.
+Next: hero collection view (show card art); balance pass with Ascend; then Phase 5 (Eras).
 
 ## Phase 4 design (agreed)
 - Ascend: any time after 1st Shuffle; resets run + Essence + shop; pays 1 token = 1 random hero unlock; each Ascend adds next element (Fire→Water→Earth→Air→Light→Void).

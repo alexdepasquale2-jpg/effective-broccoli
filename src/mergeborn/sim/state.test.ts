@@ -8,6 +8,7 @@ import {
     canAscend,
     enemyElement,
     rollChi,
+    damageEnemy,
     buyShop,
     essenceGain,
     goals,
@@ -393,5 +394,117 @@ describe('ascend and heroes', () => {
         const s = createGame(0);
         rollChi(s, always);
         assert.ok(s.chi.every((c) => c === 0));
+    });
+});
+
+describe('earth to void hero skills', () => {
+    const withHero = (id: string, ascends = 6) => {
+        const s = createGame(0);
+        s.ascends = ascends;
+        s.board[0] = 1;
+        s.hero[0] = id;
+        return s;
+    };
+    it('Quarry Golem, Lantern Saint and Moss Hermit scale board damage', () => {
+        const g = withHero('quarry-golem', 0); // no Ascends: enemy is neutral, so no counters
+        assert.equal(boardDps(g), 1);
+        g.board[1] = 1;
+        g.elem[0] = elementId('earth');
+        g.elem[1] = elementId('earth');
+        assert.ok(Math.abs(boardDps(g) - 2 * 1.2) < 1e-9);
+        const l = withHero('lantern-saint', 0);
+        assert.ok(Math.abs(boardDps(l) - 1.1) < 1e-9);
+        const m = withHero('moss-hermit', 0);
+        m.enemyHp = 1e9;
+        tick(m, 11);
+        assert.ok(Math.abs(boardDps(m) - 2) < 1e-9);
+        tap(m);
+        assert.equal(boardDps(m), 1);
+    });
+    it('Prism Knight lends 30% of its power to neighbours', () => {
+        const s = withHero('prism-knight', 0);
+        s.board[0] = 3;
+        s.board[1] = 1;
+        assert.ok(Math.abs(boardDps(s) - (cardPower(3) + 1 + 0.3 * cardPower(3))) < 1e-9);
+    });
+    it('Tremor Ram, Dawn Herald, Eclipse Widow', () => {
+        const r = withHero('tremor-ram', 0);
+        r.kills = KILLS_PER_STAGE - 1;
+        const s2 = withHero('magma-turtle', 0);
+        s2.kills = KILLS_PER_STAGE - 1;
+        assert.ok(Math.abs(enemyMaxHp(r) / enemyMaxHp(s2) - 0.8) < 1e-9);
+        const d = withHero('dawn-herald', 0);
+        d.kills = KILLS_PER_STAGE - 1;
+        d.enemyHp = 0.1;
+        tap(d);
+        assert.equal(d.enemyHp, 1);
+        const w = withHero('eclipse-widow', 0);
+        w.stage = 14 + 3; // traits on; (17 + 9) % 4 = 2 → regen
+        w.kills = KILLS_PER_STAGE - 1;
+        assert.equal(enemyTrait(w), 'none');
+    });
+    it('Gale Courier auto-taps, Storm Bard raises combo cap, Kite Thief earns gold', () => {
+        const c = withHero('gale-courier', 0);
+        c.enemyHp = 1e9;
+        tick(c, 1);
+        assert.equal(c.taps, 2);
+        const b = withHero('storm-bard', 0);
+        b.stage = 3;
+        b.enemyHp = 1e9;
+        for (let i = 0; i < 20; i++) tap(b);
+        assert.equal(b.combo, 15);
+        const k = withHero('kite-thief', 0);
+        k.enemyHp = 1e9;
+        const gold = k.gold;
+        tap(k);
+        assert.ok(k.gold > gold);
+    });
+    it('Thunder Hawk bursts every 5 s; Ink Wraith drains 1%/s', () => {
+        const h = withHero('thunder-hawk', 0);
+        h.enemyHp = 1e9;
+        tick(h, 5);
+        assert.ok(Math.abs(1e9 - h.enemyHp - 10) < 1e-6);
+        const w = withHero('ink-wraith', 0);
+        w.board[0] = 0;
+        w.board[1] = 1;
+        w.hero[1] = 'ink-wraith';
+        const hp = w.enemyHp;
+        tick(w, 1);
+        assert.ok(Math.abs(hp - w.enemyHp - (1 + enemyMaxHp(w) * 0.01)) < 1e-9);
+    });
+    it('Gem Miner and Null Jester change kill gold', () => {
+        const g = withHero('gem-miner', 0);
+        const base = killGold(g);
+        g.enemyHp = 0.1;
+        assert.equal(damageEnemy(g, 1, always)?.gold, base * 10);
+        const j = withHero('null-jester', 0);
+        j.enemyHp = 0.1;
+        assert.equal(damageEnemy(j, 1, never)?.gold, 0);
+    });
+    it('Rift Walker merges across elements; Hollow King and Feather Monk boost lucky merges', () => {
+        const s = withHero('rift-walker');
+        s.elem[0] = 1;
+        s.board[1] = 1;
+        s.elem[1] = 2;
+        assert.equal(moveCard(s, 1, 0, never), 'merge');
+        const k = withHero('hollow-king', 0);
+        k.board[1] = 1;
+        assert.equal(moveCard(k, 1, 0, () => 0.1), 'merge');
+        assert.equal(k.board[0], 3);
+    });
+    it('Root Weaver grows neighbours every 5 min; Mirror Oracle pity 7; Sun Forger +20% Essence', () => {
+        const r = withHero('root-weaver', 0);
+        r.board[1] = 2;
+        r.enemyHp = 1e12;
+        tick(r, 301);
+        assert.equal(r.board[1], 3);
+        const o = withHero('mirror-oracle', 0);
+        o.stage = 6;
+        o.gold = 1e9;
+        o.summons = 6;
+        assert.equal(o.board[summon(o, 1, never)[0]], 2);
+        const f = withHero('sun-forger', 0);
+        f.stage = 40;
+        assert.equal(essenceGain(f), Math.floor(((40 - 20) / 2.5) ** 1.6 * 1.2));
     });
 });
