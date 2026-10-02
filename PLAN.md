@@ -1,6 +1,7 @@
 # PLAN — "Mergeborn" (card battler × clicker × merge-summon idle)
 
-Third game in this repo. Route: `?game=merge`. Code: `src/mergeborn/` (`sim/` pure TS + node tests, `scenes/` Phaser), same as `canon-lane`.
+Third game in this repo, separate from Canon Lane. Route: `?game=merge`. Code: `src/mergeborn/` (`sim/` pure TS + node tests, `scenes/` Phaser), same as `canon-lane`.
+Visual plan: `docs-plan/mergeborn-plan.html` (https://claude.ai/artifact/HFYyLb17qiEDonXTfJQtRB).
 
 ## Pillar
 Revolution Idle structure: each layer you unlock **changes how the earlier layers work**.
@@ -58,4 +59,4 @@ Each layer also automates the one below (auto-Shuffle at X Essence, auto-Ascend�
 6. Balance pass: headless sim script that plays optimally and prints time-to-each-unlock vs the pacing targets.
 
 ## Status
-Done: plan. Next: Phase 1. Blockers: none.
+Done: plan + visual plan. Next: Phase 1. Blockers: none.
