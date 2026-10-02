@@ -1,203 +1,25 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Foley & Fable — Theme Preview</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/base.css">
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="./favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0c0a14" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Canon Lane" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./favicon.png" />
+    <link rel="stylesheet" href="./style.css">
+    <title>Canon Lane</title>
+  <script type="module" crossorigin src="./assets/index-DONx1sbr.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/phaser-B5cMilhc.js">
 </head>
+
 <body>
-  <div class="announcement-bar">Each book arrives wrapped & wax-sealed with care</div>
-
-  <header class="site-header">
-    <div class="page-width">
-      <div class="site-header__inner">
-        <nav class="site-header__nav">
-          <a href="#shop" aria-current="page">Shop</a>
-          <a href="#how">How It Works</a>
-          <a href="#story">Our Story</a>
-        </nav>
-        <a href="#" class="site-header__logo">
-          <span class="site-header__logo-text">Foley & Fable</span>
-          <span class="site-header__logo-tagline">Stories & Shadows</span>
-        </a>
-        <div class="site-header__actions">
-          <button type="button" class="site-header__icon-btn" data-cart-open aria-label="Cart">
-            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-          </button>
-        </div>
-      </div>
+    <div id="app">
+        <div id="game-container"></div>
     </div>
-  </header>
-
-  <main>
-    <section class="hero">
-      <div class="hero__bg">
-        <div class="hero__bg-image" style="background: linear-gradient(135deg, #3d2a35 0%, #1a1520 40%, #14101c 100%); width:100%; height:100%;"></div>
-        <div class="hero__overlay"></div>
-      </div>
-      <div class="page-width hero__content reveal is-visible">
-        <div style="text-align: center; max-width: 52rem; margin: 0 auto;">
-          <p class="eyebrow">Blind Book Dates</p>
-          <h1 class="display-heading display-heading--xl" style="margin-top: 1rem;">Where stories linger and shadows muse</h1>
-          <p class="lead" style="margin: 1.5rem auto 0;">Discover handpicked volumes, elegantly wrapped and wax-sealed — a literary surprise crafted for those who cherish thoughtful ambiance and enduring words.</p>
-          <div class="hero__actions" style="justify-content: center;">
-            <a href="#shop" class="btn btn--primary">Shop Blind Dates</a>
-            <a href="#how" class="btn btn--secondary">How It Works</a>
-          </div>
-          <div class="hero__ornament"></div>
-        </div>
-      </div>
-      <span class="hero__scroll-hint">Scroll to discover</span>
-    </section>
-
-    <section class="section" id="shop">
-      <div class="page-width">
-        <div class="section__header reveal is-visible">
-          <p class="eyebrow">Curated for you</p>
-          <h2 class="display-heading display-heading--lg">Featured Blind Book Dates</h2>
-          <p class="lead" style="margin: 1rem auto 0;">Choose your mood — romance, darkness, or cozy curiosity. Each date arrives wrapped in mystery.</p>
-        </div>
-        <div class="product-grid">
-          <article class="product-card reveal is-visible">
-            <div class="product-card__media" style="background: linear-gradient(160deg, #4a2030 0%, #2a1520 100%);"></div>
-            <div class="product-card__body">
-              <h3 class="product-card__title">Romance After Dark Blind Book Date</h3>
-              <span class="product-card__price">$17.00</span>
-            </div>
-          </article>
-          <article class="product-card reveal is-visible">
-            <div class="product-card__media" style="background: linear-gradient(160deg, #2a2035 0%, #1a1525 100%);"></div>
-            <div class="product-card__body">
-              <h3 class="product-card__title">Dark & Twisted Blind Book Date</h3>
-              <span class="product-card__price">$17.00</span>
-            </div>
-          </article>
-          <article class="product-card reveal is-visible">
-            <div class="product-card__media" style="background: linear-gradient(160deg, #3a3528 0%, #252018 100%);"></div>
-            <div class="product-card__body">
-              <h3 class="product-card__title">Cozy & Curious Blind Book Date</h3>
-              <span class="product-card__price">$17.00</span>
-            </div>
-          </article>
-          <article class="product-card reveal is-visible">
-            <span class="product-card__badge">Deluxe</span>
-            <div class="product-card__media" style="background: linear-gradient(160deg, #5a3040 0%, #3a2030 100%);"></div>
-            <div class="product-card__body">
-              <h3 class="product-card__title">Romance After Dark Deluxe</h3>
-              <span class="product-card__price">$26.00</span>
-            </div>
-          </article>
-          <article class="product-card reveal is-visible">
-            <span class="product-card__badge">Deluxe</span>
-            <div class="product-card__media" style="background: linear-gradient(160deg, #352a40 0%, #201828 100%);"></div>
-            <div class="product-card__body">
-              <h3 class="product-card__title">Dark & Twisted Deluxe</h3>
-              <span class="product-card__price">$26.00</span>
-            </div>
-          </article>
-          <article class="product-card reveal is-visible">
-            <span class="product-card__badge">Deluxe</span>
-            <div class="product-card__media" style="background: linear-gradient(160deg, #454030 0%, #2a2820 100%);"></div>
-            <div class="product-card__body">
-              <h3 class="product-card__title">Cozy & Curious Deluxe</h3>
-              <span class="product-card__price">$26.00</span>
-            </div>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section section--parchment" id="how">
-      <div class="page-width">
-        <div class="section__header reveal is-visible">
-          <p class="eyebrow" style="color: var(--wine);">The ritual</p>
-          <h2 class="display-heading display-heading--lg" style="color: var(--ink);">How your blind date arrives</h2>
-        </div>
-        <div class="steps">
-          <div class="step reveal is-visible">
-            <span class="step__number">1</span>
-            <h3 class="step__title">Choose your mood</h3>
-            <p class="step__text">Select from romance, dark & twisted, or cozy & curious — standard or deluxe editions.</p>
-          </div>
-          <div class="step reveal is-visible">
-            <span class="step__number">2</span>
-            <h3 class="step__title">We curate with care</h3>
-            <p class="step__text">Each volume is hand-selected, wrapped in elegant paper, and finished with a wax seal.</p>
-          </div>
-          <div class="step reveal is-visible">
-            <span class="step__number">3</span>
-            <h3 class="step__title">Unwrap the mystery</h3>
-            <p class="step__text">Your blind book date arrives ready to surprise — a story waiting to be discovered.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="story">
-      <div class="page-width">
-        <div class="story-split">
-          <div class="story-split__media reveal is-visible">
-            <div style="width:100%; height:100%; background: linear-gradient(160deg, var(--ink-soft) 0%, var(--wine-deep) 100%);"></div>
-            <div class="story-split__frame"></div>
-          </div>
-          <div class="story-split__content reveal is-visible">
-            <p class="eyebrow">Our story</p>
-            <h2 class="display-heading display-heading--md">Born from a passion for the written word</h2>
-            <p>We curate spaces where curiosity and nostalgia meet — across worn pages, treasured finds, and the quiet magic of a story you didn't see coming.</p>
-            <p>Every blind book date is an invitation to linger a little longer in the shadows of a good tale.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="page-width reveal is-visible">
-        <div class="newsletter">
-          <p class="eyebrow">Stay in the story</p>
-          <h2 class="display-heading display-heading--md" style="margin-top: 0.75rem;">Join our literary circle</h2>
-          <p class="lead" style="margin: 1rem auto 0;">Be the first to know about new blind dates, restocks, and seasonal collections.</p>
-          <form class="newsletter__form" onsubmit="event.preventDefault()">
-            <input type="email" class="newsletter__input" placeholder="your@email.com" required>
-            <button type="submit" class="btn btn--gold">Subscribe</button>
-          </form>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer class="site-footer">
-    <div class="page-width">
-      <div class="site-footer__grid">
-        <div class="site-footer__brand">
-          <span class="site-header__logo-text">Foley & Fable</span>
-          <p>Born from a passion for the written word, we curate spaces where curiosity and nostalgia meet across worn pages and treasured finds.</p>
-        </div>
-        <div>
-          <h3 class="site-footer__heading">Shop</h3>
-          <ul class="site-footer__links">
-            <li><a href="#">All Blind Dates</a></li>
-            <li><a href="#">Standard Editions</a></li>
-            <li><a href="#">Deluxe Editions</a></li>
-          </ul>
-        </div>
-        <div>
-          <h3 class="site-footer__heading">Connect</h3>
-          <ul class="site-footer__links">
-            <li><a href="#">Instagram</a></li>
-            <li><a href="#">Contact</a></li>
-          </ul>
-        </div>
-      </div>
-      <div class="site-footer__bottom">
-        <span>&copy; 2026 Foley & Fable. All rights reserved.</span>
-      </div>
-    </div>
-  </footer>
-
-  <script src="assets/theme.js"></script>
 </body>
 </html>

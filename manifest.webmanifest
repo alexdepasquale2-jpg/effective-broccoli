@@ -1,0 +1,17 @@
+{
+  "name": "Canon Lane",
+  "short_name": "Canon Lane",
+  "description": "Idle MOBA clicker: biblical names, Greek domains, 9000 blessings per upgrade tier.",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0c0a14",
+  "theme_color": "#0c0a14",
+  "icons": [
+    {
+      "src": "favicon.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    }
+  ]
+}
