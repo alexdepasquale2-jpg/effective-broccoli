@@ -138,6 +138,11 @@ export class Board extends Scene {
     private hex = false;
     private boardSig = '';
     private wasBoss = false;
+    private atmoEra = 0;
+    private backdrop: GameObjects.Image;
+    private fog: GameObjects.Image[] = [];
+    private embers: GameObjects.Particles.ParticleEmitter;
+    private enemyAura: GameObjects.Image;
     private comboFire: GameObjects.Particles.ParticleEmitter;
     private hitFlash: GameObjects.Rectangle;
     private eraBtn: Button;
@@ -164,6 +169,7 @@ export class Board extends Scene {
         this.state = state;
         this.cameras.main.setBackgroundColor(BG);
         this.makeFxTextures();
+        this.drawAtmosphere();
         // Crop each hero card to its art window (the painted scene) for use on board tiles.
         for (const h of HEROES) {
             const tex = this.textures.get(`hero-${h.id}`);
@@ -458,6 +464,7 @@ export class Board extends Scene {
         this.comboFire.emitting = combo > 1;
         this.comboFire.frequency = Math.max(12, 80 - s.combo * 6);
         this.comboText.setScale(1 + Math.max(0, combo - 1) * 0.6 + (combo > 1 ? Math.sin(this.time.now / 60) * 0.04 : 0));
+        this.updateAtmosphere(boss, ee);
         if (boss && !this.wasBoss) {
             this.bossEntrance();
         }
@@ -578,6 +585,81 @@ export class Board extends Scene {
 
     private sparks(x: number, y: number, color: number, count: number) {
         this.burstFx(x, y, color, count * 2, 420, 900);
+    }
+
+    /**
+     * Atmosphere, behind everything: a dark painted backdrop, slow fog banks and rising embers
+     * tinted by the current Era, a pulsing aura behind the enemy, and a vignette over the play area.
+     */
+    private drawAtmosphere() {
+        if (!this.textures.exists('backdrop')) {
+            const bd = this.textures.createCanvas('backdrop', WIDTH, 1280)!;
+            const c = bd.getContext();
+            const sky = c.createLinearGradient(0, 0, 0, 1280);
+            sky.addColorStop(0, '#1a1c28');
+            sky.addColorStop(0.45, '#101219');
+            sky.addColorStop(1, '#07080c');
+            c.fillStyle = sky;
+            c.fillRect(0, 0, WIDTH, 1280);
+            // Faint brickwork, brighter near the enemy, like a lit wall in a dark hall.
+            for (let y = 0; y < 1280; y += 36) {
+                for (let x = (y / 36) % 2 ? -45 : 0; x < WIDTH; x += 90) {
+                    const d = Math.hypot(x + 45 - WIDTH / 2, y - 300);
+                    c.strokeStyle = `rgba(255,255,255,${Math.max(0.012, 0.07 - d / 9000)})`;
+                    c.strokeRect(x + 1, y + 1, 88, 34);
+                }
+            }
+            const img = c.getImageData(0, 0, WIDTH, 1280);
+            for (let i = 0; i < img.data.length; i += 4) {
+                const n = (Math.random() - 0.5) * 10;
+                img.data[i] += n;
+                img.data[i + 1] += n;
+                img.data[i + 2] += n;
+            }
+            c.putImageData(img, 0, 0);
+            bd.refresh();
+
+            const vg = this.textures.createCanvas('vignette', WIDTH, 1280)!;
+            const v = vg.getContext();
+            const r = v.createRadialGradient(WIDTH / 2, 600, 260, WIDTH / 2, 600, 900);
+            r.addColorStop(0, 'rgba(0,0,0,0)');
+            r.addColorStop(1, 'rgba(0,0,0,0.75)');
+            v.fillStyle = r;
+            v.fillRect(0, 0, WIDTH, 1280);
+            vg.refresh();
+        }
+        this.backdrop = this.add.image(WIDTH / 2, 640, 'backdrop').setDepth(-10);
+        for (let i = 0; i < 6; i++) {
+            const f = this.add.image(Math.random() * WIDTH, 200 + Math.random() * 900, 'glow')
+                .setDisplaySize(500 + Math.random() * 400, 160 + Math.random() * 120).setAlpha(0.07).setBlendMode('ADD').setDepth(-9);
+            this.tweens.add({
+                targets: f, x: f.x + (Math.random() > 0.5 ? 1 : -1) * (150 + Math.random() * 200), y: f.y + (Math.random() - 0.5) * 80,
+                alpha: 0.03 + Math.random() * 0.06, duration: 9000 + Math.random() * 9000, yoyo: true, repeat: -1, ease: 'Sine.InOut',
+            });
+            this.fog.push(f);
+        }
+        this.embers = this.add.particles(0, 1300, 'glow', {
+            x: { min: 0, max: WIDTH }, speedY: { min: -70, max: -25 }, speedX: { min: -12, max: 12 },
+            scale: { min: 0.08, max: 0.3 }, alpha: { start: 0.7, end: 0 }, lifespan: { min: 9000, max: 16000 },
+            frequency: 260, blendMode: 'ADD',
+        }).setDepth(-8);
+        this.embers.fastForward(14000); // start with embers already in the air
+        this.enemyAura = this.add.image(ENEMY_X, ENEMY_Y, 'glow').setDisplaySize(520, 620).setBlendMode('ADD').setDepth(-7);
+        this.add.image(WIDTH / 2, 640, 'vignette').setDepth(45);
+    }
+
+    /** Re-tints the atmosphere for the current Era, and the enemy aura for its element or boss state. */
+    private updateAtmosphere(boss: boolean, enemyEl: number) {
+        const s = this.state;
+        if (s.era !== this.atmoEra) {
+            this.atmoEra = s.era;
+            const accent = [0xff7a2a, 0x9ccc65, 0xb07cff, 0xff5a8a, 0xffe08a][s.era - 1] ?? 0xff7a2a;
+            this.backdrop.setTint(Display.Color.ValueToColor(accent).lighten(70).color);
+            this.fog.forEach((f) => f.setTint(accent));
+            this.embers.setParticleTint(accent);
+        }
+        const auraColor = boss ? 0xff3a5a : enemyEl ? ELEM_COLORS[enemyEl] : PINK;
+        this.enemyAura.setTint(auraColor).setAlpha((boss ? 0.32 : 0.16) * (0.8 + 0.2 * Math.sin(this.time.now / (boss ? 140 : 420))));
     }
 
     /** Soft glow dot and shard textures, drawn once. */
