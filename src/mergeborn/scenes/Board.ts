@@ -1,6 +1,7 @@
 import { GameObjects, Scene } from 'phaser';
 import { BOARD_SIZE, BOARD_STRIDE, KILLS_PER_STAGE, POWER_TILE, WIDTH } from '../sim/constants.ts';
 import { loadGame, persistGame } from '../sim/save.ts';
+import { sfx, unlockAudio } from '../audio.ts';
 import {
     UPGRADES,
     boardCols,
@@ -15,7 +16,13 @@ import {
     isOpen,
     moveCard,
     multiSummonCount,
-    nextUnlock,
+    SHOP,
+    buyShop,
+    canShuffle,
+    essenceGain,
+    goals,
+    shopCost,
+    shuffle,
     summon,
     summonCost,
     tap,
@@ -23,7 +30,7 @@ import {
     tick,
     upgradeCost,
 } from '../sim/state.ts';
-import type { GameState, Kill, Trait, UpgradeKey } from '../sim/state.ts';
+import type { GameState, Kill, ShopKey, Trait, UpgradeKey } from '../sim/state.ts';
 
 /** Rarity ladder, same as the visual plan. Tiers past 6 cycle. */
 const TIER_COLORS = [0xa7adbf, 0x4fd18b, 0x4fa3ff, 0xb07cff, 0xffc24a, 0xff5a8a];
@@ -94,6 +101,12 @@ export class Board extends Scene {
     private summonOne: Button;
     private summonMany: Button;
     private saveClock = 0;
+    private ladder: { text: GameObjects.Text; track: GameObjects.Rectangle; bar: GameObjects.Rectangle }[] = [];
+    private shopPanel: GameObjects.Container;
+    private shopTitle: GameObjects.Text;
+    private shopBtns = new Map<ShopKey, Button>();
+    private shuffleBtn: Button;
+    private shuffleArmed = 0;
 
     constructor() {
         super('Board');
@@ -109,6 +122,9 @@ export class Board extends Scene {
         this.drawBoard();
         this.drawUpgrades();
         this.drawSummon();
+        this.drawLadder();
+        this.drawShop();
+        this.input.once('pointerdown', unlockAudio);
 
         if (offline.gold > 0) {
             this.toast(`While you were away: +${formatNum(offline.gold)} gold`);
@@ -158,8 +174,8 @@ export class Board extends Scene {
         this.enemy.setSize(200, 250).setInteractive({ useHandCursor: true });
         this.enemy.on('pointerdown', (p: Phaser.Input.Pointer) => this.onTap(p));
 
-        this.comboText = this.add.text(ENEMY_X - 190, ENEMY_Y, '', { fontFamily: DISPLAY, fontSize: '32px', color: hex(GREEN) }).setOrigin(0.5);
-        this.timerText = this.add.text(ENEMY_X + 190, ENEMY_Y, '', { fontFamily: DISPLAY, fontSize: '32px', color: hex(GOLD) }).setOrigin(0.5);
+        this.comboText = this.add.text(ENEMY_X + 190, ENEMY_Y + 50, '', { fontFamily: DISPLAY, fontSize: '32px', color: hex(GREEN) }).setOrigin(0.5);
+        this.timerText = this.add.text(ENEMY_X + 190, ENEMY_Y - 40, '', { fontFamily: DISPLAY, fontSize: '32px', color: hex(GOLD) }).setOrigin(0.5);
         this.add.rectangle(ENEMY_X, 440, 400, 18, LINE);
         this.hpBar = this.add.rectangle(ENEMY_X - 200, 440, 400, 18, PINK).setOrigin(0, 0.5);
         this.hpText = this.add.text(ENEMY_X, 464, '', { fontFamily: FONT, fontSize: '15px', color: MUTED }).setOrigin(0.5);
@@ -188,8 +204,11 @@ export class Board extends Scene {
             card.setDepth(0).setScale(1).setPosition(home.x, home.y);
             const to = this.slotAt(p.x, p.y);
             const gold = this.state.gold;
-            if (to >= 0 && moveCard(this.state, from, to) === 'merge') {
+            const result = to >= 0 ? moveCard(this.state, from, to) : 'none';
+            if (result === 'merge') {
                 this.onMerge(to, this.state.gold - gold);
+            } else if (result === 'none' && to >= 0) {
+                sfx.deny();
             }
             this.renderCards();
         });
@@ -255,8 +274,10 @@ export class Board extends Scene {
             const slots = summon(this.state, count);
             if (!slots.length) {
                 this.tweens.add({ targets: btn.box, x: btn.box.x + 8, duration: 40, yoyo: true, repeat: 2 });
+                sfx.deny();
                 return;
             }
+            sfx.summon();
             this.renderCards();
             for (const slot of slots) {
                 const card = this.cards[slot];
@@ -292,8 +313,21 @@ export class Board extends Scene {
             this.layoutBoard();
         }
         this.goldText.setText(`${formatNum(s.gold)} gold`);
-        const next = nextUnlock(s);
-        this.stageText.setText(`Stage ${s.stage}` + (next ? `  ·  next unlock at stage ${next.stage}` : ''));
+        this.stageText.setText(`Stage ${s.stage}  ·  best ${s.bestStage}  ·  ${formatNum(s.essence)} Essence`);
+        goals(s).forEach((g, i) => {
+            this.ladder[i].text.setText(g.label).setVisible(true);
+            this.ladder[i].track.setVisible(true);
+            this.ladder[i].bar.setVisible(true).width = 220 * Math.min(1, g.progress);
+            this.ladder[i].bar.setFillStyle(g.progress >= 1 ? GOLD : GREEN);
+        });
+        for (let i = goals(s).length; i < this.ladder.length; i++) {
+            this.ladder[i].text.setVisible(false);
+            this.ladder[i].track.setVisible(false);
+            this.ladder[i].bar.setVisible(false);
+        }
+        if (this.shopPanel.visible) {
+            this.refreshShop();
+        }
         this.pips.forEach((pip, i) => pip.setFillStyle(i < s.kills ? GREEN : i === KILLS_PER_STAGE - 1 ? 0x5a3044 : LINE));
 
         const boss = isBoss(s);
@@ -329,6 +363,7 @@ export class Board extends Scene {
 
     private onTap(p: Phaser.Input.Pointer) {
         const kill = tap(this.state);
+        sfx.tap();
         this.float(p.x, p.y - 20, `-${formatNum(tapDamage(this.state))}`, FG);
         this.tweens.add({ targets: this.enemy, scale: 0.95, duration: 50, yoyo: true });
         if (kill) {
@@ -338,6 +373,12 @@ export class Board extends Scene {
 
     private onKill(kill: Kill) {
         this.float(ENEMY_X, ENEMY_Y - 60, `+${formatNum(kill.gold)}`, hex(GOLD));
+        this.sparks(ENEMY_X, ENEMY_Y, kill.boss ? GOLD : PINK, kill.boss ? 24 : 8);
+        if (kill.boss) {
+            sfx.fanfare();
+        } else {
+            sfx.kill();
+        }
         if (kill.unlock) {
             this.cameras.main.flash(250, 255, 194, 74);
             this.toast(`Unlocked! ${kill.unlock.label}`, 4000);
@@ -353,10 +394,109 @@ export class Board extends Scene {
         this.tweens.add({ targets: card, scale: 1.25, duration: 90, yoyo: true, ease: 'Quad.Out' });
         this.cameras.main.shake(60 + tier * 15, 0.002 + tier * 0.0008);
         this.burst(slot, tierColor(tier));
+        const c = this.slotCenter(slot);
+        this.sparks(c.x, c.y, tierColor(tier), 6 + tier * 2);
+        sfx.merge(tier);
         if (gold > 0) {
             const { x, y } = this.slotCenter(slot);
             this.float(x, y - 30, `+${formatNum(gold)}`, hex(GOLD));
         }
+    }
+
+    private sparks(x: number, y: number, color: number, count: number) {
+        for (let i = 0; i < count; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const d = 50 + Math.random() * 90;
+            const p = this.add.rectangle(x, y, 8, 8, color).setDepth(55).setAngle(45);
+            this.tweens.add({
+                targets: p, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, alpha: 0, scale: 0.3,
+                duration: 400 + Math.random() * 250, ease: 'Quad.Out', onComplete: () => p.destroy(),
+            });
+        }
+    }
+
+    /** Goal ladder: the next three goals with progress bars, left of the enemy. */
+    private drawLadder() {
+        this.add.text(18, 170, 'NEXT GOALS', { fontFamily: FONT, fontSize: '13px', color: MUTED });
+        for (let i = 0; i < 3; i++) {
+            const y = 200 + i * 66;
+            const text = this.add.text(18, y, '', { fontFamily: FONT, fontSize: '14px', color: FG, wordWrap: { width: 230 } });
+            const track = this.add.rectangle(18, y + 44, 220, 6, LINE).setOrigin(0, 0.5);
+            const bar = this.add.rectangle(18, y + 44, 220, 6, GREEN).setOrigin(0, 0.5);
+            this.ladder.push({ text, track, bar });
+        }
+    }
+
+    private drawShop() {
+        const open = this.button(WIDTH - 70, 48, 120, 56, CARD, '15px', () => {
+            this.shopPanel.setVisible(true);
+            this.refreshShop();
+        });
+        open.box.setStrokeStyle(2, GOLD);
+        open.text.setText('Essence\nshop').setColor(hex(GOLD)).setFontFamily(FONT);
+
+        const shade = this.add.rectangle(WIDTH / 2, 640, WIDTH, 1280, 0x000000, 0.7).setInteractive();
+        const panel = this.add.rectangle(WIDTH / 2, 640, 640, 760, CARD).setStrokeStyle(3, GOLD);
+        this.shopTitle = this.add.text(WIDTH / 2, 320, '', { fontFamily: DISPLAY, fontSize: '28px', color: hex(GOLD), align: 'center' }).setOrigin(0.5);
+        const items: GameObjects.GameObject[] = [shade, panel, this.shopTitle];
+        (Object.keys(SHOP) as ShopKey[]).forEach((key, i) => {
+            const btn = this.button(WIDTH / 2, 440 + i * 110, 560, 96, BG, '19px', () => {
+                if (buyShop(this.state, key)) {
+                    sfx.summon();
+                    persistGame(this.state);
+                    this.refreshShop();
+                } else {
+                    sfx.deny();
+                }
+            });
+            btn.box.setStrokeStyle(2, LINE);
+            btn.text.setColor(FG).setFontFamily(FONT);
+            this.shopBtns.set(key, btn);
+            items.push(btn.box, btn.text);
+        });
+        this.shuffleBtn = this.button(WIDTH / 2, 800, 560, 100, GOLD, '22px', () => this.onShuffle());
+        const close = this.button(WIDTH / 2, 940, 240, 64, LINE, '20px', () => this.shopPanel.setVisible(false));
+        close.text.setText('Close').setColor(FG);
+        items.push(this.shuffleBtn.box, this.shuffleBtn.text, close.box, close.text);
+        this.shopPanel = this.add.container(0, 0, items).setDepth(50).setVisible(false);
+    }
+
+    private refreshShop() {
+        const s = this.state;
+        this.shopTitle.setText(`Essence shop\n${formatNum(s.essence)} Essence · ${s.shuffles} shuffles`);
+        for (const [key, btn] of this.shopBtns) {
+            const cost = shopCost(s, key);
+            btn.text.setText(`${SHOP[key].label} ${s.shop[key]}  ·  ${SHOP[key].effect}\n${formatNum(cost)} Essence`);
+            btn.box.setAlpha(s.essence >= cost ? 1 : 0.5);
+        }
+        const armed = this.time.now < this.shuffleArmed;
+        this.shuffleBtn.text.setText(
+            !canShuffle(s) ? 'Shuffle unlocks at stage 25'
+                : armed ? 'Tap again to Shuffle (resets this run)'
+                : `Shuffle: +${essenceGain(s)} Essence`,
+        );
+        this.shuffleBtn.box.setAlpha(canShuffle(s) ? 1 : 0.4);
+    }
+
+    private onShuffle() {
+        if (!canShuffle(this.state)) {
+            sfx.deny();
+            return;
+        }
+        if (this.time.now >= this.shuffleArmed) {
+            this.shuffleArmed = this.time.now + 3000;
+            this.refreshShop();
+            return;
+        }
+        this.shuffleArmed = 0;
+        const gain = shuffle(this.state);
+        persistGame(this.state);
+        this.layoutBoard();
+        this.refreshShop();
+        sfx.fanfare();
+        this.cameras.main.flash(400, 255, 194, 74);
+        this.sparks(WIDTH / 2, 640, GOLD, 40);
+        this.toast(`Shuffled! +${gain} Essence. Spend it in the shop.`, 3500);
     }
 
     private burst(slot: number, color: number) {
@@ -374,7 +514,7 @@ export class Board extends Scene {
         const t = this.add.text(WIDTH / 2, 180, text, {
             fontFamily: FONT, fontSize: '22px', color: FG, backgroundColor: '#2e3344', padding: { x: 16, y: 10 },
             align: 'center', wordWrap: { width: 620 },
-        }).setOrigin(0.5).setDepth(30);
+        }).setOrigin(0.5).setDepth(60);
         this.tweens.add({ targets: t, alpha: 0, delay: ms, duration: 400, onComplete: () => t.destroy() });
     }
 }

@@ -3,6 +3,11 @@ import { describe, it } from 'node:test';
 import { BOSS_SECONDS, KILLS_PER_STAGE, OFFLINE_CAP_SECONDS, POWER_TILE } from './constants.ts';
 import {
     UNLOCKS,
+    buyShop,
+    essenceGain,
+    goals,
+    killGold,
+    shuffle,
     applyOffline,
     boardCols,
     buyUpgrade,
@@ -240,5 +245,51 @@ describe('save migration', () => {
         const s = deserialize(JSON.stringify({ v: 1, gold: 5, stage: 2, kills: 0, board, savedAt: 0 }));
         assert.equal(s?.board[6], 3);
         assert.equal(s?.upgrades.tap, 0);
+    });
+});
+
+describe('shuffle', () => {
+    it('locked before stage 25, pays more Essence the deeper you go', () => {
+        assert.equal(shuffle(atStage(24)), 0);
+        assert.equal(essenceGain(atStage(25)), 3);
+        assert.ok(essenceGain(atStage(30)) > essenceGain(atStage(25)));
+    });
+    it('resets the run but keeps Essence, shop and records', () => {
+        const s = atStage(30);
+        s.bestStage = 30;
+        s.gold = 1e9;
+        s.board[0] = 6;
+        s.upgrades.tap = 4;
+        s.shop.might = 1;
+        const gain = shuffle(s);
+        assert.ok(gain > 0);
+        assert.deepEqual([s.stage, s.gold, s.board[0], s.upgrades.tap], [1, 10, 0, 0]);
+        assert.deepEqual([s.essence, s.shuffles, s.bestStage, s.shop.might], [gain, 1, 30, 1]);
+    });
+    it('shop boosts damage, gold and summon tier', () => {
+        const s = createGame(0);
+        s.essence = 100;
+        const tap1 = tapDamage(s);
+        const gold1 = killGold(s);
+        assert.ok(buyShop(s, 'might'));
+        assert.ok(buyShop(s, 'fortune'));
+        assert.ok(buyShop(s, 'headstart'));
+        assert.equal(tapDamage(s), tap1 * 1.5);
+        assert.ok(killGold(s) > gold1);
+        s.gold = 1e6;
+        assert.equal(s.board[summon(s, 1, never)[0]], 2);
+        assert.equal(s.essence, 100 - 1 - 1 - 10);
+        s.essence = 0;
+        assert.equal(buyShop(s, 'might'), false);
+    });
+    it('goal ladder shows three goals and ends with Shuffle', () => {
+        assert.equal(goals(createGame(0)).length, 3);
+        const late = goals(atStage(26));
+        assert.equal(late.length, 1);
+        assert.match(late[0].label, /Shuffle now/);
+    });
+    it('v2 saves load with an empty shop', () => {
+        const s = deserialize(JSON.stringify({ v: 2, ...createGame(0), shop: undefined, essence: undefined }));
+        assert.deepEqual(s?.shop, { might: 0, fortune: 0, headstart: 0 });
     });
 });

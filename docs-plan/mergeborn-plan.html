@@ -358,7 +358,7 @@ footer { color: var(--muted); font-size: 0.85rem; }
         <div><span class="k">Summon cost</span>10 × 1.15^summons  (resets on Shuffle)</div>
         <div><span class="k">Enemy HP</span>20 × 1.18^stage   boss = ×8 HP, 30 s</div>
         <div><span class="k">Tap damage</span>1 + 5% of board DPS</div>
-        <div><span class="k">Essence</span>floor(sqrt(maxGold / 1e6))</div>
+        <div><span class="k">Essence</span>floor(((stage − 20) / 2.5)^1.6)</div>
         <div><span class="k">Big numbers</span>mantissa + exponent past 1e300 (Era II+)</div>
       </div>
     </div>
@@ -373,8 +373,8 @@ footer { color: var(--muted); font-size: 0.85rem; }
       <div class="phase done"><div class="ph"><span>Phase 0</span><span class="st">done</span></div><h3>Plan</h3><p>This page and PLAN.md.</p></div>
       <div class="phase done"><div class="ph"><span>Phase 1</span><span class="st">done</span></div><h3>Core sim</h3><p>Tap, summon, merge, auto-battle, save/load, tests, board scene.</p></div>
       <div class="phase done"><div class="ph"><span>Phase 2</span><span class="st">done</span></div><h3>Bosses &amp; tracks</h3><p>Stages, system stages 1–2, offline progress.</p></div>
-      <div class="phase now"><div class="ph"><span>Phase 3</span><span class="st">next</span></div><h3>Shuffle</h3><p>Essence shop, goal ladder, shake, sound, particles.</p></div>
-      <div class="phase"><div class="ph"><span>Phase 4</span><span></span></div><h3>Ascend + Codex</h3><p>Elements, synergies, card skills.</p></div>
+      <div class="phase done"><div class="ph"><span>Phase 3</span><span class="st">done</span></div><h3>Shuffle</h3><p>Essence shop, goal ladder, shake, sound, particles.</p></div>
+      <div class="phase now"><div class="ph"><span>Phase 4</span><span class="st">next</span></div><h3>Ascend + Codex</h3><p>Elements, synergies, card skills.</p></div>
       <div class="phase"><div class="ph"><span>Phase 5</span><span></span></div><h3>Era + Revolution</h3><p>Rule mutators, automation, challenges.</p></div>
       <div class="phase"><div class="ph"><span>Phase 6</span><span></span></div><h3>Balance</h3><p>Headless bot plays the game and checks pacing targets.</p></div>
     </div>

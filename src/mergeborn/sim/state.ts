@@ -25,6 +25,10 @@ import {
     POWER_TILE_MULT,
     REGEN_PER_SEC,
     SAVE_VERSION,
+    SHUFFLE_STAGE,
+    ESSENCE_POW,
+    ESSENCE_SCALE,
+    ESSENCE_OFFSET,
     SHIELD_MULT,
     SPLIT_HP,
     STARTING_GOLD,
@@ -36,6 +40,7 @@ import {
 
 export type UpgradeKey = 'tap' | 'summon' | 'merge' | 'battle';
 export type UnlockKey = 'combo' | 'multi' | 'bounty' | 'traits' | 'board5';
+export type ShopKey = 'might' | 'fortune' | 'headstart';
 export type Trait = 'none' | 'shield' | 'regen' | 'split';
 
 export interface GameState {
@@ -55,6 +60,11 @@ export interface GameState {
     /** Card tier per slot (5×5, stride 5); 0 = empty. */
     board: number[];
     savedAt: number;
+    /** Layer 1 (Shuffle): kept across Shuffles. */
+    essence: number;
+    shuffles: number;
+    bestStage: number;
+    shop: Record<ShopKey, number>;
 }
 
 export interface Kill {
@@ -86,6 +96,13 @@ export const UPGRADES: Record<UpgradeKey, { label: string; base: number; needs?:
     merge: { label: 'Merge bounty', base: 60, needs: 'bounty' },
 };
 
+/** Essence shop: permanent boosts bought with Essence. */
+export const SHOP: Record<ShopKey, { label: string; effect: string; base: number; rate: number }> = {
+    might: { label: 'Might', effect: 'All damage ×1.5', base: 1, rate: 2.5 },
+    fortune: { label: 'Fortune', effect: 'All gold ×1.25', base: 1, rate: 2.5 },
+    headstart: { label: 'Headstart', effect: 'Summons +1 tier', base: 10, rate: 6 },
+};
+
 export type Rng = () => number;
 
 export function createGame(now = Date.now()): GameState {
@@ -103,6 +120,10 @@ export function createGame(now = Date.now()): GameState {
         upgrades: { tap: 0, summon: 0, merge: 0, battle: 0 },
         board: new Array(BOARD_SIZE).fill(0),
         savedAt: now,
+        essence: 0,
+        shuffles: 0,
+        bestStage: 1,
+        shop: { might: 0, fortune: 0, headstart: 0 },
     };
     spawnEnemy(state);
     return state;
@@ -118,10 +139,12 @@ export const freeSlot = (s: GameState) => s.board.findIndex((t, i) => t === 0 &&
 export const cardPower = (tier: number) => (tier > 0 ? MERGE_POWER_RATE ** (tier - 1) : 0);
 export const slotPower = (s: GameState, slot: number) =>
     cardPower(s.board[slot]) * (slot === POWER_TILE && has(s, 'board5') ? POWER_TILE_MULT : 1);
+export const mightMult = (s: GameState) => 1.5 ** s.shop.might;
+export const fortuneMult = (s: GameState) => 1.25 ** s.shop.fortune;
 export const boardDps = (s: GameState) =>
-    s.board.reduce((sum, _t, i) => sum + slotPower(s, i), 0) * (1 + 0.1 * s.upgrades.battle);
+    s.board.reduce((sum, _t, i) => sum + slotPower(s, i), 0) * (1 + 0.1 * s.upgrades.battle) * mightMult(s);
 export const comboMult = (s: GameState) => (has(s, 'combo') ? 1 + COMBO_STEP * Math.max(0, s.combo - 1) : 1);
-export const tapDamage = (s: GameState) => (1 + s.upgrades.tap) * comboMult(s) + TAP_DPS_SHARE * boardDps(s);
+export const tapDamage = (s: GameState) => (1 + s.upgrades.tap) * comboMult(s) * mightMult(s) + TAP_DPS_SHARE * boardDps(s);
 export const summonCost = (s: GameState, count = 1) => {
     let total = 0;
     for (let i = 0; i < count; i++) total += Math.ceil(SUMMON_BASE_COST * SUMMON_COST_RATE ** (s.summons + i));
@@ -139,7 +162,7 @@ export const isBoss = (s: GameState) => s.kills === KILLS_PER_STAGE - 1;
 export const enemyMaxHp = (s: GameState) =>
     ENEMY_BASE_HP * ENEMY_HP_RATE ** (s.stage - 1) * (isBoss(s) ? BOSS_HP_MULT : 1);
 export const killGold = (s: GameState) =>
-    Math.ceil(KILL_BASE_GOLD * KILL_GOLD_RATE ** (s.stage - 1)) * (isBoss(s) ? BOSS_GOLD_MULT : 1);
+    Math.ceil(KILL_BASE_GOLD * KILL_GOLD_RATE ** (s.stage - 1) * fortuneMult(s)) * (isBoss(s) ? BOSS_GOLD_MULT : 1);
 const TRAIT_CYCLE: Trait[] = ['none', 'shield', 'regen', 'split'];
 export const enemyTrait = (s: GameState): Trait =>
     has(s, 'traits') ? TRAIT_CYCLE[(s.stage + s.kills) % TRAIT_CYCLE.length] : 'none';
@@ -170,6 +193,7 @@ export function damageEnemy(s: GameState, amount: number): Kill | null {
     addGold(s, kill.gold);
     if (kill.boss) {
         s.stage += 1;
+        s.bestStage = Math.max(s.bestStage, s.stage);
         s.kills = 0;
         kill.unlock = UNLOCKS.find((u) => u.stage === s.stage);
     } else {
@@ -197,7 +221,7 @@ export function summon(s: GameState, count = 1, rng: Rng = Math.random): number[
         s.gold -= cost;
         s.summons += 1;
         const pity = has(s, 'multi') && s.summons % PITY_EVERY === 0;
-        s.board[slot] = pity || rng() < summonLuck(s) ? 2 : 1;
+        s.board[slot] = 1 + s.shop.headstart + (pity || rng() < summonLuck(s) ? 1 : 0);
         slots.push(slot);
     }
     return slots;
@@ -228,7 +252,7 @@ export function moveCard(s: GameState, from: number, to: number, rng: Rng = Math
 }
 
 export const mergeGold = (s: GameState, tier: number) =>
-    Math.ceil(KILL_BASE_GOLD * KILL_GOLD_RATE ** (s.stage - 1) * MERGE_BOUNTY * tier * (1 + 0.25 * s.upgrades.merge));
+    Math.ceil(KILL_BASE_GOLD * KILL_GOLD_RATE ** (s.stage - 1) * MERGE_BOUNTY * tier * (1 + 0.25 * s.upgrades.merge) * fortuneMult(s));
 
 export function buyUpgrade(s: GameState, key: UpgradeKey): boolean {
     const cost = upgradeCost(s, key);
@@ -272,7 +296,7 @@ export function applyOffline(s: GameState, now = Date.now()): { gold: number; se
     const dps = boardDps(s);
     const hp = ENEMY_BASE_HP * ENEMY_HP_RATE ** (s.stage - 1);
     const perKill = Math.ceil(KILL_BASE_GOLD * KILL_GOLD_RATE ** (s.stage - 1));
-    const gold = Math.floor((dps / hp) * perKill * seconds * OFFLINE_RATE);
+    const gold = Math.floor((dps / hp) * perKill * fortuneMult(s) * seconds * OFFLINE_RATE);
     addGold(s, gold);
     s.savedAt = now;
     return { gold, seconds };
@@ -293,12 +317,64 @@ export function deserialize(raw: string | null): GameState | null {
             const board = new Array(BOARD_SIZE).fill(0);
             data.board.forEach((t: number, i: number) => (board[Math.floor(i / 4) * BOARD_STRIDE + (i % 4)] = t));
             data.board = board;
-        } else if (v !== SAVE_VERSION || !Array.isArray(data.board) || data.board.length !== BOARD_SIZE) {
+        } else if ((v !== 2 && v !== SAVE_VERSION) || !Array.isArray(data.board) || data.board.length !== BOARD_SIZE) {
             return null;
         }
         const base = createGame(data.savedAt);
-        return { ...base, ...data, upgrades: { ...base.upgrades, ...data.upgrades } };
+        return { ...base, ...data, upgrades: { ...base.upgrades, ...data.upgrades }, shop: { ...base.shop, ...data.shop } };
     } catch {
         return null;
     }
+}
+
+export const canShuffle = (s: GameState) => s.stage >= SHUFFLE_STAGE;
+export const essenceGain = (s: GameState) =>
+    canShuffle(s) ? Math.floor(((s.stage - ESSENCE_OFFSET) / ESSENCE_SCALE) ** ESSENCE_POW) : 0;
+
+/** Layer 1 reset: trade the run for Essence. Keeps Essence, shop, and records. */
+export function shuffle(s: GameState): number {
+    const gain = essenceGain(s);
+    if (!gain) {
+        return 0;
+    }
+    const fresh = createGame(s.savedAt);
+    Object.assign(s, {
+        ...fresh,
+        essence: s.essence + gain,
+        shuffles: s.shuffles + 1,
+        bestStage: s.bestStage,
+        shop: s.shop,
+    });
+    return gain;
+}
+
+export const shopCost = (s: GameState, key: ShopKey) => SHOP[key].base * SHOP[key].rate ** s.shop[key];
+
+export function buyShop(s: GameState, key: ShopKey): boolean {
+    const cost = shopCost(s, key);
+    if (s.essence < cost) {
+        return false;
+    }
+    s.essence -= cost;
+    s.shop[key] += 1;
+    return true;
+}
+
+export interface Goal {
+    label: string;
+    progress: number;
+}
+
+/** The next three goals for the goal ladder: upcoming unlocks, then Shuffle. */
+export function goals(s: GameState): Goal[] {
+    const list: Goal[] = UNLOCKS.filter((u) => s.stage < u.stage).map((u) => ({
+        label: `Stage ${u.stage}: ${u.label.split(':')[0]}`,
+        progress: s.stage / u.stage,
+    }));
+    list.push(
+        canShuffle(s)
+            ? { label: `Shuffle now: +${essenceGain(s)} Essence`, progress: 1 }
+            : { label: `Stage ${SHUFFLE_STAGE}: Shuffle`, progress: s.stage / SHUFFLE_STAGE },
+    );
+    return list.slice(0, 3);
 }

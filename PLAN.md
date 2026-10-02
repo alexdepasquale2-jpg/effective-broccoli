@@ -27,7 +27,7 @@ Rule: something new unlocks every 30–90 s early on, every 5–10 min mid-game,
 ## Reset layers (Revolution Idle style)
 | Layer | Unlocks at | Resets | Currency | Permanent rewards / rule change |
 |---|---|---|---|---|
-| L1 **Shuffle** | Stage 25 boss | Gold, board, stage | Essence = floor(sqrt(maxGold/1e6)) | Essence shop: start tier, summon odds, tap mult. Unlocks Tap Stage 2 |
+| L1 **Shuffle** | Stage 25 boss | Gold, board, stage | Essence = floor(((stage−20)/2.5)^1.6) | Essence shop: start tier, summon odds, tap mult. Unlocks Tap Stage 2 |
 | L2 **Ascend** | 10 Shuffles or 1e4 Essence | + Essence, Essence shop | Sigils | New **Element** joins the pool (Fire→Water→Earth→Air→Light→Void). Each one adds a counter mechanic |
 | L3 **Codex** | Collect every card up to tier 12 | Collection progress | Pages | Codex gives permanent "card skills" (on-merge, on-death, aura). Merge Stage 3 |
 | L4 **Era** | Final boss of each Era | Everything below | Era Shards | **Rules mutate**: Era 2 = cards decay, Era 3 = board grid hexes, Era 4 = enemies merge too, Era 5 = you can summon enemy cards |
@@ -59,6 +59,6 @@ Each layer also automates the one below (auto-Shuffle at X Essence, auto-Ascend�
 6. Balance pass: headless sim script that plays optimally and prints time-to-each-unlock vs the pacing targets.
 
 ## Status
-Done: plan, visual plan, Phase 1 (core loop), Phase 2 (boss unlocks at stages 3/6/10/14/18, 4 gold upgrades, traits, 5×5 board).
-Next: Phase 3 (Shuffle + Essence shop, goal ladder, juice). Progress walls at ~stage 25–30 by design until Shuffle exists.
-Blockers: none.
+Done: Phases 1–3. Phase 3 = Shuffle at stage 25, Essence shop (Might/Fortune/Headstart), goal ladder, WebAudio sfx, particles.
+Next: Phase 4 (Ascend + elements/synergies, Codex + card skills).
+Open balance issue (Phase 6): Shuffle runs stay ~8 min instead of shrinking toward 90 s.

@@ -32,7 +32,7 @@ export const OFFLINE_CAP_SECONDS = 8 * 60 * 60;
 /** Offline earns a fraction of online income. */
 export const OFFLINE_RATE = 0.5;
 export const SAVE_KEY = 'mergeborn-v1';
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** Tap combo: taps within this window chain; each link adds COMBO_STEP to the multiplier. */
 export const COMBO_WINDOW = 1;
@@ -55,3 +55,9 @@ export const REGEN_PER_SEC = 0.03;
 export const SPLIT_HP = 0.5;
 
 export const UPGRADE_COST_RATE = 1.5;
+
+/** Shuffle (layer 1 reset) opens at this stage. Essence = floor(((stage - OFFSET) / SCALE)^POW): polynomial, so it can't outrun exponential shop costs. */
+export const SHUFFLE_STAGE = 25;
+export const ESSENCE_OFFSET = 20;
+export const ESSENCE_SCALE = 2.5;
+export const ESSENCE_POW = 1.6;
