@@ -21,6 +21,9 @@ import {
     canShuffle,
     essenceGain,
     goals,
+    ascend,
+    canAscend,
+    enemyElement,
     shopCost,
     shuffle,
     summon,
@@ -30,10 +33,14 @@ import {
     tick,
     upgradeCost,
 } from '../sim/state.ts';
+import { ELEMENTS, HEROES, heroById } from '../sim/heroes.ts';
 import type { GameState, Kill, ShopKey, Trait, UpgradeKey } from '../sim/state.ts';
 
 /** Rarity ladder, same as the visual plan. Tiers past 6 cycle. */
 const TIER_COLORS = [0xa7adbf, 0x4fd18b, 0x4fa3ff, 0xb07cff, 0xffc24a, 0xff5a8a];
+/** Element colours by id (0 = neutral), matching the hero card frames. */
+const ELEM_COLORS = [0x2e3344, 0xff7a2a, 0x4fa3ff, 0x9ccc65, 0xb8e6ff, 0xffe08a, 0xb07cff];
+const ELEM_GLYPH = ['', '🔥', '💧', '🪨', '🌪', '☀', '◐'];
 const tierColor = (tier: number) => TIER_COLORS[(tier - 1) % TIER_COLORS.length];
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -107,6 +114,8 @@ export class Board extends Scene {
     private shopBtns = new Map<ShopKey, Button>();
     private shuffleBtn: Button;
     private shuffleArmed = 0;
+    private ascendBtn: Button;
+    private ascendArmed = 0;
 
     constructor() {
         super('Board');
@@ -188,7 +197,8 @@ export class Board extends Scene {
             this.slots.push(this.add.rectangle(0, 0, 10, 10, BG));
             const face = this.add.rectangle(0, 0, 10, 10, CARD);
             const label = this.add.text(0, 0, '', { fontFamily: DISPLAY, fontSize: '32px', color: FG }).setOrigin(0.5);
-            const card = this.add.container(0, 0, [face, label]);
+            const badge = this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '16px', color: FG }).setOrigin(0, 0);
+            const card = this.add.container(0, 0, [face, label, badge]);
             card.setData('slot', i);
             this.cards.push(card);
         }
@@ -227,7 +237,8 @@ export class Board extends Scene {
             this.slots[i].setVisible(open).setPosition(x, y).setSize(this.cell, this.cell);
             this.slots[i].setStrokeStyle(tile ? 4 : 2, tile ? GOLD : LINE);
             const card = this.cards[i];
-            const [face, label] = card.list as [GameObjects.Rectangle, GameObjects.Text];
+            const [face, label, badge] = card.list as [GameObjects.Rectangle, GameObjects.Text, GameObjects.Text];
+            badge.setPosition(-(this.cell - 10) / 2 + 6, -(this.cell - 10) / 2 + 4);
             face.setSize(this.cell - 10, this.cell - 10);
             label.setFontSize(Math.round(this.cell * 0.26));
             card.setPosition(x, y).setSize(this.cell - 10, this.cell - 10);
@@ -299,10 +310,16 @@ export class Board extends Scene {
         this.state.board.forEach((tier, i) => {
             const card = this.cards[i];
             card.setVisible(tier > 0 && isOpen(this.state, i));
+            const chi = this.state.chi[i];
+            this.slots[i].setFillStyle(chi ? ELEM_COLORS[chi] : BG, chi ? 0.14 : 1);
             if (tier > 0) {
-                const [face, label] = card.list as [GameObjects.Rectangle, GameObjects.Text];
-                face.setStrokeStyle(4, tierColor(tier));
-                label.setText(`T${tier}`).setColor(hex(tierColor(tier)));
+                const [face, label, badge] = card.list as [GameObjects.Rectangle, GameObjects.Text, GameObjects.Text];
+                const el = this.state.elem[i];
+                const hero = heroById(this.state.hero[i]);
+                face.setFillStyle(el ? ELEM_COLORS[el] : CARD, el ? 0.22 : 1).setStrokeStyle(hero ? 6 : 4, hero ? GOLD : tierColor(tier));
+                label.setText(hero ? `${hero.name.split(' ').pop()}\nT${tier}` : `T${tier}`).setColor(hex(tierColor(tier)));
+                label.setFontSize(Math.round(this.cell * (hero ? 0.16 : 0.26)));
+                badge.setText(ELEM_GLYPH[el] + (hero ? '★' : ''));
             }
         });
     }
@@ -333,9 +350,11 @@ export class Board extends Scene {
         const boss = isBoss(s);
         const max = enemyMaxHp(s);
         const trait = enemyTrait(s);
-        this.enemyLabel.setText(boss ? `BOSS\nStage ${s.stage}` : `Foe ${s.kills + 1}`);
+        const ee = enemyElement(s);
+        const eName = ee ? `\n${ELEM_GLYPH[ee]} ${ELEMENTS[ee - 1].toUpperCase()}` : '';
+        this.enemyLabel.setText((boss ? `BOSS\nStage ${s.stage}` : `Foe ${s.kills + 1}`) + eName);
         this.traitText.setText(TRAIT_TEXT[trait] + (trait === 'split' && s.split ? ' (split!)' : ''));
-        this.enemyFrame.setStrokeStyle(boss ? 8 : 4, boss ? GOLD : PINK);
+        this.enemyFrame.setStrokeStyle(boss ? 8 : 4, boss ? GOLD : ee ? ELEM_COLORS[ee] : PINK);
         this.hpBar.width = 400 * Math.max(0, s.enemyHp / max);
         this.hpText.setText(`${formatNum(Math.max(0, s.enemyHp))} / ${formatNum(max)} HP`);
         this.timerText.setText(boss ? `${Math.ceil(s.bossTimer)}s` : '');
@@ -454,16 +473,27 @@ export class Board extends Scene {
             this.shopBtns.set(key, btn);
             items.push(btn.box, btn.text);
         });
-        this.shuffleBtn = this.button(WIDTH / 2, 800, 560, 100, GOLD, '22px', () => this.onShuffle());
-        const close = this.button(WIDTH / 2, 940, 240, 64, LINE, '20px', () => this.shopPanel.setVisible(false));
+        this.shuffleBtn = this.button(WIDTH / 2, 775, 560, 86, GOLD, '22px', () => this.onShuffle());
+        this.ascendBtn = this.button(WIDTH / 2, 875, 560, 86, 0xb07cff, '20px', () => this.onAscend());
+        const close = this.button(WIDTH / 2, 970, 240, 56, LINE, '20px', () => this.shopPanel.setVisible(false));
         close.text.setText('Close').setColor(FG);
-        items.push(this.shuffleBtn.box, this.shuffleBtn.text, close.box, close.text);
+        items.push(this.shuffleBtn.box, this.shuffleBtn.text, this.ascendBtn.box, this.ascendBtn.text, close.box, close.text);
         this.shopPanel = this.add.container(0, 0, items).setDepth(50).setVisible(false);
     }
 
     private refreshShop() {
         const s = this.state;
-        this.shopTitle.setText(`Essence shop\n${formatNum(s.essence)} Essence · ${s.shuffles} shuffles`);
+        this.shopTitle.setText(
+            `Essence shop\n${formatNum(s.essence)} Essence · ${s.shuffles} shuffles · heroes ${s.heroes.length}/${HEROES.length}`,
+        );
+        const nextEl = ELEMENTS[s.ascends];
+        const aArmed = this.time.now < this.ascendArmed;
+        this.ascendBtn.text.setText(
+            !canAscend(s) ? 'Ascend unlocks after your first Shuffle'
+                : aArmed ? 'Tap again: wipes Essence + shop'
+                : `Ascend ${s.ascends + 1}: ${nextEl ? `+${nextEl} element, ` : ''}+1 hero`,
+        );
+        this.ascendBtn.box.setAlpha(canAscend(s) ? 1 : 0.4);
         for (const [key, btn] of this.shopBtns) {
             const cost = shopCost(s, key);
             btn.text.setText(`${SHOP[key].label} ${s.shop[key]}  ·  ${SHOP[key].effect}\n${formatNum(cost)} Essence`);
@@ -476,6 +506,28 @@ export class Board extends Scene {
                 : `Shuffle: +${essenceGain(s)} Essence`,
         );
         this.shuffleBtn.box.setAlpha(canShuffle(s) ? 1 : 0.4);
+    }
+
+    private onAscend() {
+        if (!canAscend(this.state)) {
+            sfx.deny();
+            return;
+        }
+        if (this.time.now >= this.ascendArmed) {
+            this.ascendArmed = this.time.now + 3000;
+            this.refreshShop();
+            return;
+        }
+        this.ascendArmed = 0;
+        const hero = heroById(ascend(this.state) ?? '');
+        persistGame(this.state);
+        this.layoutBoard();
+        this.refreshShop();
+        sfx.fanfare();
+        this.cameras.main.flash(600, 176, 124, 255);
+        this.sparks(WIDTH / 2, 640, 0xb07cff, 60);
+        const el = ELEMENTS[this.state.ascends - 1];
+        this.toast(`Ascended!${el && this.state.ascends <= ELEMENTS.length ? ` ${el.toUpperCase()} chi flows.` : ''}` + (hero ? ` New hero: ${hero.name}. ${hero.skill}` : ''), 5000);
     }
 
     private onShuffle() {

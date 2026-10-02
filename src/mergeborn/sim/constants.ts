@@ -32,7 +32,7 @@ export const OFFLINE_CAP_SECONDS = 8 * 60 * 60;
 /** Offline earns a fraction of online income. */
 export const OFFLINE_RATE = 0.5;
 export const SAVE_KEY = 'mergeborn-v1';
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 /** Tap combo: taps within this window chain; each link adds COMBO_STEP to the multiplier. */
 export const COMBO_WINDOW = 1;
@@ -61,3 +61,6 @@ export const SHUFFLE_STAGE = 25;
 export const ESSENCE_OFFSET = 20;
 export const ESSENCE_SCALE = 2.5;
 export const ESSENCE_POW = 1.6;
+
+/** Ascend (layer 2): chance a summon is one of your unlocked heroes of the tile's element. */
+export const HERO_SUMMON_CHANCE = 0.04;

@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { BOSS_SECONDS, KILLS_PER_STAGE, OFFLINE_CAP_SECONDS, POWER_TILE } from './constants.ts';
+import { elementId } from './heroes.ts';
 import {
     UNLOCKS,
+    ascend,
+    canAscend,
+    enemyElement,
+    rollChi,
     buyShop,
     essenceGain,
     goals,
@@ -291,5 +296,102 @@ describe('shuffle', () => {
     it('v2 saves load with an empty shop', () => {
         const s = deserialize(JSON.stringify({ v: 2, ...createGame(0), shop: undefined, essence: undefined }));
         assert.deepEqual(s?.shop, { might: 0, fortune: 0, headstart: 0 });
+    });
+});
+
+describe('ascend and heroes', () => {
+    const ascended = (n: number) => {
+        const s = createGame(0);
+        s.ascends = n;
+        return s;
+    };
+    it('needs one Shuffle, wipes Essence and shop, adds an element and a hero', () => {
+        const s = createGame(0);
+        assert.equal(ascend(s), null);
+        s.shuffles = 1;
+        s.essence = 50;
+        s.shop.might = 3;
+        s.bestStage = 40;
+        assert.ok(canAscend(s));
+        const hero = ascend(s, () => 0);
+        assert.equal(hero, 'fire-bellows');
+        assert.deepEqual([s.ascends, s.essence, s.shop.might, s.shuffles, s.bestStage], [1, 0, 0, 0, 40]);
+        assert.deepEqual(s.heroes, ['fire-bellows']);
+        assert.ok(s.chi.every((c) => c === 0 || c === 1));
+    });
+    it('shuffle keeps heroes and re-rolls chi', () => {
+        const s = ascended(2);
+        s.heroes = ['smelter'];
+        s.stage = 30;
+        shuffle(s);
+        assert.deepEqual([s.ascends, s.heroes], [2, ['smelter']]);
+        assert.ok(s.chi.some((c) => c > 0));
+    });
+    it('summons take the tile chi; only same element or neutral merge', () => {
+        const s = ascended(2);
+        s.gold = 1e9;
+        s.chi.fill(1);
+        s.chi[1] = 2;
+        summon(s, 2, never);
+        assert.deepEqual([s.elem[0], s.elem[1]], [1, 2]);
+        assert.equal(moveCard(s, 0, 1), 'swap');
+        s.chi[2] = 0;
+        summon(s, 1, never);
+        assert.equal(moveCard(s, 2, 1), 'merge');
+        assert.deepEqual([s.board[1], s.elem[1]], [2, 1]);
+    });
+    it('counter wheel: water ×2 vs fire, ×0.5 vs air', () => {
+        const s = ascended(4);
+        s.board[0] = 1;
+        s.elem[0] = elementId('water');
+        s.stage = 1;
+        s.kills = 0; // enemy element = (3 + 0) % 4 + 1 = 4 = air
+        assert.equal(enemyElement(s), elementId('air'));
+        assert.equal(boardDps(s), 0.5);
+        s.kills = 1; // (3 + 1) % 4 + 1 = 1 = fire
+        assert.equal(enemyElement(s), elementId('fire'));
+        assert.equal(boardDps(s), 2);
+    });
+    it('heroes roll from the tile element and keep their skill through merges', () => {
+        const s = ascended(1);
+        s.heroes = ['fire-bellows'];
+        s.gold = 1e9;
+        s.chi.fill(1);
+        summon(s, 1, always);
+        assert.equal(s.hero[0], 'fire-bellows');
+        s.board[1] = 1;
+        s.elem[1] = 1;
+        assert.equal(moveCard(s, 1, 0, never), 'merge');
+        assert.equal(s.hero[0], 'fire-bellows');
+        s.board[1] = 1; // neighbour of the bellows
+        assert.equal(boardDps(s), 2.5 + 1.25);
+    });
+    it('hero skills: duelist, turtle, siren, smuggler, bellringer', () => {
+        const s = ascended(2);
+        s.board[0] = 1;
+        s.enemyHp = 1e9;
+        s.hero[0] = 'ifrit-duelist';
+        for (let i = 0; i < 9; i++) tap(s);
+        const before = s.enemyHp;
+        tap(s);
+        assert.ok(Math.abs(before - s.enemyHp - 10 * tapDamage(s)) < 1e-6);
+        s.hero[0] = 'rain-smuggler';
+        assert.equal(summonCost(s), Math.ceil(10 * 0.85));
+        s.hero[0] = 'magma-turtle';
+        s.kills = KILLS_PER_STAGE - 2;
+        s.enemyHp = 0.1;
+        tap(s);
+        assert.equal(s.bossTimer, BOSS_SECONDS + 5);
+        s.hero[0] = 'drowned-bellringer';
+        s.enemyHp = 0.1;
+        tap(s);
+        // Boss kill queues 3 weakened foes; the next spawn already used one.
+        assert.equal(s.weakened, 2);
+        assert.ok(Math.abs(s.enemyHp - enemyMaxHp(s) * 0.7) < 1e-9);
+    });
+    it('rollChi stays neutral before any Ascend', () => {
+        const s = createGame(0);
+        rollChi(s, always);
+        assert.ok(s.chi.every((c) => c === 0));
     });
 });

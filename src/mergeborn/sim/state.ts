@@ -36,7 +36,9 @@ import {
     SUMMON_COST_RATE,
     TAP_DPS_SHARE,
     UPGRADE_COST_RATE,
+    HERO_SUMMON_CHANCE,
 } from './constants.ts';
+import { ELEMENTS, HEROES, counterMult, elementId, heroById } from './heroes.ts';
 
 export type UpgradeKey = 'tap' | 'summon' | 'merge' | 'battle';
 export type UnlockKey = 'combo' | 'multi' | 'bounty' | 'traits' | 'board5';
@@ -65,6 +67,17 @@ export interface GameState {
     shuffles: number;
     bestStage: number;
     shop: Record<ShopKey, number>;
+    /** Per-slot card element id (0 = neutral) and hero id ('' = plain card). */
+    elem: number[];
+    hero: string[];
+    /** Per-slot latent chi: element id stamped on cards summoned there. Re-rolled each run. */
+    chi: number[];
+    taps: number;
+    /** Bellringer: foes left to spawn weakened. */
+    weakened: number;
+    /** Layer 2 (Ascend): kept across Ascends. */
+    ascends: number;
+    heroes: string[];
 }
 
 export interface Kill {
@@ -124,6 +137,13 @@ export function createGame(now = Date.now()): GameState {
         shuffles: 0,
         bestStage: 1,
         shop: { might: 0, fortune: 0, headstart: 0 },
+        elem: new Array(BOARD_SIZE).fill(0),
+        hero: new Array(BOARD_SIZE).fill(''),
+        chi: new Array(BOARD_SIZE).fill(0),
+        taps: 0,
+        weakened: 0,
+        ascends: 0,
+        heroes: [],
     };
     spawnEnemy(state);
     return state;
@@ -136,18 +156,47 @@ export const isOpen = (s: GameState, slot: number) =>
     slot % BOARD_STRIDE < boardCols(s) && Math.floor(slot / BOARD_STRIDE) < boardCols(s);
 export const freeSlot = (s: GameState) => s.board.findIndex((t, i) => t === 0 && isOpen(s, i));
 
+/** Elements unlocked so far: one per Ascend. */
+export const unlockedElements = (s: GameState) => Math.min(s.ascends, ELEMENTS.length);
+export const heroOnBoard = (s: GameState, id: string) => s.hero.some((x, i) => x === id && s.board[i] > 0);
+const neighbours = (slot: number) => {
+    const c = slot % BOARD_STRIDE;
+    return [slot - BOARD_STRIDE, slot + BOARD_STRIDE, c > 0 ? slot - 1 : -1, c < BOARD_STRIDE - 1 ? slot + 1 : -1].filter(
+        (n) => n >= 0 && n < BOARD_SIZE,
+    );
+};
+const nextTo = (s: GameState, slot: number, id: string) => neighbours(slot).some((n) => s.hero[n] === id && s.board[n] > 0);
+
+/** Enemy element: cycles through unlocked elements; neutral before the first Ascend. */
+export const enemyElement = (s: GameState) => {
+    const n = unlockedElements(s);
+    return n ? ((s.stage * 3 + s.kills) % n) + 1 : 0;
+};
+
 export const cardPower = (tier: number) => (tier > 0 ? MERGE_POWER_RATE ** (tier - 1) : 0);
 export const slotPower = (s: GameState, slot: number) =>
-    cardPower(s.board[slot]) * (slot === POWER_TILE && has(s, 'board5') ? POWER_TILE_MULT : 1);
+    cardPower(s.board[slot]) *
+    (slot === POWER_TILE && has(s, 'board5') ? POWER_TILE_MULT : 1) *
+    (nextTo(s, slot, 'fire-bellows') ? 1.25 : 1) *
+    counterMult(s.elem[slot], enemyElement(s));
 export const mightMult = (s: GameState) => 1.5 ** s.shop.might;
 export const fortuneMult = (s: GameState) => 1.25 ** s.shop.fortune;
+/** Whole-board multiplier from hunter heroes against the current enemy's element. */
+const huntMult = (s: GameState) => {
+    const e = enemyElement(s);
+    let m = 1;
+    if (e === elementId('earth') && heroOnBoard(s, 'wildfire-hound')) m *= 1.5;
+    if (e === elementId('fire') && heroOnBoard(s, 'abyss-diver')) m *= 1.5;
+    return m;
+};
 export const boardDps = (s: GameState) =>
-    s.board.reduce((sum, _t, i) => sum + slotPower(s, i), 0) * (1 + 0.1 * s.upgrades.battle) * mightMult(s);
+    s.board.reduce((sum, _t, i) => sum + slotPower(s, i), 0) * (1 + 0.1 * s.upgrades.battle) * mightMult(s) * huntMult(s);
 export const comboMult = (s: GameState) => (has(s, 'combo') ? 1 + COMBO_STEP * Math.max(0, s.combo - 1) : 1);
 export const tapDamage = (s: GameState) => (1 + s.upgrades.tap) * comboMult(s) * mightMult(s) + TAP_DPS_SHARE * boardDps(s);
 export const summonCost = (s: GameState, count = 1) => {
     let total = 0;
-    for (let i = 0; i < count; i++) total += Math.ceil(SUMMON_BASE_COST * SUMMON_COST_RATE ** (s.summons + i));
+    const discount = heroOnBoard(s, 'rain-smuggler') ? 0.85 : 1;
+    for (let i = 0; i < count; i++) total += Math.ceil(SUMMON_BASE_COST * SUMMON_COST_RATE ** (s.summons + i) * discount);
     return total;
 };
 export const summonLuck = (s: GameState) => Math.min(LUCK_CAP, LUCK_PER_LEVEL * s.upgrades.summon);
@@ -169,8 +218,12 @@ export const enemyTrait = (s: GameState): Trait =>
 
 function spawnEnemy(s: GameState) {
     s.enemyHp = enemyMaxHp(s);
+    if (s.weakened > 0) {
+        s.enemyHp *= 0.7;
+        s.weakened -= 1;
+    }
     s.split = false;
-    s.bossTimer = isBoss(s) ? BOSS_SECONDS : 0;
+    s.bossTimer = isBoss(s) ? BOSS_SECONDS + (heroOnBoard(s, 'magma-turtle') ? 5 : 0) : 0;
 }
 
 function addGold(s: GameState, amount: number) {
@@ -196,6 +249,9 @@ export function damageEnemy(s: GameState, amount: number): Kill | null {
         s.bestStage = Math.max(s.bestStage, s.stage);
         s.kills = 0;
         kill.unlock = UNLOCKS.find((u) => u.stage === s.stage);
+        if (heroOnBoard(s, 'drowned-bellringer')) {
+            s.weakened = 3;
+        }
     } else {
         s.kills += 1;
     }
@@ -206,7 +262,9 @@ export function damageEnemy(s: GameState, amount: number): Kill | null {
 export function tap(s: GameState): Kill | null {
     s.combo = s.comboTimer > 0 ? Math.min(COMBO_CAP, s.combo + 1) : 1;
     s.comboTimer = COMBO_WINDOW;
-    return damageEnemy(s, tapDamage(s));
+    s.taps += 1;
+    const duel = heroOnBoard(s, 'ifrit-duelist') && s.taps % 10 === 0 ? 10 : 1;
+    return damageEnemy(s, tapDamage(s) * duel);
 }
 
 /** Summons up to `count` cards into free slots. Returns the filled slots. */
@@ -221,11 +279,35 @@ export function summon(s: GameState, count = 1, rng: Rng = Math.random): number[
         s.gold -= cost;
         s.summons += 1;
         const pity = has(s, 'multi') && s.summons % PITY_EVERY === 0;
-        s.board[slot] = 1 + s.shop.headstart + (pity || rng() < summonLuck(s) ? 1 : 0);
+        const tier = 1 + s.shop.headstart + (pity || rng() < summonLuck(s) ? 1 : 0);
+        placeCard(s, slot, tier, rng);
         slots.push(slot);
+        if (heroOnBoard(s, 'flare-sprite')) {
+            const roll = rng();
+            if (roll < 0.1) {
+                s.board[slot] = 0; // burned
+            } else if (roll < 0.35) {
+                const extra = freeSlot(s);
+                if (extra >= 0) {
+                    placeCard(s, extra, tier + 1, rng);
+                    slots.push(extra);
+                }
+            }
+        }
     }
     return slots;
 }
+/** Puts a card on a slot: it takes the tile's chi, and may roll as an unlocked hero of that element. */
+function placeCard(s: GameState, slot: number, tier: number, rng: Rng) {
+    s.board[slot] = tier;
+    s.elem[slot] = s.chi[slot];
+    s.hero[slot] = '';
+    const pool = s.heroes.filter((id) => elementId(heroById(id)!.element) === s.chi[slot]);
+    if (pool.length && rng() < HERO_SUMMON_CHANCE) {
+        s.hero[slot] = pool[Math.floor(rng() * pool.length) % pool.length];
+    }
+}
+
 export const multiSummonCount = (s: GameState) => (has(s, 'multi') ? MULTI_SUMMON : 1);
 
 export type MoveResult = 'merge' | 'move' | 'swap' | 'none';
@@ -237,17 +319,30 @@ export function moveCard(s: GameState, from: number, to: number, rng: Rng = Math
     if (from === to || !a || !isOpen(s, to)) {
         return 'none';
     }
-    if (a === b) {
+    const ea = s.elem[from];
+    const eb = s.elem[to];
+    if (a === b && (!ea || !eb || ea === eb)) {
         const lucky = has(s, 'bounty') && rng() < LUCKY_MERGE_CHANCE;
+        const smelt = s.hero[from] === 'smelter' && s.hero[to] === 'smelter';
+        const eel = nextTo(s, to, 'mirror-eel') || nextTo(s, from, 'mirror-eel');
         s.board[to] = a + (lucky ? 2 : 1);
+        s.elem[to] = eb || ea;
+        s.hero[to] = s.hero[to] || s.hero[from];
         s.board[from] = 0;
-        if (has(s, 'bounty')) {
-            addGold(s, mergeGold(s, s.board[to]));
+        s.hero[from] = '';
+        if (eel && rng() < 0.1) {
+            s.board[from] = 1;
+            s.elem[from] = s.elem[to];
+        }
+        if (has(s, 'bounty') || smelt) {
+            addGold(s, mergeGold(s, s.board[to]) * (smelt ? 3 : 1));
         }
         return 'merge';
     }
-    s.board[to] = a;
-    s.board[from] = b;
+    const swap = <T,>(arr: T[]) => ([arr[from], arr[to]] = [arr[to], arr[from]]);
+    swap(s.board);
+    swap(s.elem);
+    swap(s.hero);
     return b ? 'swap' : 'move';
 }
 
@@ -283,7 +378,8 @@ export function tick(s: GameState, dt: number): Kill[] {
     if (trait === 'regen') {
         s.enemyHp = Math.min(enemyMaxHp(s), s.enemyHp + enemyMaxHp(s) * REGEN_PER_SEC * dt);
     }
-    const kill = damageEnemy(s, boardDps(s) * dt * (trait === 'shield' ? SHIELD_MULT : 1));
+    const shield = trait === 'shield' && !heroOnBoard(s, 'undertow-siren') ? SHIELD_MULT : 1;
+    const kill = damageEnemy(s, boardDps(s) * dt * shield);
     if (kill) {
         kills.push(kill);
     }
@@ -296,7 +392,8 @@ export function applyOffline(s: GameState, now = Date.now()): { gold: number; se
     const dps = boardDps(s);
     const hp = ENEMY_BASE_HP * ENEMY_HP_RATE ** (s.stage - 1);
     const perKill = Math.ceil(KILL_BASE_GOLD * KILL_GOLD_RATE ** (s.stage - 1));
-    const gold = Math.floor((dps / hp) * perKill * fortuneMult(s) * seconds * OFFLINE_RATE);
+    const clerk = heroOnBoard(s, 'tide-clerk') ? 1.5 : 1;
+    const gold = Math.floor((dps / hp) * perKill * fortuneMult(s) * clerk * seconds * OFFLINE_RATE);
     addGold(s, gold);
     s.savedAt = now;
     return { gold, seconds };
@@ -317,7 +414,7 @@ export function deserialize(raw: string | null): GameState | null {
             const board = new Array(BOARD_SIZE).fill(0);
             data.board.forEach((t: number, i: number) => (board[Math.floor(i / 4) * BOARD_STRIDE + (i % 4)] = t));
             data.board = board;
-        } else if ((v !== 2 && v !== SAVE_VERSION) || !Array.isArray(data.board) || data.board.length !== BOARD_SIZE) {
+        } else if (![2, 3, SAVE_VERSION].includes(v) || !Array.isArray(data.board) || data.board.length !== BOARD_SIZE) {
             return null;
         }
         const base = createGame(data.savedAt);
@@ -344,8 +441,42 @@ export function shuffle(s: GameState): number {
         shuffles: s.shuffles + 1,
         bestStage: s.bestStage,
         shop: s.shop,
+        ascends: s.ascends,
+        heroes: s.heroes,
     });
+    rollChi(s);
     return gain;
+}
+
+/** Lays latent chi across the board from unlocked elements; about a third of tiles stay neutral. */
+export function rollChi(s: GameState, rng: Rng = Math.random) {
+    const n = unlockedElements(s);
+    s.chi = s.chi.map(() => (n && rng() > 0.33 ? 1 + Math.floor(rng() * n) % n : 0));
+}
+
+export const canAscend = (s: GameState) => s.shuffles >= 1;
+
+/** Heroes you could still unlock: from elements you have, not yet owned. */
+export const heroPool = (s: GameState) =>
+    HEROES.filter((x) => ELEMENTS.indexOf(x.element) < unlockedElements(s) && !s.heroes.includes(x.id));
+
+/**
+ * Layer 2 reset: wipes the run, Essence and the shop. Unlocks the next element and
+ * spends the Ascend token on one random hero. Returns the new hero id ('' if none left).
+ */
+export function ascend(s: GameState, rng: Rng = Math.random): string | null {
+    if (!canAscend(s)) {
+        return null;
+    }
+    const fresh = createGame(s.savedAt);
+    Object.assign(s, { ...fresh, bestStage: s.bestStage, ascends: s.ascends + 1, heroes: s.heroes });
+    const pool = heroPool(s);
+    const pick = pool.length ? pool[Math.floor(rng() * pool.length) % pool.length].id : '';
+    if (pick) {
+        s.heroes = [...s.heroes, pick];
+    }
+    rollChi(s, rng);
+    return pick;
 }
 
 export const shopCost = (s: GameState, key: ShopKey) => SHOP[key].base * SHOP[key].rate ** s.shop[key];
