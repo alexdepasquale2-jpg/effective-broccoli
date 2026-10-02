@@ -1,0 +1,412 @@
+<title>Mergeborn Game Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a single card-table column; every section is a "hand" of cards, colored by the rarity ladder (common → void). */
+:root {
+  --bg: #11131a; --felt: #181b25; --card: #1f2330; --line: #2e3344;
+  --fg: #e9e7f2; --muted: #9a9cb3;
+  --r1: #a7adbf; --r2: #4fd18b; --r3: #4fa3ff; --r4: #b07cff; --r5: #ffc24a; --r6: #ff5a8a;
+  --display: "Unbounded", "Arial Black", system-ui, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f3f2f8; --felt: #ebe9f3; --card: #ffffff; --line: #d6d4e2; --fg: #1a1b26; --muted: #5d5f75;
+  --r1: #6b7184; --r2: #128a50; --r3: #1d6fd6; --r4: #7a3fd9; --r5: #b07800; --r6: #d1245a; color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f3f2f8; --felt: #ebe9f3; --card: #ffffff; --line: #d6d4e2; --fg: #1a1b26; --muted: #5d5f75;
+  --r1: #6b7184; --r2: #128a50; --r3: #1d6fd6; --r4: #7a3fd9; --r5: #b07800; --r6: #d1245a; color-scheme: light; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.55 var(--body); }
+.wrap { max-width: 1040px; margin: 0 auto; padding-inline: 16px; padding-block: 40px 72px; display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2.2rem, 7vw, 4rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+h2 { font-size: clamp(1.25rem, 3vw, 1.6rem); font-weight: 700; }
+h3 { font-size: 0.95rem; font-weight: 700; }
+p { margin: 0; max-width: 65ch; }
+.eyebrow { font: 600 0.72rem var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.lede { color: var(--muted); font-size: 1.08rem; }
+section { display: grid; gap: 20px; }
+.sec-head { display: grid; gap: 6px; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* hero */
+.hero { display: grid; gap: 18px; }
+.foil { background: linear-gradient(100deg, var(--r3), var(--r4) 40%, var(--r6) 70%, var(--r5)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: 600 0.75rem var(--mono); padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.chip b { color: var(--fg); font-weight: 600; }
+
+/* loop diagram */
+.loop { background: var(--felt); border: 1px solid var(--line); border-radius: 18px; padding: 16px; overflow-x: auto; }
+.loop svg { display: block; width: 100%; min-width: 560px; height: auto; }
+.loop text { font-family: var(--body); fill: var(--fg); }
+.loop .sub { fill: var(--muted); font-size: 12px; }
+.loop .num { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+
+/* merge ladder */
+.ladder { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.mcard { width: 84px; border-radius: 10px; border: 2px solid var(--c); background: var(--card); padding: 8px; display: grid; gap: 4px; justify-items: center; }
+.mcard .t { font: 800 1.1rem var(--display); color: var(--c); }
+.mcard .p { font: 600 0.72rem var(--mono); color: var(--muted); }
+.mcard .bar { width: 100%; background: var(--c); border-radius: 4px; opacity: .85; }
+.plus { font: 700 1rem var(--mono); color: var(--muted); align-self: center; }
+
+/* evolution matrix */
+.matrix-wrap { overflow-x: auto; }
+.matrix { display: grid; grid-template-columns: 110px repeat(4, minmax(170px, 1fr)); gap: 8px; min-width: 820px; }
+.matrix .hd { font: 600 0.72rem var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--c, var(--muted)); padding: 4px 2px; }
+.matrix .sys { font: 700 0.9rem var(--display); align-self: center; }
+.cell { background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--c); border-radius: 10px; padding: 10px 12px; font-size: 0.88rem; }
+.cell b { display: block; font-weight: 600; margin-bottom: 2px; }
+.cell span { color: var(--muted); }
+
+/* reset layers: stacked deck */
+.deck { display: grid; gap: 12px; }
+.layer { display: grid; grid-template-columns: 64px 1fr; gap: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; position: relative; }
+.layer .badge { width: 64px; height: 86px; border-radius: 10px; border: 2px solid var(--c); display: grid; place-content: center; text-align: center; font: 800 1.2rem var(--display); color: var(--c); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.layer .badge small { display: block; font: 600 0.6rem var(--mono); letter-spacing: .08em; color: var(--muted); }
+.layer .body { display: grid; gap: 8px; min-width: 0; }
+.layer .row { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.84rem; color: var(--muted); }
+.layer .row b { color: var(--fg); font-weight: 600; }
+.layer .rule { font-size: 0.95rem; }
+.layer.indent-1 { margin-left: 0; } .layer.indent-2 { margin-left: 12px; } .layer.indent-3 { margin-left: 24px; } .layer.indent-4 { margin-left: 36px; } .layer.indent-5 { margin-left: 48px; }
+
+/* eras */
+.eras { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.era { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 6px; align-content: start; }
+.era .n { font: 800 1.6rem var(--display); color: var(--c); line-height: 1; }
+.era p { font-size: 0.9rem; color: var(--muted); }
+
+/* pacing chart */
+.chart { background: var(--felt); border: 1px solid var(--line); border-radius: 18px; padding: 16px; overflow-x: auto; }
+.chart svg { display: block; width: 100%; min-width: 480px; height: auto; }
+.chart text { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+.chart .lbl { fill: var(--fg); font-weight: 600; }
+
+/* hooks + numbers */
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+.hooks { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.hooks li { display: grid; grid-template-columns: 10px 1fr; gap: 12px; align-items: baseline; }
+.hooks li::before { content: ""; width: 10px; height: 10px; border-radius: 3px; background: var(--c); transform: translateY(1px); }
+.hooks li span { color: var(--muted); }
+.formulas { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 10px; font-family: var(--mono); font-size: 0.82rem; overflow-x: auto; }
+.formulas div { display: grid; gap: 2px; }
+.formulas .k { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: .08em; }
+
+/* phases */
+.phases { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; counter-reset: ph; }
+.phase { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--card); display: grid; gap: 6px; align-content: start; }
+.phase .ph { font: 600 0.72rem var(--mono); color: var(--muted); display: flex; justify-content: space-between; }
+.phase.now { border-color: var(--r5); box-shadow: 0 0 0 1px var(--r5) inset; }
+.phase .st { color: var(--r5); }
+.phase.done .st { color: var(--r2); }
+.phase p { font-size: 0.88rem; color: var(--muted); }
+footer { color: var(--muted); font-size: 0.85rem; }
+
+@media (max-width: 520px) {
+  .layer { grid-template-columns: 1fr; }
+  .layer[class*="indent"] { margin-left: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mcard { transition: transform .2s; } .mcard:hover { transform: translateY(-4px) rotate(-2deg); }
+}
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">Game plan · third game in effective-broccoli</div>
+    <h1><span class="foil">Mergeborn</span></h1>
+    <p class="lede">A card battler where you tap, summon and merge cards that fight on their own. Like Revolution Idle, every new layer changes how the earlier ones work, so the grind keeps turning into a new game.</p>
+    <div class="chips">
+      <span class="chip">route <b>?game=merge</b></span>
+      <span class="chip">code <b>src/mergeborn/</b></span>
+      <span class="chip">stack <b>Phaser 4 + pure-TS sim</b></span>
+      <span class="chip">pay model <b>none</b></span>
+    </div>
+  </header>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">The first 60 seconds</div>
+      <h2>Core loop</h2>
+      <p class="lede">Five actions feed each other. Bosses close the loop by unlocking the next system.</p>
+    </div>
+    <div class="loop">
+      <svg viewBox="0 0 900 330" role="img" aria-label="Core loop: Tap earns gold, gold buys summons, summons fill the board, merging raises tiers, the board battles enemies, bosses unlock new systems and loop back to tap.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker>
+        </defs>
+        <g fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#ar)">
+          <path d="M168 110 H222"/><path d="M348 110 H402"/><path d="M528 110 H582"/><path d="M708 110 H762"/>
+          <path d="M825 175 V250 H560"/>
+          <path d="M430 250 H80 V178" stroke-dasharray="5 5"/>
+        </g>
+        <g>
+          <rect x="42" y="45" width="126" height="130" rx="12" fill="var(--card)" stroke="var(--r1)" stroke-width="2"/>
+          <text x="105" y="100" text-anchor="middle" font-size="22" font-weight="700">Tap</text>
+          <text x="105" y="124" text-anchor="middle" class="sub">hit enemy card</text>
+          <text x="105" y="142" text-anchor="middle" class="sub">→ Gold</text>
+        </g>
+        <g>
+          <rect x="222" y="45" width="126" height="130" rx="12" fill="var(--card)" stroke="var(--r2)" stroke-width="2"/>
+          <text x="285" y="100" text-anchor="middle" font-size="22" font-weight="700">Summon</text>
+          <text x="285" y="124" text-anchor="middle" class="sub">spend Gold</text>
+          <text x="285" y="142" text-anchor="middle" class="sub">random T1 card</text>
+        </g>
+        <g>
+          <rect x="402" y="45" width="126" height="130" rx="12" fill="var(--card)" stroke="var(--r3)" stroke-width="2"/>
+          <text x="465" y="100" text-anchor="middle" font-size="22" font-weight="700">Merge</text>
+          <text x="465" y="124" text-anchor="middle" class="sub">2 same → tier +1</text>
+          <text x="465" y="142" text-anchor="middle" class="sub">power ×2.5</text>
+        </g>
+        <g>
+          <rect x="582" y="45" width="126" height="130" rx="12" fill="var(--card)" stroke="var(--r4)" stroke-width="2"/>
+          <text x="645" y="100" text-anchor="middle" font-size="22" font-weight="700">Battle</text>
+          <text x="645" y="124" text-anchor="middle" class="sub">4×4 board</text>
+          <text x="645" y="142" text-anchor="middle" class="sub">auto-attacks</text>
+        </g>
+        <g>
+          <rect x="762" y="45" width="126" height="130" rx="12" fill="var(--card)" stroke="var(--r5)" stroke-width="2"/>
+          <text x="825" y="100" text-anchor="middle" font-size="22" font-weight="700">Boss</text>
+          <text x="825" y="124" text-anchor="middle" class="sub">every 10th foe</text>
+          <text x="825" y="142" text-anchor="middle" class="sub">30 s timer</text>
+        </g>
+        <rect x="430" y="226" width="130" height="48" rx="24" fill="var(--card)" stroke="var(--r6)" stroke-width="2"/>
+        <text x="495" y="256" text-anchor="middle" font-size="15" font-weight="700">Unlock</text>
+        <text x="80" y="300" class="num">kills give Gold back to Tap and Summon</text>
+        <text x="600" y="300" class="num">boss reward: Gold + a new system or stage</text>
+      </svg>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Why merging always wins</div>
+      <h2>Merge ladder</h2>
+      <p class="lede">Two cards make one, but the new card has 2.5× the power. A merge is always worth more than keeping the pair (2.5 vs 2). Card art changes at tiers 5, 10 and 15.</p>
+    </div>
+    <div class="ladder" aria-label="Merge ladder from tier 1 to tier 6">
+      <div class="mcard" style="--c:var(--r1)"><div class="t">T1</div><div class="bar" style="height:4px"></div><div class="p">1</div></div>
+      <span class="plus">→</span>
+      <div class="mcard" style="--c:var(--r2)"><div class="t">T2</div><div class="bar" style="height:6px"></div><div class="p">2.5</div></div>
+      <span class="plus">→</span>
+      <div class="mcard" style="--c:var(--r3)"><div class="t">T3</div><div class="bar" style="height:12px"></div><div class="p">6.3</div></div>
+      <span class="plus">→</span>
+      <div class="mcard" style="--c:var(--r4)"><div class="t">T4</div><div class="bar" style="height:24px"></div><div class="p">15.6</div></div>
+      <span class="plus">→</span>
+      <div class="mcard" style="--c:var(--r5)"><div class="t">T5</div><div class="bar" style="height:50px"></div><div class="p">39</div></div>
+      <span class="plus">→</span>
+      <div class="mcard" style="--c:var(--r6)"><div class="t">T6</div><div class="bar" style="height:96px"></div><div class="p">98</div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Each system gains new actions, not just bigger numbers</div>
+      <h2>How every system evolves</h2>
+    </div>
+    <div class="matrix-wrap">
+      <div class="matrix">
+        <div class="hd"></div>
+        <div class="hd" style="--c:var(--r1)">Stage 1</div>
+        <div class="hd" style="--c:var(--r3)">Stage 2</div>
+        <div class="hd" style="--c:var(--r4)">Stage 3</div>
+        <div class="hd" style="--c:var(--r5)">Stage 4 · automation</div>
+
+        <div class="sys">Tap</div>
+        <div class="cell" style="--c:var(--r1)"><b>Strike</b><span>Damage the enemy card.</span></div>
+        <div class="cell" style="--c:var(--r3)"><b>Combo meter</b><span>Chained taps multiply damage.</span></div>
+        <div class="cell" style="--c:var(--r4)"><b>Chain crits</b><span>Crits jump to your cards and buff them.</span></div>
+        <div class="cell" style="--c:var(--r5)"><b>Auto-tapper</b><span>Taps become Draws (instant summons).</span></div>
+
+        <div class="sys">Summon</div>
+        <div class="cell" style="--c:var(--r1)"><b>Single</b><span>One card, flat odds.</span></div>
+        <div class="cell" style="--c:var(--r3)"><b>Multi ×5 / ×10</b><span>Pity counter caps bad luck.</span></div>
+        <div class="cell" style="--c:var(--r4)"><b>Banners</b><span>Pick an element. Lucky skip-tier pulls.</span></div>
+        <div class="cell" style="--c:var(--r5)"><b>Auto-summon</b><span>Fills any free board slot.</span></div>
+
+        <div class="sys">Merge</div>
+        <div class="cell" style="--c:var(--r1)"><b>2 → 1</b><span>Same card, tier +1.</span></div>
+        <div class="cell" style="--c:var(--r3)"><b>Combo Gold</b><span>Chance to jump +2 tiers.</span></div>
+        <div class="cell" style="--c:var(--r4)"><b>3-way fusion</b><span>Hybrid cards with two elements.</span></div>
+        <div class="cell" style="--c:var(--r5)"><b>Auto-merge</b><span>Merge chains explode for AoE.</span></div>
+
+        <div class="sys">Battle</div>
+        <div class="cell" style="--c:var(--r1)"><b>One lane</b><span>Single enemy at a time.</span></div>
+        <div class="cell" style="--c:var(--r3)"><b>Enemy traits</b><span>Shield, regen, split.</span></div>
+        <div class="cell" style="--c:var(--r4)"><b>Synergies</b><span>Adjacent element and class bonuses.</span></div>
+        <div class="cell" style="--c:var(--r5)"><b>Gauntlet</b><span>Auto-pushes stages; you set formation.</span></div>
+
+        <div class="sys">Board</div>
+        <div class="cell" style="--c:var(--r1)"><b>4×4</b><span>16 slots.</span></div>
+        <div class="cell" style="--c:var(--r3)"><b>5×5 + tiles</b><span>Fire tile, crit tile, gold tile.</span></div>
+        <div class="cell" style="--c:var(--r4)"><b>Multi-board</b><span>Several decks fight in parallel.</span></div>
+        <div class="cell" style="--c:var(--r5)"><b>Board merge</b><span>Boards fuse at each Era reset.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Resets, Revolution Idle style</div>
+      <h2>Five layers, each automating the one below</h2>
+      <p class="lede">Every layer resets the ones beneath it, pays a new currency, and changes a rule. Once a layer is automated, its old grind runs in the background.</p>
+    </div>
+    <div class="deck">
+      <article class="layer indent-1" style="--c:var(--r2)">
+        <div class="badge"><small>LAYER</small>L1</div>
+        <div class="body">
+          <h3>Shuffle</h3>
+          <div class="row"><span>unlocks <b>Stage 25 boss</b></span><span>resets <b>Gold, board, stage</b></span><span>pays <b>Essence</b></span></div>
+          <p class="rule">Essence shop: starting tier, summon odds, tap multiplier. Unlocks Tap stage 2.</p>
+        </div>
+      </article>
+      <article class="layer indent-2" style="--c:var(--r3)">
+        <div class="badge"><small>LAYER</small>L2</div>
+        <div class="body">
+          <h3>Ascend</h3>
+          <div class="row"><span>unlocks <b>10 Shuffles or 1e4 Essence</b></span><span>resets <b>+ Essence shop</b></span><span>pays <b>Sigils</b></span></div>
+          <p class="rule">A new element joins the pool: Fire → Water → Earth → Air → Light → Void. Each one adds a counter mechanic.</p>
+        </div>
+      </article>
+      <article class="layer indent-3" style="--c:var(--r4)">
+        <div class="badge"><small>LAYER</small>L3</div>
+        <div class="body">
+          <h3>Codex</h3>
+          <div class="row"><span>unlocks <b>every card up to T12</b></span><span>resets <b>collection progress</b></span><span>pays <b>Pages</b></span></div>
+          <p class="rule">Permanent card skills: on-merge, on-death, aura. Unlocks Merge stage 3.</p>
+        </div>
+      </article>
+      <article class="layer indent-4" style="--c:var(--r5)">
+        <div class="badge"><small>LAYER</small>L4</div>
+        <div class="body">
+          <h3>Era</h3>
+          <div class="row"><span>unlocks <b>each Era's final boss</b></span><span>resets <b>everything below</b></span><span>pays <b>Era Shards</b></span></div>
+          <p class="rule">The rules mutate. See the five Eras below.</p>
+        </div>
+      </article>
+      <article class="layer indent-5" style="--c:var(--r6)">
+        <div class="badge"><small>LAYER</small>L5</div>
+        <div class="body">
+          <h3>Revolution</h3>
+          <div class="row"><span>unlocks <b>Era 5</b></span><span>resets <b>all</b></span><span>pays <b>Revolutions</b></span></div>
+          <p class="rule">Automation for every lower layer, plus challenge runs (no tap, no merge, 3×3 board) with permanent multipliers.</p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Layer 4 rule mutators</div>
+      <h2>Each Era plays like a new game</h2>
+    </div>
+    <div class="eras">
+      <div class="era" style="--c:var(--r1)"><div class="n">I</div><h3>Base rules</h3><p>Tap, summon, merge and battle as learned.</p></div>
+      <div class="era" style="--c:var(--r2)"><div class="n">II</div><h3>Decay</h3><p>Cards lose power over time. Merge often or fall behind.</p></div>
+      <div class="era" style="--c:var(--r3)"><div class="n">III</div><h3>Hex board</h3><p>Six neighbours per slot. Synergies get richer.</p></div>
+      <div class="era" style="--c:var(--r4)"><div class="n">IV</div><h3>Enemies merge</h3><p>Foes fuse mid-fight. Kill pairs before they combine.</p></div>
+      <div class="era" style="--c:var(--r6)"><div class="n">V</div><h3>Turncoat</h3><p>Summon enemy cards onto your board.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Pacing target</div>
+      <h2>Each Shuffle runs faster than the last</h2>
+      <p class="lede">Shuffle #1 takes about 8 minutes, and #10 takes about 90 seconds. Each reset should feel like a power spike, not a setback.</p>
+    </div>
+    <div class="chart">
+      <svg viewBox="0 0 640 280" role="img" aria-label="Bar chart of target Shuffle duration from 480 seconds on run 1 down to 90 seconds on run 10.">
+        <g stroke="var(--line)" stroke-width="1">
+          <line x1="60" y1="230" x2="620" y2="230"/>
+          <line x1="60" y1="170" x2="620" y2="170" stroke-dasharray="3 4"/>
+          <line x1="60" y1="110" x2="620" y2="110" stroke-dasharray="3 4"/>
+          <line x1="60" y1="50" x2="620" y2="50" stroke-dasharray="3 4"/>
+        </g>
+        <text x="52" y="234" text-anchor="end">0</text>
+        <text x="52" y="174" text-anchor="end">2 min</text>
+        <text x="52" y="114" text-anchor="end">4 min</text>
+        <text x="52" y="54" text-anchor="end">6 min</text>
+        <g id="bars"></g>
+        <text x="340" y="268" text-anchor="middle">Shuffle number</text>
+      </svg>
+    </div>
+  </section>
+
+  <section class="two">
+    <div style="display:grid;gap:16px;align-content:start">
+      <div class="sec-head"><div class="eyebrow">Keeping the grind fun</div><h2>Hooks</h2></div>
+      <ul class="hooks">
+        <li style="--c:var(--r2)"><div><b>Variable rewards.</b> <span>Summon odds, lucky +2 merges, crit chains. Pity timers cap bad luck.</span></div></li>
+        <li style="--c:var(--r3)"><div><b>Goal ladder.</b> <span>The next three unlocks are always on screen with progress bars.</span></div></li>
+        <li style="--c:var(--r4)"><div><b>Juicy merges.</b> <span>Screen shake, rising sound pitch per tier, new art at T5, T10, T15.</span></div></li>
+        <li style="--c:var(--r5)"><div><b>Unlock cadence.</b> <span>New unlock every 30–90 s early, every 5–10 min mid-game, every reset late.</span></div></li>
+        <li style="--c:var(--r6)"><div><b>Offline progress.</b> <span>Up to 8 h (raised by upgrades), with a "while you were away" summary.</span></div></li>
+        <li style="--c:var(--r1)"><div><b>Fair play.</b> <span>No paid currency, no countdown sales, no loot boxes for money.</span></div></li>
+      </ul>
+    </div>
+    <div style="display:grid;gap:16px;align-content:start">
+      <div class="sec-head"><div class="eyebrow">Starting values, tuned in the sim</div><h2>Numbers</h2></div>
+      <div class="formulas">
+        <div><span class="k">Card power</span>base × 2.5^tier × elementMult</div>
+        <div><span class="k">Summon cost</span>10 × 1.15^summons  (resets on Shuffle)</div>
+        <div><span class="k">Enemy HP</span>20 × 1.18^stage   boss = ×8 HP, 30 s</div>
+        <div><span class="k">Tap damage</span>1 + 5% of board DPS</div>
+        <div><span class="k">Essence</span>floor(((stage − 20) / 2.5)^1.6)</div>
+        <div><span class="k">Big numbers</span>mantissa + exponent past 1e300 (Era II+)</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">Build order · each phase is playable and tested</div>
+      <h2>Phases</h2>
+    </div>
+    <div class="phases">
+      <div class="phase done"><div class="ph"><span>Phase 0</span><span class="st">done</span></div><h3>Plan</h3><p>This page and PLAN.md.</p></div>
+      <div class="phase done"><div class="ph"><span>Phase 1</span><span class="st">done</span></div><h3>Core sim</h3><p>Tap, summon, merge, auto-battle, save/load, tests, board scene.</p></div>
+      <div class="phase done"><div class="ph"><span>Phase 2</span><span class="st">done</span></div><h3>Bosses &amp; tracks</h3><p>Stages, system stages 1–2, offline progress.</p></div>
+      <div class="phase done"><div class="ph"><span>Phase 3</span><span class="st">done</span></div><h3>Shuffle</h3><p>Essence shop, goal ladder, shake, sound, particles.</p></div>
+      <div class="phase done"><div class="ph"><span>Phase 4</span><span class="st">done</span></div><h3>Ascend + Codex</h3><p>Elements, synergies, card skills.</p></div>
+      <div class="phase done"><div class="ph"><span>Phase 5</span><span class="st">done</span></div><h3>Era + Revolution</h3><p>Rule mutators, automation, challenges.</p></div>
+      <div class="phase done"><div class="ph"><span>Phase 6</span><span class="st">done</span></div><h3>Balance</h3><p>Headless bot plays the game and checks pacing targets.</p></div>
+    </div>
+  </section>
+
+  <footer>Source of truth: <span class="mono">PLAN.md</span> on branch <span class="mono">ccr-23e6281f-4g4ops</span>.</footer>
+</div>
+
+<script>
+(function () {
+  // Target: 480 s on run 1 decaying geometrically to 90 s on run 10.
+  var g = document.getElementById('bars');
+  var ns = 'http://www.w3.org/2000/svg';
+  var n = 10, x0 = 60, w = 560, base = 230, scale = 60 / 120; // 60 px per 2 min
+  var colors = ['--r1','--r1','--r2','--r2','--r3','--r3','--r4','--r4','--r5','--r6'];
+  for (var i = 0; i < n; i++) {
+    var secs = 480 * Math.pow(90 / 480, i / (n - 1));
+    var h = secs * scale, bw = w / n, x = x0 + i * bw + 8;
+    var r = document.createElementNS(ns, 'rect');
+    r.setAttribute('x', x); r.setAttribute('y', base - h);
+    r.setAttribute('width', bw - 16); r.setAttribute('height', h);
+    r.setAttribute('rx', 4); r.setAttribute('fill', 'var(' + colors[i] + ')');
+    g.appendChild(r);
+    var t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', x + (bw - 16) / 2); t.setAttribute('y', base - h - 6);
+    t.setAttribute('text-anchor', 'middle'); t.setAttribute('class', 'lbl');
+    t.textContent = secs >= 120 ? (secs / 60).toFixed(1) + 'm' : Math.round(secs) + 's';
+    g.appendChild(t);
+    var k = document.createElementNS(ns, 'text');
+    k.setAttribute('x', x + (bw - 16) / 2); k.setAttribute('y', base + 16);
+    k.setAttribute('text-anchor', 'middle'); k.textContent = '#' + (i + 1);
+    g.appendChild(k);
+  }
+})();
+</script>

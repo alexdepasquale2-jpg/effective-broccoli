@@ -1,0 +1,666 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { BOSS_SECONDS, KILLS_PER_STAGE, OFFLINE_CAP_SECONDS, POWER_TILE } from './constants.ts';
+import { elementId } from './heroes.ts';
+import {
+    UNLOCKS,
+    ascend,
+    canAscend,
+    enemyElement,
+    rollChi,
+    canRevolt,
+    revolt,
+    startChallenge,
+    canEra,
+    neighbours,
+    nextEra,
+    damageEnemy,
+    buyShop,
+    essenceGain,
+    goals,
+    killGold,
+    shuffle,
+    applyOffline,
+    boardCols,
+    buyUpgrade,
+    enemyMaxHp,
+    enemyTrait,
+    freeSlot,
+    tapDamage,
+    boardDps,
+    cardPower,
+    createGame,
+    deserialize,
+    isBoss,
+    moveCard,
+    serialize,
+    summon,
+    summonCost,
+    tap,
+    tick,
+} from './state.ts';
+
+describe('summon', () => {
+    it('spends gold, places a tier-1 card, raises cost', () => {
+        const s = createGame(0);
+        const cost = summonCost(s);
+        assert.deepEqual(summon(s), [0]);
+        assert.equal(s.board[0], 1);
+        assert.equal(s.gold, 10 - cost);
+        assert.ok(summonCost(s) > cost);
+    });
+    it('fails without gold or a free slot', () => {
+        const s = createGame(0);
+        s.gold = 0;
+        assert.deepEqual(summon(s), []);
+        s.gold = 1e9;
+        s.board.fill(1);
+        assert.deepEqual(summon(s), []);
+    });
+});
+
+describe('moveCard', () => {
+    it('merges equal tiers into one higher tier', () => {
+        const s = createGame(0);
+        s.board[0] = 2;
+        s.board[5] = 2;
+        assert.equal(moveCard(s, 0, 5), 'merge');
+        assert.deepEqual([s.board[0], s.board[5]], [0, 3]);
+    });
+    it('moves into empty slots and swaps different tiers', () => {
+        const s = createGame(0);
+        s.board[0] = 1;
+        assert.equal(moveCard(s, 0, 3), 'move');
+        s.board[6] = 2;
+        assert.equal(moveCard(s, 3, 6), 'swap');
+        assert.deepEqual([s.board[3], s.board[6]], [2, 1]);
+        assert.equal(moveCard(s, 7, 6), 'none');
+    });
+    it('merging always beats keeping the pair', () => {
+        assert.ok(cardPower(3) > 2 * cardPower(2));
+    });
+});
+
+describe('combat', () => {
+    it('taps kill enemies and pay gold', () => {
+        const s = createGame(0);
+        const gold = s.gold;
+        let kill = null;
+        for (let i = 0; i < 100 && !kill; i++) kill = tap(s);
+        assert.ok(kill);
+        assert.equal(s.gold, gold + kill.gold);
+        assert.equal(s.kills, 1);
+    });
+    it('board auto-attacks on tick', () => {
+        const s = createGame(0);
+        s.board[0] = 5;
+        const hp = s.enemyHp;
+        tick(s, 0.1);
+        assert.ok(s.enemyHp < hp);
+        assert.equal(boardDps(s), cardPower(5));
+    });
+    it('beating the boss advances the stage', () => {
+        const s = createGame(0);
+        s.kills = KILLS_PER_STAGE - 2;
+        s.enemyHp = 0.5;
+        tap(s);
+        assert.ok(isBoss(s));
+        assert.equal(s.bossTimer, BOSS_SECONDS);
+        s.enemyHp = 0.5;
+        assert.equal(tap(s)?.boss, true);
+        assert.deepEqual([s.stage, s.kills], [2, 0]);
+    });
+    it('an escaped boss replays the stage', () => {
+        const s = createGame(0);
+        s.kills = KILLS_PER_STAGE - 1;
+        s.bossTimer = 0.05;
+        tick(s, 0.1);
+        assert.deepEqual([s.stage, s.kills], [1, 0]);
+    });
+});
+
+describe('save', () => {
+    it('round-trips and rejects junk', () => {
+        const s = createGame(0);
+        s.board[2] = 4;
+        const back = deserialize(serialize(s, 123));
+        assert.equal(back?.board[2], 4);
+        assert.equal(back?.savedAt, 123);
+        assert.equal(deserialize('{bad'), null);
+        assert.equal(deserialize(JSON.stringify({ v: 99 })), null);
+    });
+    it('offline gold is capped and needs a board', () => {
+        const s = createGame(0);
+        assert.equal(applyOffline(s, 3600_000).gold, 0);
+        s.board[0] = 3;
+        s.savedAt = 0;
+        const capped = applyOffline(s, 1e12);
+        assert.equal(capped.seconds, OFFLINE_CAP_SECONDS);
+        assert.ok(capped.gold > 0);
+    });
+});
+
+const never = () => 1;
+const always = () => 0;
+const atStage = (stage: number) => {
+    const s = createGame(0);
+    s.stage = stage;
+    return s;
+};
+
+describe('unlocks', () => {
+    it('a boss kill reports the unlock it reaches', () => {
+        const s = atStage(UNLOCKS[0].stage - 1);
+        s.kills = KILLS_PER_STAGE - 1;
+        s.enemyHp = 0.5;
+        assert.equal(tap(s)?.unlock?.key, 'combo');
+    });
+    it('tap combo multiplies chained taps only once unlocked', () => {
+        const early = createGame(0);
+        tap(early);
+        tap(early);
+        assert.equal(tapDamage(early), 1);
+        const s = atStage(3);
+        s.enemyHp = 1e9;
+        for (let i = 0; i < 5; i++) tap(s);
+        assert.ok(Math.abs(tapDamage(s) - 1.4) < 1e-9);
+        tick(s, 1.1);
+        assert.equal(s.combo, 0);
+    });
+    it('multi-summon with pity makes every 10th summon T2', () => {
+        const s = atStage(6);
+        s.gold = 1e9;
+        summon(s, 5, never);
+        const slots = summon(s, 5, never);
+        assert.equal(slots.length, 5);
+        assert.equal(s.board[slots[4]], 2);
+        assert.equal(s.board[slots[3]], 1);
+    });
+    it('summon luck can roll T2', () => {
+        const s = createGame(0);
+        s.gold = 1e9;
+        s.upgrades.summon = 5;
+        assert.equal(s.board[summon(s, 1, always)[0]], 2);
+    });
+    it('merge bounty pays gold and can jump +2 tiers', () => {
+        const s = atStage(10);
+        s.board[0] = 2;
+        s.board[1] = 2;
+        const gold = s.gold;
+        moveCard(s, 0, 1, always);
+        assert.equal(s.board[1], 4);
+        assert.ok(s.gold > gold);
+    });
+    it('5×5 board opens new slots and the power tile doubles a card', () => {
+        const s = atStage(17);
+        s.board.fill(1);
+        s.board[4] = 0;
+        assert.equal(freeSlot(s), -1);
+        assert.equal(moveCard(s, 0, 4), 'none'); // column 5 is closed on 4×4
+        s.stage = 18;
+        assert.equal(boardCols(s), 5);
+        assert.equal(freeSlot(s), 4);
+        s.board[POWER_TILE] = 0;
+        const before = boardDps(s);
+        s.board[POWER_TILE] = 1;
+        assert.equal(boardDps(s) - before, 2);
+    });
+});
+
+describe('enemy traits', () => {
+    it('none before stage 14', () => {
+        for (let k = 0; k < 4; k++) assert.equal(enemyTrait({ ...atStage(13), kills: k }), 'none');
+    });
+    it('shield halves board damage', () => {
+        const s = atStage(15); // trait = (stage + kills) % 4 → none, shield, regen, split
+        s.kills = 2;
+        assert.equal(enemyTrait(s), 'shield');
+        s.board[0] = 1;
+        const hp = s.enemyHp;
+        tick(s, 1);
+        assert.ok(Math.abs(hp - s.enemyHp - 0.5) < 1e-9);
+    });
+    it('regen heals over time', () => {
+        const s = atStage(14);
+        assert.equal(enemyTrait(s), 'regen');
+        s.enemyHp = 1;
+        tick(s, 1);
+        assert.ok(s.enemyHp > 1);
+    });
+    it('split enemies come back once at half HP', () => {
+        const s = atStage(15);
+        assert.equal(enemyTrait(s), 'split');
+        s.enemyHp = 0.5;
+        assert.equal(tap(s), null);
+        assert.equal(s.enemyHp, enemyMaxHp(s) * 0.5);
+        s.enemyHp = 0.5;
+        assert.ok(tap(s));
+    });
+});
+
+describe('upgrades', () => {
+    it('spend gold, raise level and cost; merge needs its unlock', () => {
+        const s = createGame(0);
+        s.gold = 1e6;
+        assert.ok(buyUpgrade(s, 'tap'));
+        assert.equal(tapDamage(s), 2);
+        assert.equal(buyUpgrade(s, 'merge'), false);
+        s.stage = 10;
+        assert.ok(buyUpgrade(s, 'merge'));
+    });
+});
+
+describe('save migration', () => {
+    it('v1 4×4 boards map onto the 5×5 grid', () => {
+        const board = new Array(16).fill(0);
+        board[5] = 3; // row 1, col 1
+        const s = deserialize(JSON.stringify({ v: 1, gold: 5, stage: 2, kills: 0, board, savedAt: 0 }));
+        assert.equal(s?.board[6], 3);
+        assert.equal(s?.upgrades.tap, 0);
+    });
+});
+
+describe('shuffle', () => {
+    it('locked before stage 25, pays more Essence the deeper you go', () => {
+        assert.equal(shuffle(atStage(24)), 0);
+        assert.equal(essenceGain(atStage(25)), 3);
+        assert.ok(essenceGain(atStage(30)) > essenceGain(atStage(25)));
+    });
+    it('resets the run but keeps Essence, shop and records', () => {
+        const s = atStage(30);
+        s.bestStage = 30;
+        s.gold = 1e9;
+        s.board[0] = 6;
+        s.upgrades.tap = 4;
+        s.shop.might = 1;
+        const gain = shuffle(s);
+        assert.ok(gain > 0);
+        assert.deepEqual([s.stage, s.gold, s.board[0], s.upgrades.tap], [1, 10, 0, 0]);
+        assert.deepEqual([s.essence, s.shuffles, s.bestStage, s.shop.might], [gain, 1, 30, 1]);
+    });
+    it('shop boosts damage, gold and summon tier', () => {
+        const s = createGame(0);
+        s.essence = 100;
+        const tap1 = tapDamage(s);
+        const gold1 = killGold(s);
+        assert.ok(buyShop(s, 'might'));
+        assert.ok(buyShop(s, 'fortune'));
+        assert.ok(buyShop(s, 'headstart'));
+        assert.equal(tapDamage(s), tap1 * 1.5);
+        assert.ok(killGold(s) > gold1);
+        s.gold = 1e6;
+        assert.equal(s.board[summon(s, 1, never)[0]], 2);
+        assert.equal(s.essence, 100 - 1 - 1 - 10);
+        s.essence = 0;
+        assert.equal(buyShop(s, 'might'), false);
+    });
+    it('goal ladder shows three goals and ends with Shuffle', () => {
+        assert.equal(goals(createGame(0)).length, 3);
+        const late = goals(atStage(26));
+        assert.equal(late.length, 1);
+        assert.match(late[0].label, /Shuffle now/);
+    });
+    it('v2 saves load with an empty shop', () => {
+        const s = deserialize(JSON.stringify({ v: 2, ...createGame(0), shop: undefined, essence: undefined }));
+        assert.deepEqual(s?.shop, { might: 0, fortune: 0, headstart: 0 });
+    });
+});
+
+describe('ascend and heroes', () => {
+    const ascended = (n: number) => {
+        const s = createGame(0);
+        s.ascends = n;
+        return s;
+    };
+    it('needs one Shuffle, wipes Essence and shop, adds an element and a hero', () => {
+        const s = createGame(0);
+        assert.equal(ascend(s), null);
+        s.shuffles = 1;
+        s.essence = 50;
+        s.shop.might = 3;
+        s.bestStage = 40;
+        assert.ok(canAscend(s));
+        const hero = ascend(s, () => 0);
+        assert.equal(hero, 'fire-bellows');
+        assert.deepEqual([s.ascends, s.essence, s.shop.might, s.shuffles, s.bestStage], [1, 0, 0, 0, 40]);
+        assert.deepEqual(s.heroes, ['fire-bellows']);
+        assert.ok(s.chi.every((c) => c === 0 || c === 1));
+    });
+    it('shuffle keeps heroes and re-rolls chi', () => {
+        const s = ascended(2);
+        s.heroes = ['smelter'];
+        s.stage = 30;
+        shuffle(s);
+        assert.deepEqual([s.ascends, s.heroes], [2, ['smelter']]);
+        assert.ok(s.chi.some((c) => c > 0));
+    });
+    it('summons take the tile chi; only same element or neutral merge', () => {
+        const s = ascended(2);
+        s.gold = 1e9;
+        s.chi.fill(1);
+        s.chi[1] = 2;
+        summon(s, 2, never);
+        assert.deepEqual([s.elem[0], s.elem[1]], [1, 2]);
+        assert.equal(moveCard(s, 0, 1), 'swap');
+        s.chi[2] = 0;
+        summon(s, 1, never);
+        assert.equal(moveCard(s, 2, 1), 'merge');
+        assert.deepEqual([s.board[1], s.elem[1]], [2, 1]);
+    });
+    it('counter wheel: water ×2 vs fire, ×0.5 vs air', () => {
+        const s = ascended(4);
+        s.board[0] = 1;
+        s.elem[0] = elementId('water');
+        s.stage = 1;
+        s.kills = 0; // enemy element = (3 + 0) % 4 + 1 = 4 = air
+        assert.equal(enemyElement(s), elementId('air'));
+        assert.equal(boardDps(s), 0.5 * 2 ** 4); // countered, ×2 per Ascend
+        s.kills = 1; // (3 + 1) % 4 + 1 = 1 = fire
+        assert.equal(enemyElement(s), elementId('fire'));
+        assert.equal(boardDps(s), 2 * 2 ** 4);
+    });
+    it('heroes roll from the tile element and keep their skill through merges', () => {
+        const s = ascended(1);
+        s.heroes = ['fire-bellows'];
+        s.gold = 1e9;
+        s.chi.fill(1);
+        summon(s, 1, always);
+        assert.equal(s.hero[0], 'fire-bellows');
+        s.board[1] = 1;
+        s.elem[1] = 1;
+        assert.equal(moveCard(s, 1, 0, never), 'merge');
+        assert.equal(s.hero[0], 'fire-bellows');
+        s.board[1] = 1; // neighbour of the bellows
+        assert.equal(boardDps(s), (2.5 + 1.25) * 2);
+    });
+    it('hero skills: duelist, turtle, siren, smuggler, bellringer', () => {
+        const s = ascended(2);
+        s.board[0] = 1;
+        s.enemyHp = 1e9;
+        s.hero[0] = 'ifrit-duelist';
+        for (let i = 0; i < 9; i++) tap(s);
+        const before = s.enemyHp;
+        tap(s);
+        assert.ok(Math.abs(before - s.enemyHp - 10 * tapDamage(s)) < 1e-6);
+        s.hero[0] = 'rain-smuggler';
+        assert.equal(summonCost(s), Math.ceil(10 * 0.85));
+        s.hero[0] = 'magma-turtle';
+        s.kills = KILLS_PER_STAGE - 2;
+        s.enemyHp = 0.1;
+        tap(s);
+        assert.equal(s.bossTimer, BOSS_SECONDS + 5);
+        s.hero[0] = 'drowned-bellringer';
+        s.enemyHp = 0.1;
+        tap(s);
+        // Boss kill queues 3 weakened foes; the next spawn already used one.
+        assert.equal(s.weakened, 2);
+        assert.ok(Math.abs(s.enemyHp - enemyMaxHp(s) * 0.7) < 1e-9);
+    });
+    it('rollChi stays neutral before any Ascend', () => {
+        const s = createGame(0);
+        rollChi(s, always);
+        assert.ok(s.chi.every((c) => c === 0));
+    });
+});
+
+describe('earth to void hero skills', () => {
+    const withHero = (id: string, ascends = 6) => {
+        const s = createGame(0);
+        s.ascends = ascends;
+        s.board[0] = 1;
+        s.hero[0] = id;
+        return s;
+    };
+    it('Quarry Golem, Lantern Saint and Moss Hermit scale board damage', () => {
+        const g = withHero('quarry-golem', 0); // no Ascends: enemy is neutral, so no counters
+        assert.equal(boardDps(g), 1);
+        g.board[1] = 1;
+        g.elem[0] = elementId('earth');
+        g.elem[1] = elementId('earth');
+        assert.ok(Math.abs(boardDps(g) - 2 * 1.2) < 1e-9);
+        const l = withHero('lantern-saint', 0);
+        assert.ok(Math.abs(boardDps(l) - 1.1) < 1e-9);
+        const m = withHero('moss-hermit', 0);
+        m.enemyHp = 1e9;
+        tick(m, 11);
+        assert.ok(Math.abs(boardDps(m) - 2) < 1e-9);
+        tap(m);
+        assert.equal(boardDps(m), 1);
+    });
+    it('Prism Knight lends 30% of its power to neighbours', () => {
+        const s = withHero('prism-knight', 0);
+        s.board[0] = 3;
+        s.board[1] = 1;
+        assert.ok(Math.abs(boardDps(s) - (cardPower(3) + 1 + 0.3 * cardPower(3))) < 1e-9);
+    });
+    it('Tremor Ram, Dawn Herald, Eclipse Widow', () => {
+        const r = withHero('tremor-ram', 0);
+        r.kills = KILLS_PER_STAGE - 1;
+        const s2 = withHero('magma-turtle', 0);
+        s2.kills = KILLS_PER_STAGE - 1;
+        assert.ok(Math.abs(enemyMaxHp(r) / enemyMaxHp(s2) - 0.8) < 1e-9);
+        const d = withHero('dawn-herald', 0);
+        d.kills = KILLS_PER_STAGE - 1;
+        d.enemyHp = 0.1;
+        tap(d);
+        assert.equal(d.enemyHp, 1);
+        const w = withHero('eclipse-widow', 0);
+        w.stage = 14 + 3; // traits on; (17 + 9) % 4 = 2 → regen
+        w.kills = KILLS_PER_STAGE - 1;
+        assert.equal(enemyTrait(w), 'none');
+    });
+    it('Gale Courier auto-taps, Storm Bard raises combo cap, Kite Thief earns gold', () => {
+        const c = withHero('gale-courier', 0);
+        c.enemyHp = 1e9;
+        tick(c, 1);
+        assert.equal(c.taps, 2);
+        const b = withHero('storm-bard', 0);
+        b.stage = 3;
+        b.enemyHp = 1e9;
+        for (let i = 0; i < 20; i++) tap(b);
+        assert.equal(b.combo, 15);
+        const k = withHero('kite-thief', 0);
+        k.enemyHp = 1e9;
+        const gold = k.gold;
+        tap(k);
+        assert.ok(k.gold > gold);
+    });
+    it('Thunder Hawk bursts every 5 s; Ink Wraith drains 1%/s', () => {
+        const h = withHero('thunder-hawk', 0);
+        h.enemyHp = 1e9;
+        tick(h, 5);
+        assert.ok(Math.abs(1e9 - h.enemyHp - 10) < 1e-6);
+        const w = withHero('ink-wraith', 0);
+        w.board[0] = 0;
+        w.board[1] = 1;
+        w.hero[1] = 'ink-wraith';
+        const hp = w.enemyHp;
+        tick(w, 1);
+        assert.ok(Math.abs(hp - w.enemyHp - (1 + enemyMaxHp(w) * 0.01)) < 1e-9);
+    });
+    it('Gem Miner and Null Jester change kill gold', () => {
+        const g = withHero('gem-miner', 0);
+        const base = killGold(g);
+        g.enemyHp = 0.1;
+        assert.equal(damageEnemy(g, 1, always)?.gold, base * 10);
+        const j = withHero('null-jester', 0);
+        j.enemyHp = 0.1;
+        assert.equal(damageEnemy(j, 1, never)?.gold, 0);
+    });
+    it('Rift Walker merges across elements; Hollow King and Feather Monk boost lucky merges', () => {
+        const s = withHero('rift-walker');
+        s.elem[0] = 1;
+        s.board[1] = 1;
+        s.elem[1] = 2;
+        assert.equal(moveCard(s, 1, 0, never), 'merge');
+        const k = withHero('hollow-king', 0);
+        k.board[1] = 1;
+        assert.equal(moveCard(k, 1, 0, () => 0.1), 'merge');
+        assert.equal(k.board[0], 3);
+    });
+    it('Root Weaver grows neighbours every 5 min; Mirror Oracle pity 7; Sun Forger +20% Essence', () => {
+        const r = withHero('root-weaver', 0);
+        r.board[1] = 2;
+        r.enemyHp = 1e12;
+        tick(r, 301);
+        assert.equal(r.board[1], 3);
+        const o = withHero('mirror-oracle', 0);
+        o.stage = 6;
+        o.gold = 1e9;
+        o.summons = 6;
+        assert.equal(o.board[summon(o, 1, never)[0]], 2);
+        const f = withHero('sun-forger', 0);
+        f.stage = 40;
+        assert.equal(essenceGain(f), Math.floor(((40 - 20) / 2.5) ** 1.6 * 1.2));
+    });
+});
+
+describe('eras', () => {
+    const inEra = (era: number) => {
+        const s = createGame(0);
+        s.era = era;
+        return s;
+    };
+    it('opens at stage 60, resets everything below, keeps heroes, multiplies damage and gold', () => {
+        const s = atStage(59);
+        assert.equal(nextEra(s), false);
+        s.stage = 60;
+        s.essence = 99;
+        s.ascends = 3;
+        s.shuffles = 5;
+        s.heroes = ['smelter'];
+        s.bestStage = 80;
+        const gold = killGold(createGame(0));
+        assert.ok(canEra(s) && nextEra(s));
+        assert.deepEqual([s.era, s.stage, s.essence, s.ascends, s.shuffles, s.bestStage], [2, 1, 0, 0, 0, 80]);
+        assert.deepEqual(s.heroes, ['smelter']);
+        assert.equal(tapDamage(s), 3);
+        assert.equal(killGold(s), gold * 2);
+        s.era = 5;
+        s.stage = 90;
+        assert.equal(canEra(s), false);
+    });
+    it('Era II: unmerged cards decay a tier after 90 s; merging resets the clock', () => {
+        const s = inEra(2);
+        s.board[0] = 3;
+        s.board[1] = 2;
+        s.board[2] = 2;
+        s.enemyHp = 1e12;
+        tick(s, 60);
+        moveCard(s, 1, 2, never);
+        tick(s, 31);
+        assert.deepEqual([s.board[0], s.board[2]], [2, 3]);
+    });
+    it('Era III: six neighbours and same-element synergy', () => {
+        assert.equal(neighbours(6, false).length, 4);
+        assert.equal(neighbours(6, true).length, 6);
+        const s = inEra(3);
+        s.board[6] = 1;
+        s.board[7] = 1;
+        s.elem[6] = 1;
+        s.elem[7] = 1;
+        assert.ok(Math.abs(boardDps(s) / eraDps(s) - 2.2) < 1e-9);
+    });
+    it('Era IV: a foe left alive 8 s absorbs the next and pays double', () => {
+        const s = inEra(4);
+        const hp = s.enemyHp;
+        tick(s, 8);
+        assert.equal(s.kills, 1);
+        assert.ok(s.enemyHp > hp * 1.9);
+        const expected = killGold(s) * 2;
+        s.enemyHp = 0.1;
+        assert.equal(tap(s)?.gold, expected);
+    });
+    it('Era V: kills can drop an enemy card onto your board', () => {
+        const s = inEra(5);
+        s.stage = 25;
+        s.enemyHp = 0.1;
+        const k = damageEnemy(s, 1, always);
+        assert.equal(k?.turncoat, 0);
+        assert.equal(s.board[0], 3);
+    });
+});
+const eraDps = (s: ReturnType<typeof createGame>) => 3 ** (s.era - 1);
+
+describe('revolution', () => {
+    const lateEra5 = () => {
+        const s = createGame(0);
+        s.era = 5;
+        s.stage = 120;
+        s.heroes = ['smelter'];
+        s.bestStage = 90;
+        s.ascends = 6;
+        s.essence = 500;
+        return s;
+    };
+    it('opens in Era V at stage 120 (+20 per Revolution), resets to Era I, keeps heroes, ×4 damage ×3 gold', () => {
+        const s = lateEra5();
+        s.era = 4;
+        assert.equal(canRevolt(s), false);
+        s.era = 5;
+        const gold = killGold(createGame(0));
+        assert.ok(revolt(s));
+        assert.deepEqual([s.era, s.stage, s.ascends, s.essence, s.revolutions, s.bestStage], [1, 1, 0, 0, 1, 90]);
+        assert.deepEqual(s.heroes, ['smelter']);
+        assert.equal(tapDamage(s), 4);
+        assert.equal(killGold(s), gold * 3);
+    });
+    it('automation unlocks one per Revolution and can be switched off', () => {
+        const s = createGame(0);
+        s.board[0] = 2;
+        s.board[1] = 2;
+        tick(s, 0.6);
+        assert.equal(s.board[1], 2); // locked
+        s.revolutions = 1;
+        tick(s, 0.6);
+        assert.equal(s.board.filter((t) => t === 3).length, 1);
+        s.revolutions = 2;
+        s.gold = 1e6;
+        const before = s.board.filter(Boolean).length;
+        s.auto.summon = false;
+        tick(s, 0.6);
+        assert.equal(s.board.filter(Boolean).length, before);
+        s.auto.summon = true;
+        tick(s, 0.6);
+        assert.equal(s.board.filter(Boolean).length, before + 1);
+    });
+    it('auto-Shuffle fires after 60 s stalled; auto-Ascend after 3 Shuffles', () => {
+        const s = createGame(0);
+        s.revolutions = 5;
+        s.stage = 30;
+        s.shuffles = 2;
+        s.enemyHp = 1e30;
+        tick(s, 61);
+        assert.deepEqual([s.stage, s.ascends, s.shuffles], [1, 1, 0]);
+    });
+    it('auto-Shuffle holds off when an Era is available', () => {
+        const s = createGame(0);
+        s.revolutions = 4;
+        s.stage = 140; // Era II gate with 4 Revolutions: 60 + 4 × 20
+        s.enemyHp = 1e30;
+        tick(s, 61);
+        assert.equal(s.stage, 140);
+    });
+    it('challenges: need a Revolution, apply their rule, clear at stage 30 for ×2 damage', () => {
+        const s = createGame(0);
+        assert.equal(startChallenge(s, 'notap'), false);
+        s.revolutions = 1;
+        assert.ok(startChallenge(s, 'notap'));
+        assert.equal(tap(s), null);
+        startChallenge(s, 'tiny');
+        assert.equal(boardCols(s), 3);
+        startChallenge(s, 'nomerge');
+        s.board[0] = 1;
+        s.board[1] = 1;
+        assert.equal(moveCard(s, 0, 1), 'swap');
+        s.stage = 29;
+        s.kills = KILLS_PER_STAGE - 1;
+        s.enemyHp = 0.1;
+        const k = damageEnemy(s, 1);
+        assert.equal(k?.cleared, 'nomerge');
+        assert.deepEqual([s.challenge, s.cleared], ['', ['nomerge']]);
+        assert.equal(startChallenge(s, 'nomerge'), false);
+        s.board.fill(0);
+        assert.equal(tapDamage(s), 1 * 4 * 2); // one Revolution × one cleared challenge
+    });
+});
