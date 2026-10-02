@@ -67,6 +67,13 @@ export const HERO_SUMMON_CHANCE = 0.04;
 
 /** Era (layer 4): reached at this stage; each completed Era multiplies damage and gold. */
 export const ERA_STAGE = 60;
+/** Each later Era opens this many stages deeper. */
+export const ERA_STAGE_STEP = 15;
+/** Revolution opens at this stage in Era V, deeper by REV_STAGE_STEP per Revolution. */
+export const REV_STAGE = 120;
+export const REV_STAGE_STEP = 20;
+/** Each Ascend multiplies damage for the rest of the Era. */
+export const ASCEND_DAMAGE = 2;
 export const MAX_ERA = 5;
 export const ERA_DAMAGE = 3;
 export const ERA_GOLD = 2;
@@ -75,8 +82,8 @@ export const FUSE_SECONDS = 8;
 export const TURNCOAT_CHANCE = 0.1;
 
 /** Revolution (layer 5): each one gives these permanent multipliers and unlocks one automation. */
-export const REV_DAMAGE = 10;
-export const REV_GOLD = 5;
+export const REV_DAMAGE = 4;
+export const REV_GOLD = 3;
 /** Challenges are cleared by reaching this stage; each clear doubles damage forever. */
 export const CHALLENGE_GOAL = 30;
 /** Auto-Shuffle fires after this long without a new stage. */

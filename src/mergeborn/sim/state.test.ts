@@ -354,10 +354,10 @@ describe('ascend and heroes', () => {
         s.stage = 1;
         s.kills = 0; // enemy element = (3 + 0) % 4 + 1 = 4 = air
         assert.equal(enemyElement(s), elementId('air'));
-        assert.equal(boardDps(s), 0.5);
+        assert.equal(boardDps(s), 0.5 * 2 ** 4); // countered, ×2 per Ascend
         s.kills = 1; // (3 + 1) % 4 + 1 = 1 = fire
         assert.equal(enemyElement(s), elementId('fire'));
-        assert.equal(boardDps(s), 2);
+        assert.equal(boardDps(s), 2 * 2 ** 4);
     });
     it('heroes roll from the tile element and keep their skill through merges', () => {
         const s = ascended(1);
@@ -371,7 +371,7 @@ describe('ascend and heroes', () => {
         assert.equal(moveCard(s, 1, 0, never), 'merge');
         assert.equal(s.hero[0], 'fire-bellows');
         s.board[1] = 1; // neighbour of the bellows
-        assert.equal(boardDps(s), 2.5 + 1.25);
+        assert.equal(boardDps(s), (2.5 + 1.25) * 2);
     });
     it('hero skills: duelist, turtle, siren, smuggler, bellringer', () => {
         const s = ascended(2);
@@ -586,14 +586,14 @@ describe('revolution', () => {
     const lateEra5 = () => {
         const s = createGame(0);
         s.era = 5;
-        s.stage = 60;
+        s.stage = 120;
         s.heroes = ['smelter'];
         s.bestStage = 90;
         s.ascends = 6;
         s.essence = 500;
         return s;
     };
-    it('opens in Era V at stage 60, resets to Era I, keeps heroes, ×10 damage ×5 gold', () => {
+    it('opens in Era V at stage 120 (+20 per Revolution), resets to Era I, keeps heroes, ×4 damage ×3 gold', () => {
         const s = lateEra5();
         s.era = 4;
         assert.equal(canRevolt(s), false);
@@ -602,8 +602,8 @@ describe('revolution', () => {
         assert.ok(revolt(s));
         assert.deepEqual([s.era, s.stage, s.ascends, s.essence, s.revolutions, s.bestStage], [1, 1, 0, 0, 1, 90]);
         assert.deepEqual(s.heroes, ['smelter']);
-        assert.equal(tapDamage(s), 10);
-        assert.equal(killGold(s), gold * 5);
+        assert.equal(tapDamage(s), 4);
+        assert.equal(killGold(s), gold * 3);
     });
     it('automation unlocks one per Revolution and can be switched off', () => {
         const s = createGame(0);
@@ -633,6 +633,14 @@ describe('revolution', () => {
         tick(s, 61);
         assert.deepEqual([s.stage, s.ascends, s.shuffles], [1, 1, 0]);
     });
+    it('auto-Shuffle holds off when an Era is available', () => {
+        const s = createGame(0);
+        s.revolutions = 4;
+        s.stage = 140; // Era II gate with 4 Revolutions: 60 + 4 × 20
+        s.enemyHp = 1e30;
+        tick(s, 61);
+        assert.equal(s.stage, 140);
+    });
     it('challenges: need a Revolution, apply their rule, clear at stage 30 for ×2 damage', () => {
         const s = createGame(0);
         assert.equal(startChallenge(s, 'notap'), false);
@@ -653,6 +661,6 @@ describe('revolution', () => {
         assert.deepEqual([s.challenge, s.cleared], ['', ['nomerge']]);
         assert.equal(startChallenge(s, 'nomerge'), false);
         s.board.fill(0);
-        assert.equal(tapDamage(s), 1 * 10 * 2); // one Revolution × one cleared challenge
+        assert.equal(tapDamage(s), 1 * 4 * 2); // one Revolution × one cleared challenge
     });
 });

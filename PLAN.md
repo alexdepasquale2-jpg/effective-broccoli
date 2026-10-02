@@ -62,7 +62,8 @@ Each layer also automates the one below (auto-Shuffle at X Essence, auto-Ascend�
 Done: Phases 1–3; Phase 4 core: Ascend (after 1st Shuffle; wipes run+Essence+shop; +1 element, +1 random hero), chi tiles, element merges, counter wheel, hero summons (4%), all 36 hero skills live, hero collection screen with card art.
 Phase 5a done: Eras I–V (gate stage 60; ×3 dmg ×2 gold each; Decay, Hex, Fusion, Turncoat). Heroes survive Era resets.
 Phase 5b done: Revolution (Era V stage 60; ×10 dmg ×5 gold; one automation per Revolution: merge, summon, upgrade, Shuffle, Ascend; challenges No Tap / No Merge / Tiny Board, clear at stage 30 for ×2 dmg). Graphics pass done (juice, board cards, atmosphere).
-Next: Phase 6 balance — headless bot through Ascend/Era/Revolution; Era gate 60 and all multipliers untested for pacing.
+Phase 6 done: `npm run balance [hours]` bot. Pacing (perfect bot, 4 taps/s): Shuffle #1 10 min, Ascend 1 34 min, Era 2 1.4 h, Era 5 7 h, Revolution 1 7.5 h, Rev 2 17.5 h, Rev 3 31.6 h; 34/36 heroes by 48 h.
+Open: Shuffle runs hold ~8 min (Ascend resets the Shuffle count, so the old "Shuffle #10 in 90 s" target no longer applies).
 
 ## Phase 4 design (agreed)
 - Ascend: any time after 1st Shuffle; resets run + Essence + shop; pays 1 token = 1 random hero unlock; each Ascend adds next element (Fire→Water→Earth→Air→Light→Void).

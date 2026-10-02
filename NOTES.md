@@ -7,3 +7,6 @@
 - Shuffle bot (stall 60 s then Shuffle, greedy shop): 10 Shuffles, best stage 68, ~8 min per run.
 - Hero art for the game lives in public/assets/mergeborn/heroes/<id>.jpg (300×420, made from docs-plan/<id>.png). Regenerate thumbs if card art changes.
 - Era reset wipes Ascends, so elements re-lock; collected heroes only roll again once their element is re-Ascended.
+- Balance: run `npm run balance 48` after any economy change; compare milestone times with PLAN.md status.
+- Automation must never reset past a better reset: auto-Shuffle skips when an Era or Revolution is available (bot caught a 13 h stall).
+- Every layer multiplier needs a rising gate, or that layer collapses to minutes (Era gates now rise +15/Era and +20/Revolution).

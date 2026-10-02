@@ -1,5 +1,5 @@
 import { Display, GameObjects, Scene } from 'phaser';
-import { ERA_STAGE, BOARD_SIZE, BOARD_STRIDE, KILLS_PER_STAGE, POWER_TILE, WIDTH } from '../sim/constants.ts';
+import { BOARD_SIZE, BOARD_STRIDE, KILLS_PER_STAGE, POWER_TILE, WIDTH } from '../sim/constants.ts';
 import { loadGame, persistGame } from '../sim/save.ts';
 import { sfx, unlockAudio } from '../audio.ts';
 import {
@@ -29,6 +29,8 @@ import {
     CHALLENGES,
     autoOn,
     canRevolt,
+    eraGate,
+    revGate,
     revolt,
     startChallenge,
     ERAS,
@@ -812,12 +814,12 @@ export class Board extends Scene {
 
     private refreshRevolution() {
         const s = this.state;
-        this.revTitle.setText(`Revolutions: ${s.revolutions}\nDamage ×${formatNum(10 ** s.revolutions * 2 ** s.cleared.length)} · Gold ×${formatNum(5 ** s.revolutions)}`);
+        this.revTitle.setText(`Revolutions: ${s.revolutions}\nDamage ×${formatNum(4 ** s.revolutions * 2 ** s.cleared.length)} · Gold ×${formatNum(3 ** s.revolutions)}`);
         const armed = this.time.now < this.revArmed;
         this.revBtn.text.setText(
-            !canRevolt(s) ? `Revolution opens in Era V at stage ${ERA_STAGE}\n(×10 damage, ×5 gold, next automation)`
+            !canRevolt(s) ? `Revolution opens in Era V at stage ${revGate(s)}\n(×4 damage, ×3 gold, next automation)`
                 : armed ? 'Tap again: back to Era I, everything resets\n(heroes, records and challenges stay)'
-                : `REVOLT: ×10 damage, ×5 gold\nunlocks ${AUTOMATIONS[s.revolutions]?.label ?? 'more power'}`,
+                : `REVOLT: ×4 damage, ×3 gold\nunlocks ${AUTOMATIONS[s.revolutions]?.label ?? 'more power'}`,
         );
         this.revBtn.box.setAlpha(canRevolt(s) ? 1 : 0.4);
         AUTOMATIONS.forEach((a, i) => {
@@ -998,7 +1000,7 @@ export class Board extends Scene {
         const eArmed = this.time.now < this.eraArmed;
         this.eraBtn.text.setText(
             !next ? 'Final Era reached'
-                : !canEra(s) ? `Era ${s.era + 1} ${next.name} opens at stage ${ERA_STAGE}\n${next.rule}`
+                : !canEra(s) ? `Era ${s.era + 1} ${next.name} opens at stage ${eraGate(s)}\n${next.rule}`
                 : eArmed ? 'Tap again: resets Shuffles, Ascends, Essence\n(heroes stay collected)'
                 : `Begin Era ${s.era + 1}: ${next.name} (×3 dmg, ×2 gold)\n${next.rule}`,
         );

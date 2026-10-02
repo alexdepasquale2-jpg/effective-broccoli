@@ -41,6 +41,10 @@ import {
     ERA_DAMAGE,
     ERA_GOLD,
     ERA_STAGE,
+    ERA_STAGE_STEP,
+    REV_STAGE,
+    REV_STAGE_STEP,
+    ASCEND_DAMAGE,
     FUSE_SECONDS,
     MAX_ERA,
     TURNCOAT_CHANCE,
@@ -223,8 +227,8 @@ export const neighbours = (slot: number, hex = false) => {
     return out.filter((n) => n >= 0);
 };
 const nextTo = (s: GameState, slot: number, id: string) => neighbours(slot, isHex(s)).some((n) => s.hero[n] === id && s.board[n] > 0);
-/** Permanent multipliers from the upper layers: Eras, Revolutions and cleared challenges. */
-export const eraDamage = (s: GameState) => ERA_DAMAGE ** (s.era - 1) * REV_DAMAGE ** s.revolutions * 2 ** s.cleared.length;
+/** Multipliers from the upper layers: Ascends (this Era), Eras, Revolutions and cleared challenges. */
+export const eraDamage = (s: GameState) => ASCEND_DAMAGE ** s.ascends * ERA_DAMAGE ** (s.era - 1) * REV_DAMAGE ** s.revolutions * 2 ** s.cleared.length;
 export const eraGold = (s: GameState) => ERA_GOLD ** (s.era - 1) * REV_GOLD ** s.revolutions;
 /** Era III: +10% per same-element neighbour. */
 const hexSynergy = (s: GameState, slot: number) =>
@@ -686,7 +690,9 @@ export const ERAS = [
     { name: 'Fusion', rule: 'A foe alive 8 s absorbs the next one (double gold)' },
     { name: 'Turncoat', rule: 'Kills: 10% chance the enemy card joins your board' },
 ];
-export const canEra = (s: GameState) => s.stage >= ERA_STAGE && s.era < MAX_ERA;
+/** Era gates deepen with each Era and each Revolution, so later loops play deeper stages. */
+export const eraGate = (s: GameState) => ERA_STAGE + ERA_STAGE_STEP * (s.era - 1) + REV_STAGE_STEP * s.revolutions;
+export const canEra = (s: GameState) => s.stage >= eraGate(s) && s.era < MAX_ERA;
 
 /** Layer 4 reset: everything below (run, Essence, shop, Ascends) for the next Era's rules. Heroes stay collected. */
 export function nextEra(s: GameState): boolean {
@@ -740,7 +746,8 @@ function runAutomation(s: GameState, dt: number) {
             buyUpgrade(s, cheapest);
         }
     }
-    if (autoOn(s, 'shuffle') && !s.challenge && s.stageTime >= STALL_SECONDS && canShuffle(s)) {
+    // Never auto-Shuffle away a run that can take a bigger reset (Era or Revolution) instead.
+    if (autoOn(s, 'shuffle') && !s.challenge && s.stageTime >= STALL_SECONDS && canShuffle(s) && !canEra(s) && !canRevolt(s)) {
         shuffle(s);
         if (autoOn(s, 'ascend') && s.shuffles >= 3 && s.ascends < ELEMENTS.length) {
             ascend(s);
@@ -748,7 +755,8 @@ function runAutomation(s: GameState, dt: number) {
     }
 }
 
-export const canRevolt = (s: GameState) => s.era === MAX_ERA && s.stage >= ERA_STAGE;
+export const revGate = (s: GameState) => REV_STAGE + REV_STAGE_STEP * s.revolutions;
+export const canRevolt = (s: GameState) => s.era === MAX_ERA && s.stage >= revGate(s);
 
 /** Layer 5 reset: back to Era I with everything below wiped. Keeps heroes, records, challenges and automation settings. */
 export function revolt(s: GameState): boolean {
