@@ -387,10 +387,14 @@ export class Board extends Scene {
             this.bakedSig[i] = '';
             (card.list[0] as GameObjects.Image).setDisplaySize(this.cell - 10, this.cell - 10);
             card.setPosition(x, y).setSize(this.cell - 10, this.cell - 10);
-            card.removeInteractive();
-            if (open) {
+            // Make each card interactive once, then only resize and toggle it. removeInteractive() is
+            // deferred to the next frame, so remove + set in one go would silently strip the new input.
+            if (!card.input) {
                 card.setInteractive({ draggable: true, useHandCursor: true });
+            } else {
+                (card.input.hitArea as Phaser.Geom.Rectangle).setSize(this.cell - 10, this.cell - 10);
             }
+            card.input!.enabled = open;
         }
         this.renderCards();
     }
