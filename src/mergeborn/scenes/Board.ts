@@ -116,9 +116,21 @@ export class Board extends Scene {
     private shuffleArmed = 0;
     private ascendBtn: Button;
     private ascendArmed = 0;
+    private heroPanel: GameObjects.Container;
+    private heroTiles: { img: GameObjects.Image; lock: GameObjects.Text }[] = [];
+    private heroTitle: GameObjects.Text;
+    private heroZoom: GameObjects.Container;
+    private heroZoomImg: GameObjects.Image;
+    private heroZoomText: GameObjects.Text;
 
     constructor() {
         super('Board');
+    }
+
+    preload() {
+        for (const h of HEROES) {
+            this.load.image(`hero-${h.id}`, `assets/mergeborn/heroes/${h.id}.jpg`);
+        }
     }
 
     create() {
@@ -133,6 +145,7 @@ export class Board extends Scene {
         this.drawSummon();
         this.drawLadder();
         this.drawShop();
+        this.drawHeroes();
         this.input.once('pointerdown', unlockAudio);
 
         if (offline.gold > 0) {
@@ -444,6 +457,76 @@ export class Board extends Scene {
             const bar = this.add.rectangle(18, y + 44, 220, 6, GREEN).setOrigin(0, 0.5);
             this.ladder.push({ text, track, bar });
         }
+    }
+
+    /** Hero collection: 6×6 grid of card art; locked heroes are dark silhouettes. Tap to zoom. */
+    private drawHeroes() {
+        const open = this.button(70, 48, 120, 56, CARD, '15px', () => {
+            this.refreshHeroes();
+            this.heroPanel.setVisible(true);
+        });
+        open.box.setStrokeStyle(2, 0xb07cff);
+        open.text.setText('Heroes').setColor('#b07cff').setFontFamily(FONT);
+
+        const shade = this.add.rectangle(WIDTH / 2, 640, WIDTH, 1280, 0x05060a, 0.96).setInteractive();
+        this.heroTitle = this.add.text(WIDTH / 2, 70, '', { fontFamily: DISPLAY, fontSize: '28px', color: '#b07cff', align: 'center' }).setOrigin(0.5);
+        const items: GameObjects.GameObject[] = [shade, this.heroTitle];
+        const w = 108;
+        const hgt = 151;
+        const x0 = (WIDTH - 6 * w - 5 * 6) / 2 + w / 2;
+        HEROES.forEach((hero, i) => {
+            const x = x0 + (i % 6) * (w + 6);
+            const y = 135 + hgt / 2 + Math.floor(i / 6) * (hgt + 8);
+            const img = this.add.image(x, y, `hero-${hero.id}`).setDisplaySize(w, hgt).setInteractive({ useHandCursor: true });
+            const lock = this.add.text(x, y, '?', { fontFamily: DISPLAY, fontSize: '40px', color: MUTED }).setOrigin(0.5);
+            img.on('pointerdown', () => this.zoomHero(i));
+            this.heroTiles.push({ img, lock });
+            items.push(img, lock);
+        });
+        const close = this.button(WIDTH / 2, 1210, 240, 64, LINE, '20px', () => this.heroPanel.setVisible(false));
+        close.text.setText('Close').setColor(FG);
+        items.push(close.box, close.text);
+        this.heroPanel = this.add.container(0, 0, items).setDepth(52).setVisible(false);
+
+        const zshade = this.add.rectangle(WIDTH / 2, 640, WIDTH, 1280, 0x000000, 0.85).setInteractive();
+        zshade.on('pointerdown', () => this.heroZoom.setVisible(false));
+        this.heroZoomImg = this.add.image(WIDTH / 2, 560, 'hero-fire-bellows').setDisplaySize(560, 784);
+        this.heroZoomText = this.add.text(WIDTH / 2, 1010, '', { fontFamily: FONT, fontSize: '22px', color: FG, align: 'center', wordWrap: { width: 600 } }).setOrigin(0.5, 0);
+        this.heroZoom = this.add.container(0, 0, [zshade, this.heroZoomImg, this.heroZoomText]).setDepth(54).setVisible(false);
+    }
+
+    private refreshHeroes() {
+        const s = this.state;
+        this.heroTitle.setText(`Heroes ${s.heroes.length}/${HEROES.length}\nUnlock one per Ascend`);
+        HEROES.forEach((hero, i) => {
+            const owned = s.heroes.includes(hero.id);
+            const { img, lock } = this.heroTiles[i];
+            if (owned) {
+                img.clearTint().setAlpha(1);
+            } else {
+                img.setTint(0x1a1a24).setAlpha(0.9);
+            }
+            lock.setVisible(!owned);
+        });
+    }
+
+    private zoomHero(i: number) {
+        const hero = HEROES[i];
+        const owned = this.state.heroes.includes(hero.id);
+        const elementOpen = ELEMENTS.indexOf(hero.element) < Math.min(this.state.ascends, ELEMENTS.length);
+        this.heroZoomImg.setTexture(`hero-${hero.id}`).setDisplaySize(560, 784);
+        if (owned) {
+            this.heroZoomImg.clearTint();
+        } else {
+            this.heroZoomImg.setTint(0x1a1a24);
+        }
+        const onBoard = this.state.hero.some((h, slot) => h === hero.id && this.state.board[slot] > 0);
+        this.heroZoomText.setText(
+            owned ? `${hero.name}: ${hero.skill}\n${onBoard ? 'On your board now' : 'Rolls on summons from ' + hero.element + ' chi tiles'}`
+                : elementOpen ? `Locked. A future Ascend can unlock it.`
+                : `Locked. Needs the ${hero.element} element (Ascend ${ELEMENTS.indexOf(hero.element) + 1}).`,
+        );
+        this.heroZoom.setVisible(true);
     }
 
     private drawShop() {
