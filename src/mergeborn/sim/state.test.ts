@@ -8,6 +8,9 @@ import {
     canAscend,
     enemyElement,
     rollChi,
+    canRevolt,
+    revolt,
+    startChallenge,
     canEra,
     neighbours,
     nextEra,
@@ -578,3 +581,78 @@ describe('eras', () => {
     });
 });
 const eraDps = (s: ReturnType<typeof createGame>) => 3 ** (s.era - 1);
+
+describe('revolution', () => {
+    const lateEra5 = () => {
+        const s = createGame(0);
+        s.era = 5;
+        s.stage = 60;
+        s.heroes = ['smelter'];
+        s.bestStage = 90;
+        s.ascends = 6;
+        s.essence = 500;
+        return s;
+    };
+    it('opens in Era V at stage 60, resets to Era I, keeps heroes, ×10 damage ×5 gold', () => {
+        const s = lateEra5();
+        s.era = 4;
+        assert.equal(canRevolt(s), false);
+        s.era = 5;
+        const gold = killGold(createGame(0));
+        assert.ok(revolt(s));
+        assert.deepEqual([s.era, s.stage, s.ascends, s.essence, s.revolutions, s.bestStage], [1, 1, 0, 0, 1, 90]);
+        assert.deepEqual(s.heroes, ['smelter']);
+        assert.equal(tapDamage(s), 10);
+        assert.equal(killGold(s), gold * 5);
+    });
+    it('automation unlocks one per Revolution and can be switched off', () => {
+        const s = createGame(0);
+        s.board[0] = 2;
+        s.board[1] = 2;
+        tick(s, 0.6);
+        assert.equal(s.board[1], 2); // locked
+        s.revolutions = 1;
+        tick(s, 0.6);
+        assert.equal(s.board.filter((t) => t === 3).length, 1);
+        s.revolutions = 2;
+        s.gold = 1e6;
+        const before = s.board.filter(Boolean).length;
+        s.auto.summon = false;
+        tick(s, 0.6);
+        assert.equal(s.board.filter(Boolean).length, before);
+        s.auto.summon = true;
+        tick(s, 0.6);
+        assert.equal(s.board.filter(Boolean).length, before + 1);
+    });
+    it('auto-Shuffle fires after 60 s stalled; auto-Ascend after 3 Shuffles', () => {
+        const s = createGame(0);
+        s.revolutions = 5;
+        s.stage = 30;
+        s.shuffles = 2;
+        s.enemyHp = 1e30;
+        tick(s, 61);
+        assert.deepEqual([s.stage, s.ascends, s.shuffles], [1, 1, 0]);
+    });
+    it('challenges: need a Revolution, apply their rule, clear at stage 30 for ×2 damage', () => {
+        const s = createGame(0);
+        assert.equal(startChallenge(s, 'notap'), false);
+        s.revolutions = 1;
+        assert.ok(startChallenge(s, 'notap'));
+        assert.equal(tap(s), null);
+        startChallenge(s, 'tiny');
+        assert.equal(boardCols(s), 3);
+        startChallenge(s, 'nomerge');
+        s.board[0] = 1;
+        s.board[1] = 1;
+        assert.equal(moveCard(s, 0, 1), 'swap');
+        s.stage = 29;
+        s.kills = KILLS_PER_STAGE - 1;
+        s.enemyHp = 0.1;
+        const k = damageEnemy(s, 1);
+        assert.equal(k?.cleared, 'nomerge');
+        assert.deepEqual([s.challenge, s.cleared], ['', ['nomerge']]);
+        assert.equal(startChallenge(s, 'nomerge'), false);
+        s.board.fill(0);
+        assert.equal(tapDamage(s), 1 * 10 * 2); // one Revolution × one cleared challenge
+    });
+});

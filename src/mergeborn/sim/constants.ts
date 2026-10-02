@@ -32,7 +32,7 @@ export const OFFLINE_CAP_SECONDS = 8 * 60 * 60;
 /** Offline earns a fraction of online income. */
 export const OFFLINE_RATE = 0.5;
 export const SAVE_KEY = 'mergeborn-v1';
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 /** Tap combo: taps within this window chain; each link adds COMBO_STEP to the multiplier. */
 export const COMBO_WINDOW = 1;
@@ -73,3 +73,11 @@ export const ERA_GOLD = 2;
 export const DECAY_SECONDS = 90;
 export const FUSE_SECONDS = 8;
 export const TURNCOAT_CHANCE = 0.1;
+
+/** Revolution (layer 5): each one gives these permanent multipliers and unlocks one automation. */
+export const REV_DAMAGE = 10;
+export const REV_GOLD = 5;
+/** Challenges are cleared by reaching this stage; each clear doubles damage forever. */
+export const CHALLENGE_GOAL = 30;
+/** Auto-Shuffle fires after this long without a new stage. */
+export const STALL_SECONDS = 60;

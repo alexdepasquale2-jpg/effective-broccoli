@@ -44,12 +44,18 @@ import {
     FUSE_SECONDS,
     MAX_ERA,
     TURNCOAT_CHANCE,
+    REV_DAMAGE,
+    REV_GOLD,
+    CHALLENGE_GOAL,
+    STALL_SECONDS,
 } from './constants.ts';
 import { ELEMENTS, HEROES, counterMult, elementId, heroById } from './heroes.ts';
 
 export type UpgradeKey = 'tap' | 'summon' | 'merge' | 'battle';
 export type UnlockKey = 'combo' | 'multi' | 'bounty' | 'traits' | 'board5';
 export type ShopKey = 'might' | 'fortune' | 'headstart';
+export type AutoKey = 'merge' | 'summon' | 'upgrade' | 'shuffle' | 'ascend';
+export type ChallengeKey = 'notap' | 'nomerge' | 'tiny';
 export type Trait = 'none' | 'shield' | 'regen' | 'split';
 
 export interface GameState {
@@ -96,11 +102,21 @@ export interface GameState {
     age: number[];
     foeAge: number;
     fused: boolean;
+    /** Layer 5 (Revolution): kept forever. */
+    revolutions: number;
+    auto: Record<AutoKey, boolean>;
+    challenge: ChallengeKey | '';
+    cleared: ChallengeKey[];
+    /** Seconds on the current stage (for auto-Shuffle) and the automation tick accumulator. */
+    stageTime: number;
+    autoClock: number;
 }
 
 export interface Kill {
     gold: number;
     boss: boolean;
+    /** Set when this boss kill completed the active challenge. */
+    cleared?: ChallengeKey;
     /** Era V: slot a defecting enemy card landed on. */
     turncoat?: number;
     /** Set when this boss kill reached a stage that unlocks something. */
@@ -172,6 +188,12 @@ export function createGame(now = Date.now()): GameState {
         age: new Array(BOARD_SIZE).fill(0),
         foeAge: 0,
         fused: false,
+        revolutions: 0,
+        auto: { merge: true, summon: true, upgrade: true, shuffle: true, ascend: true },
+        challenge: '',
+        cleared: [],
+        stageTime: 0,
+        autoClock: 0,
     };
     spawnEnemy(state);
     return state;
@@ -179,7 +201,7 @@ export function createGame(now = Date.now()): GameState {
 
 export const has = (s: GameState, key: UnlockKey) => s.stage >= UNLOCKS.find((u) => u.key === key)!.stage;
 export const nextUnlock = (s: GameState) => UNLOCKS.find((u) => s.stage < u.stage) ?? null;
-export const boardCols = (s: GameState) => (has(s, 'board5') ? 5 : 4);
+export const boardCols = (s: GameState) => (s.challenge === 'tiny' ? 3 : has(s, 'board5') ? 5 : 4);
 export const isOpen = (s: GameState, slot: number) =>
     slot % BOARD_STRIDE < boardCols(s) && Math.floor(slot / BOARD_STRIDE) < boardCols(s);
 export const freeSlot = (s: GameState) => s.board.findIndex((t, i) => t === 0 && isOpen(s, i));
@@ -201,8 +223,9 @@ export const neighbours = (slot: number, hex = false) => {
     return out.filter((n) => n >= 0);
 };
 const nextTo = (s: GameState, slot: number, id: string) => neighbours(slot, isHex(s)).some((n) => s.hero[n] === id && s.board[n] > 0);
-export const eraDamage = (s: GameState) => ERA_DAMAGE ** (s.era - 1);
-export const eraGold = (s: GameState) => ERA_GOLD ** (s.era - 1);
+/** Permanent multipliers from the upper layers: Eras, Revolutions and cleared challenges. */
+export const eraDamage = (s: GameState) => ERA_DAMAGE ** (s.era - 1) * REV_DAMAGE ** s.revolutions * 2 ** s.cleared.length;
+export const eraGold = (s: GameState) => ERA_GOLD ** (s.era - 1) * REV_GOLD ** s.revolutions;
 /** Era III: +10% per same-element neighbour. */
 const hexSynergy = (s: GameState, slot: number) =>
     isHex(s) && s.elem[slot] ? 1 + 0.1 * neighbours(slot, true).filter((n) => s.board[n] && s.elem[n] === s.elem[slot]).length : 1;
@@ -323,6 +346,12 @@ export function damageEnemy(s: GameState, amount: number, rng: Rng = Math.random
     addGold(s, kill.gold);
     if (kill.boss) {
         s.stage += 1;
+        s.stageTime = 0;
+        if (s.challenge && s.stage >= CHALLENGE_GOAL) {
+            s.cleared = [...s.cleared, s.challenge];
+            kill.cleared = s.challenge;
+            s.challenge = '';
+        }
         s.bestStage = Math.max(s.bestStage, s.stage);
         s.kills = 0;
         kill.unlock = UNLOCKS.find((u) => u.stage === s.stage);
@@ -337,6 +366,9 @@ export function damageEnemy(s: GameState, amount: number, rng: Rng = Math.random
 }
 
 export function tap(s: GameState): Kill | null {
+    if (s.challenge === 'notap') {
+        return null;
+    }
     s.combo = s.comboTimer > 0 ? Math.min(COMBO_CAP + (heroOnBoard(s, 'storm-bard') ? 5 : 0), s.combo + 1) : 1;
     s.comboTimer = COMBO_WINDOW;
     s.taps += 1;
@@ -359,7 +391,7 @@ export function summon(s: GameState, count = 1, rng: Rng = Math.random): number[
         s.gold -= cost;
         s.summons += 1;
         const pity = has(s, 'multi') && s.summons % (heroOnBoard(s, 'mirror-oracle') ? 7 : PITY_EVERY) === 0;
-        const tier = 1 + s.shop.headstart + (pity || rng() < summonLuck(s) ? 1 : 0);
+        const tier = 1 + s.shop.headstart + (pity || rng() < summonLuck(s) ? 1 : 0) + (s.challenge === 'nomerge' ? Math.floor(s.stage / 4) : 0);
         placeCard(s, slot, tier, rng);
         slots.push(slot);
         if (heroOnBoard(s, 'flare-sprite')) {
@@ -403,7 +435,7 @@ export function moveCard(s: GameState, from: number, to: number, rng: Rng = Math
     const ea = s.elem[from];
     const eb = s.elem[to];
     const rift = s.hero[from] === 'rift-walker' || s.hero[to] === 'rift-walker';
-    if (a === b && (!ea || !eb || ea === eb || rift)) {
+    if (a === b && s.challenge !== 'nomerge' && (!ea || !eb || ea === eb || rift)) {
         const chance = (has(s, 'bounty') ? LUCKY_MERGE_CHANCE : 0) + (heroOnBoard(s, 'feather-monk') ? 0.03 : 0) +
             (s.hero[to] === 'hollow-king' ? 0.15 : 0);
         const lucky = rng() < chance;
@@ -451,6 +483,8 @@ export function tick(s: GameState, dt: number): Kill[] {
     const before = s.clock;
     s.clock += dt;
     s.idle += dt;
+    s.stageTime += dt;
+    runAutomation(s, dt);
     if (s.era === 2) {
         // Decay: cards left unmerged too long lose a tier.
         s.board.forEach((t, i) => {
@@ -544,11 +578,11 @@ export function deserialize(raw: string | null): GameState | null {
             const board = new Array(BOARD_SIZE).fill(0);
             data.board.forEach((t: number, i: number) => (board[Math.floor(i / 4) * BOARD_STRIDE + (i % 4)] = t));
             data.board = board;
-        } else if (![2, 3, 4, SAVE_VERSION].includes(v) || !Array.isArray(data.board) || data.board.length !== BOARD_SIZE) {
+        } else if (![2, 3, 4, 5, SAVE_VERSION].includes(v) || !Array.isArray(data.board) || data.board.length !== BOARD_SIZE) {
             return null;
         }
         const base = createGame(data.savedAt);
-        return { ...base, ...data, upgrades: { ...base.upgrades, ...data.upgrades }, shop: { ...base.shop, ...data.shop } };
+        return { ...base, ...data, upgrades: { ...base.upgrades, ...data.upgrades }, shop: { ...base.shop, ...data.shop }, auto: { ...base.auto, ...data.auto } };
     } catch {
         return null;
     }
@@ -574,6 +608,10 @@ export function shuffle(s: GameState): number {
         ascends: s.ascends,
         heroes: s.heroes,
         era: s.era,
+        revolutions: s.revolutions,
+        auto: s.auto,
+        cleared: s.cleared,
+        challenge: s.challenge,
     });
     rollChi(s);
     return gain;
@@ -600,7 +638,7 @@ export function ascend(s: GameState, rng: Rng = Math.random): string | null {
         return null;
     }
     const fresh = createGame(s.savedAt);
-    Object.assign(s, { ...fresh, bestStage: s.bestStage, ascends: s.ascends + 1, heroes: s.heroes, era: s.era });
+    Object.assign(s, { ...fresh, bestStage: s.bestStage, ascends: s.ascends + 1, heroes: s.heroes, era: s.era, revolutions: s.revolutions, auto: s.auto, cleared: s.cleared, challenge: s.challenge });
     const pool = heroPool(s);
     const pick = pool.length ? pool[Math.floor(rng() * pool.length) % pool.length].id : '';
     if (pick) {
@@ -656,6 +694,82 @@ export function nextEra(s: GameState): boolean {
         return false;
     }
     const fresh = createGame(s.savedAt);
-    Object.assign(s, { ...fresh, bestStage: s.bestStage, heroes: s.heroes, era: s.era + 1 });
+    Object.assign(s, { ...fresh, bestStage: s.bestStage, heroes: s.heroes, era: s.era + 1, revolutions: s.revolutions, auto: s.auto, cleared: s.cleared });
+    return true;
+}
+
+/** Automations unlock one per Revolution, in this order. */
+export const AUTOMATIONS: { key: AutoKey; label: string }[] = [
+    { key: 'merge', label: 'Auto-merge' },
+    { key: 'summon', label: 'Auto-summon' },
+    { key: 'upgrade', label: 'Auto-upgrade' },
+    { key: 'shuffle', label: 'Auto-Shuffle (after 60 s stalled)' },
+    { key: 'ascend', label: 'Auto-Ascend (after 3 Shuffles)' },
+];
+export const CHALLENGES: { key: ChallengeKey; label: string; rule: string }[] = [
+    { key: 'notap', label: 'No Tap', rule: 'Taps do nothing' },
+    { key: 'nomerge', label: 'No Merge', rule: 'Merging is off; summons grow with stage' },
+    { key: 'tiny', label: 'Tiny Board', rule: 'The board is 3×3' },
+];
+export const autoOn = (s: GameState, key: AutoKey) =>
+    s.auto[key] && AUTOMATIONS.findIndex((a) => a.key === key) < s.revolutions;
+
+/** Runs unlocked automations twice a second. */
+function runAutomation(s: GameState, dt: number) {
+    s.autoClock += dt;
+    if (s.autoClock < 0.5) {
+        return;
+    }
+    s.autoClock = 0;
+    if (autoOn(s, 'merge')) {
+        for (let a = 0; a < BOARD_SIZE; a++) {
+            const b = s.board.findIndex((t, j) => j !== a && t && t === s.board[a] && isOpen(s, a) && isOpen(s, j) &&
+                (!s.elem[a] || !s.elem[j] || s.elem[a] === s.elem[j]));
+            if (s.board[a] && b >= 0 && moveCard(s, a, b) === 'merge') {
+                break;
+            }
+        }
+    }
+    if (autoOn(s, 'summon')) {
+        summon(s, 1);
+    }
+    if (autoOn(s, 'upgrade')) {
+        const keys = (Object.keys(UPGRADES) as UpgradeKey[]).filter((k) => canUpgrade(s, k));
+        const cheapest = keys.sort((x, y) => upgradeCost(s, x) - upgradeCost(s, y))[0];
+        if (cheapest && upgradeCost(s, cheapest) <= s.gold * 0.5) {
+            buyUpgrade(s, cheapest);
+        }
+    }
+    if (autoOn(s, 'shuffle') && !s.challenge && s.stageTime >= STALL_SECONDS && canShuffle(s)) {
+        shuffle(s);
+        if (autoOn(s, 'ascend') && s.shuffles >= 3 && s.ascends < ELEMENTS.length) {
+            ascend(s);
+        }
+    }
+}
+
+export const canRevolt = (s: GameState) => s.era === MAX_ERA && s.stage >= ERA_STAGE;
+
+/** Layer 5 reset: back to Era I with everything below wiped. Keeps heroes, records, challenges and automation settings. */
+export function revolt(s: GameState): boolean {
+    if (!canRevolt(s)) {
+        return false;
+    }
+    const keep = { bestStage: s.bestStage, heroes: s.heroes, revolutions: s.revolutions + 1, auto: s.auto, cleared: s.cleared };
+    Object.assign(s, createGame(s.savedAt), keep);
+    return true;
+}
+
+/** Starts (or abandons, with '') a challenge: a fresh run under its rule. Needs one Revolution. */
+export function startChallenge(s: GameState, key: ChallengeKey | ''): boolean {
+    if (s.revolutions < 1 || (key && s.cleared.includes(key))) {
+        return false;
+    }
+    const keep = {
+        bestStage: s.bestStage, heroes: s.heroes, revolutions: s.revolutions, auto: s.auto, cleared: s.cleared,
+        era: s.era, ascends: s.ascends, shop: s.shop, essence: s.essence,
+    };
+    Object.assign(s, createGame(s.savedAt), keep, { challenge: key });
+    rollChi(s);
     return true;
 }

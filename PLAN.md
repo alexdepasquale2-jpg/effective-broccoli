@@ -61,7 +61,8 @@ Each layer also automates the one below (auto-Shuffle at X Essence, auto-Ascend�
 ## Status
 Done: Phases 1–3; Phase 4 core: Ascend (after 1st Shuffle; wipes run+Essence+shop; +1 element, +1 random hero), chi tiles, element merges, counter wheel, hero summons (4%), all 36 hero skills live, hero collection screen with card art.
 Phase 5a done: Eras I–V (gate stage 60; ×3 dmg ×2 gold each; Decay, Hex, Fusion, Turncoat). Heroes survive Era resets.
-Next: Phase 5b Revolution (automation + challenges), then Phase 6 balance (Era gate was 80, lowered to 60 untested).
+Phase 5b done: Revolution (Era V stage 60; ×10 dmg ×5 gold; one automation per Revolution: merge, summon, upgrade, Shuffle, Ascend; challenges No Tap / No Merge / Tiny Board, clear at stage 30 for ×2 dmg). Graphics pass done (juice, board cards, atmosphere).
+Next: Phase 6 balance — headless bot through Ascend/Era/Revolution; Era gate 60 and all multipliers untested for pacing.
 
 ## Phase 4 design (agreed)
 - Ascend: any time after 1st Shuffle; resets run + Essence + shop; pays 1 token = 1 random hero unlock; each Ascend adds next element (Fire→Water→Earth→Air→Light→Void).

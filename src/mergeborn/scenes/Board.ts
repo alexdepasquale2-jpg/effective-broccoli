@@ -25,6 +25,12 @@ import {
     canAscend,
     enemyElement,
     heroOnBoard,
+    AUTOMATIONS,
+    CHALLENGES,
+    autoOn,
+    canRevolt,
+    revolt,
+    startChallenge,
     ERAS,
     canEra,
     isHex,
@@ -139,6 +145,12 @@ export class Board extends Scene {
     private boardSig = '';
     private wasBoss = false;
     private atmoEra = 0;
+    private revPanel: GameObjects.Container;
+    private revTitle: GameObjects.Text;
+    private revBtn: Button;
+    private revArmed = 0;
+    private autoBtns: Button[] = [];
+    private challengeBtns: Button[] = [];
     private backdrop: GameObjects.Image;
     private fog: GameObjects.Image[] = [];
     private embers: GameObjects.Particles.ParticleEmitter;
@@ -186,6 +198,7 @@ export class Board extends Scene {
         this.drawLadder();
         this.drawShop();
         this.drawHeroes();
+        this.drawRevolution();
         this.time.addEvent({ delay: 1400, loop: true, callback: () => this.shimmer() });
         this.input.once('pointerdown', unlockAudio);
 
@@ -221,11 +234,11 @@ export class Board extends Scene {
 
     private drawHud() {
         this.goldText = this.add.text(WIDTH / 2, 48, '', { fontFamily: DISPLAY, fontSize: '42px', color: hex(GOLD) }).setOrigin(0.5);
-        this.stageText = this.add.text(WIDTH / 2, 94, '', { fontFamily: FONT, fontSize: '18px', color: MUTED, align: 'center' }).setOrigin(0.5);
+        this.stageText = this.add.text(WIDTH / 2, 96, '', { fontFamily: FONT, fontSize: '17px', color: MUTED, align: 'center', wordWrap: { width: 420 } }).setOrigin(0.5);
         const pipW = 40;
         const x0 = WIDTH / 2 - (KILLS_PER_STAGE * (pipW + 6) - 6) / 2 + pipW / 2;
         for (let i = 0; i < KILLS_PER_STAGE; i++) {
-            this.pips.push(this.add.rectangle(x0 + i * (pipW + 6), 126, pipW, 8, LINE));
+            this.pips.push(this.add.rectangle(x0 + i * (pipW + 6), 136, pipW, 8, LINE));
         }
     }
 
@@ -430,7 +443,7 @@ export class Board extends Scene {
             this.layoutBoard();
         }
         this.goldText.setText(`${formatNum(s.gold)} gold`);
-        this.stageText.setText(`Era ${s.era} ${ERAS[s.era - 1].name}  ·  Stage ${s.stage}  ·  best ${s.bestStage}  ·  ${formatNum(s.essence)} Essence`);
+        this.stageText.setText(`${s.challenge ? '⚔ ' + CHALLENGES.find((c) => c.key === s.challenge)!.label + '  ·  ' : ''}Era ${s.era} ${ERAS[s.era - 1].name}  ·  Stage ${s.stage}  ·  best ${s.bestStage}  ·  ${formatNum(s.essence)} Essence`);
         goals(s).forEach((g, i) => {
             this.ladder[i].text.setText(g.label).setVisible(true);
             this.ladder[i].track.setVisible(true);
@@ -523,6 +536,9 @@ export class Board extends Scene {
             sfx.fanfare();
         } else {
             sfx.kill();
+        }
+        if (kill.cleared) {
+            this.toast(`Challenge cleared: ${CHALLENGES.find((c) => c.key === kill.cleared)!.label}! Damage ×2 forever`, 4500);
         }
         if (kill.unlock) {
             this.cameras.main.flash(250, 255, 194, 74);
@@ -750,6 +766,113 @@ export class Board extends Scene {
             const bar = this.add.rectangle(18, y + 44, 220, 6, GREEN).setOrigin(0, 0.5);
             this.ladder.push({ text, track, bar });
         }
+    }
+
+    /** Revolution panel: the layer-5 reset, automation toggles and challenge runs. */
+    private drawRevolution() {
+        const open = this.button(WIDTH - 70, 112, 120, 40, CARD, '14px', () => {
+            this.refreshRevolution();
+            this.revPanel.setVisible(true);
+        });
+        open.box.setStrokeStyle(2, PINK);
+        open.text.setText('Revolution').setColor(hex(PINK)).setFontFamily(FONT);
+
+        const shade = this.add.rectangle(WIDTH / 2, 640, WIDTH, 1280, 0x05060a, 0.96).setInteractive();
+        this.revTitle = this.add.text(WIDTH / 2, 90, '', { fontFamily: DISPLAY, fontSize: '26px', color: hex(PINK), align: 'center' }).setOrigin(0.5);
+        this.revBtn = this.button(WIDTH / 2, 230, 600, 96, PINK, '20px', () => this.onRevolt());
+        const label = (y: number, t: string) => this.add.text(60, y, t, { fontFamily: FONT, fontSize: '16px', color: MUTED });
+        const items: GameObjects.GameObject[] = [shade, this.revTitle, this.revBtn.box, this.revBtn.text, label(310, 'AUTOMATION · one per Revolution')];
+        AUTOMATIONS.forEach((a, i) => {
+            const btn = this.button(WIDTH / 2, 370 + i * 74, 600, 64, BG, '18px', () => {
+                if (i < this.state.revolutions) {
+                    this.state.auto[a.key] = !this.state.auto[a.key];
+                    sfx.summon();
+                    persistGame(this.state);
+                    this.refreshRevolution();
+                } else {
+                    sfx.deny();
+                }
+            });
+            btn.text.setFontFamily(FONT);
+            this.autoBtns.push(btn);
+            items.push(btn.box, btn.text);
+        });
+        items.push(label(750, 'CHALLENGES · reach stage 30 for ×2 damage forever'));
+        CHALLENGES.forEach((c, i) => {
+            const btn = this.button(WIDTH / 2, 815 + i * 92, 600, 80, BG, '18px', () => this.onChallenge(c.key));
+            btn.text.setFontFamily(FONT);
+            this.challengeBtns.push(btn);
+            items.push(btn.box, btn.text);
+        });
+        const close = this.button(WIDTH / 2, 1180, 240, 64, LINE, '20px', () => this.revPanel.setVisible(false));
+        close.text.setText('Close').setColor(FG);
+        items.push(close.box, close.text);
+        this.revPanel = this.add.container(0, 0, items).setDepth(52).setVisible(false);
+    }
+
+    private refreshRevolution() {
+        const s = this.state;
+        this.revTitle.setText(`Revolutions: ${s.revolutions}\nDamage ×${formatNum(10 ** s.revolutions * 2 ** s.cleared.length)} · Gold ×${formatNum(5 ** s.revolutions)}`);
+        const armed = this.time.now < this.revArmed;
+        this.revBtn.text.setText(
+            !canRevolt(s) ? `Revolution opens in Era V at stage ${ERA_STAGE}\n(×10 damage, ×5 gold, next automation)`
+                : armed ? 'Tap again: back to Era I, everything resets\n(heroes, records and challenges stay)'
+                : `REVOLT: ×10 damage, ×5 gold\nunlocks ${AUTOMATIONS[s.revolutions]?.label ?? 'more power'}`,
+        );
+        this.revBtn.box.setAlpha(canRevolt(s) ? 1 : 0.4);
+        AUTOMATIONS.forEach((a, i) => {
+            const btn = this.autoBtns[i];
+            const unlocked = i < s.revolutions;
+            btn.text.setText(unlocked ? `${a.label}: ${s.auto[a.key] ? 'ON' : 'OFF'}` : `${a.label} · Revolution ${i + 1}`);
+            btn.text.setColor(unlocked ? (autoOn(s, a.key) ? hex(GREEN) : FG) : MUTED);
+            btn.box.setStrokeStyle(2, unlocked && s.auto[a.key] ? GREEN : LINE);
+        });
+        CHALLENGES.forEach((c, i) => {
+            const btn = this.challengeBtns[i];
+            const done = s.cleared.includes(c.key);
+            const active = s.challenge === c.key;
+            btn.text.setText(
+                `${c.label}: ${c.rule}\n` +
+                    (done ? '✓ Cleared' : active ? 'Active · tap to abandon' : s.revolutions < 1 ? 'Needs 1 Revolution' : 'Tap to start (restarts your run)'),
+            );
+            btn.text.setColor(done ? hex(GREEN) : active ? hex(GOLD) : s.revolutions < 1 ? MUTED : FG);
+            btn.box.setStrokeStyle(2, active ? GOLD : done ? GREEN : LINE);
+        });
+    }
+
+    private onRevolt() {
+        if (!canRevolt(this.state)) {
+            sfx.deny();
+            return;
+        }
+        if (this.time.now >= this.revArmed) {
+            this.revArmed = this.time.now + 3000;
+            this.refreshRevolution();
+            return;
+        }
+        this.revArmed = 0;
+        revolt(this.state);
+        persistGame(this.state);
+        this.layoutBoard();
+        this.refreshRevolution();
+        sfx.fanfare();
+        this.cameras.main.flash(1000, 255, 90, 138);
+        this.cameras.main.shake(600, 0.02);
+        this.sparks(WIDTH / 2, 640, PINK, 120);
+        this.toast(`REVOLUTION ${this.state.revolutions}! ${AUTOMATIONS[this.state.revolutions - 1]?.label ?? ''} unlocked.`, 5000);
+    }
+
+    private onChallenge(key: (typeof CHALLENGES)[number]['key']) {
+        const s = this.state;
+        if (!startChallenge(s, s.challenge === key ? '' : key)) {
+            sfx.deny();
+            return;
+        }
+        persistGame(s);
+        this.layoutBoard();
+        this.refreshRevolution();
+        sfx.fanfare();
+        this.toast(s.challenge ? `Challenge: ${CHALLENGES.find((c) => c.key === s.challenge)!.rule}. Reach stage 30!` : 'Challenge abandoned.', 3500);
     }
 
     /** Hero collection: 6×6 grid of card art; locked heroes are dark silhouettes. Tap to zoom. */
