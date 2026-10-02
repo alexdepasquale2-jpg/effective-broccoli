@@ -7,7 +7,7 @@
     "dev": "vite --config vite/config.dev.mjs",
     "build": "vite build --config vite/config.prod.mjs",
     "preview": "vite preview --host --port 8080 --strictPort --config vite/config.prod.mjs",
-    "test": "node --experimental-strip-types --test src/canon-lane/sim/*.test.ts"
+    "test": "node --experimental-strip-types --test src/canon-lane/sim/*.test.ts src/mergeborn/sim/*.test.ts"
   },
   "devDependencies": {
     "typescript": "~5.7.2",

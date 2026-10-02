@@ -59,4 +59,5 @@ Each layer also automates the one below (auto-Shuffle at X Essence, auto-Ascendâ
 6. Balance pass: headless sim script that plays optimally and prints time-to-each-unlock vs the pacing targets.
 
 ## Status
-Done: plan + visual plan. Next: Phase 1. Blockers: none.
+Done: plan, visual plan, Phase 1 (sim + tests, Board scene, `?game=merge`).
+Next: Phase 2 (bosses rewards, system tracks stages 1â€“2, offline summary polish). Blockers: none.
