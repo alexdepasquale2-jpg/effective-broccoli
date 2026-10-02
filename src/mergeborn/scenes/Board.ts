@@ -86,6 +86,19 @@ export function formatNum(n: number): string {
     return (n / 1000 ** exp).toFixed(2).replace(/\.?0+$/, '') + SUFFIXES[exp];
 }
 
+/** The pieces of one board card, back to front. */
+interface CardParts {
+    glow: GameObjects.Image;
+    face: GameObjects.Rectangle;
+    wash: GameObjects.Rectangle;
+    art: GameObjects.Image;
+    shade: GameObjects.Rectangle;
+    label: GameObjects.Text;
+    name: GameObjects.Text;
+    badge: GameObjects.Text;
+    shine: GameObjects.Rectangle;
+}
+
 interface Button {
     box: GameObjects.Rectangle;
     text: GameObjects.Text;
@@ -97,6 +110,7 @@ export class Board extends Scene {
     private cell = 0;
     private slots: GameObjects.Rectangle[] = [];
     private cards: GameObjects.Container[] = [];
+    private parts: CardParts[] = [];
     private goldText: GameObjects.Text;
     private stageText: GameObjects.Text;
     private pips: GameObjects.Rectangle[] = [];
@@ -150,6 +164,13 @@ export class Board extends Scene {
         this.state = state;
         this.cameras.main.setBackgroundColor(BG);
         this.makeFxTextures();
+        // Crop each hero card to its art window (the painted scene) for use on board tiles.
+        for (const h of HEROES) {
+            const tex = this.textures.get(`hero-${h.id}`);
+            if (!tex.has('art')) {
+                tex.add('art', 0, 15, 45, 270, 246);
+            }
+        }
 
         this.drawHud();
         this.drawEnemy();
@@ -159,6 +180,7 @@ export class Board extends Scene {
         this.drawLadder();
         this.drawShop();
         this.drawHeroes();
+        this.time.addEvent({ delay: 1400, loop: true, callback: () => this.shimmer() });
         this.input.once('pointerdown', unlockAudio);
 
         if (offline.gold > 0) {
@@ -175,6 +197,7 @@ export class Board extends Scene {
         for (const kill of tick(this.state, dt)) {
             this.onKill(kill);
         }
+        this.pulseCards();
         this.saveClock += dt;
         if (this.saveClock > 5) {
             this.saveClock = 0;
@@ -227,10 +250,19 @@ export class Board extends Scene {
         this.add.text(WIDTH - GRID_X, GRID_Y - 18, 'drag equal cards to merge', { fontFamily: FONT, fontSize: '14px', color: MUTED }).setOrigin(1, 0.5);
         for (let i = 0; i < BOARD_SIZE; i++) {
             this.slots.push(this.add.rectangle(0, 0, 10, 10, BG));
-            const face = this.add.rectangle(0, 0, 10, 10, CARD);
-            const label = this.add.text(0, 0, '', { fontFamily: DISPLAY, fontSize: '32px', color: FG }).setOrigin(0.5);
-            const badge = this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '16px', color: FG }).setOrigin(0, 0);
-            const card = this.add.container(0, 0, [face, label, badge]);
+            const parts: CardParts = {
+                glow: this.add.image(0, 0, 'glow').setBlendMode('ADD'),
+                face: this.add.rectangle(0, 0, 10, 10, CARD),
+                wash: this.add.rectangle(0, 0, 10, 10, CARD, 0),
+                art: this.add.image(0, 0, 'glow'),
+                shade: this.add.rectangle(0, 0, 10, 10, 0x000000, 0.6),
+                label: this.add.text(0, 0, '', { fontFamily: DISPLAY, fontSize: '32px', color: FG, stroke: '#000', strokeThickness: 5 }).setOrigin(0.5),
+                name: this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '13px', color: FG, fontStyle: 'bold' }).setOrigin(0.5),
+                badge: this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '16px', color: FG }).setOrigin(0, 0),
+                shine: this.add.rectangle(0, 0, 10, 10, 0xffffff, 0).setBlendMode('ADD'),
+            };
+            this.parts.push(parts);
+            const card = this.add.container(0, 0, Object.values(parts));
             card.setData('slot', i);
             this.cards.push(card);
         }
@@ -271,10 +303,16 @@ export class Board extends Scene {
             this.slots[i].setVisible(open).setPosition(x, y).setSize(this.cell, this.cell);
             this.slots[i].setStrokeStyle(tile ? 4 : 2, tile ? GOLD : LINE);
             const card = this.cards[i];
-            const [face, label, badge] = card.list as [GameObjects.Rectangle, GameObjects.Text, GameObjects.Text];
-            badge.setPosition(-(this.cell - 10) / 2 + 6, -(this.cell - 10) / 2 + 4);
-            face.setSize(this.cell - 10, this.cell - 10);
-            label.setFontSize(Math.round(this.cell * 0.26));
+            const p = this.parts[i];
+            const w = this.cell - 10;
+            p.glow.setDisplaySize(this.cell * 1.7, this.cell * 1.7);
+            p.face.setSize(w, w);
+            p.wash.setSize(w - 12, w - 12);
+            p.art.setPosition(0, 0);
+            p.shade.setSize(w - 8, w * 0.26).setPosition(0, w / 2 - w * 0.13 - 4);
+            p.name.setPosition(0, w / 2 - w * 0.13 - 4).setFontSize(Math.max(11, Math.round(this.cell * 0.12)));
+            p.badge.setPosition(-w / 2 + 6, -w / 2 + 4).setFontSize(Math.round(this.cell * 0.15));
+            p.shine.setSize(w * 0.16, w - 4);
             card.setPosition(x, y).setSize(this.cell - 10, this.cell - 10);
             card.removeInteractive();
             if (open) {
@@ -348,20 +386,36 @@ export class Board extends Scene {
             const chi = this.state.chi[i];
             this.slots[i].setFillStyle(chi ? ELEM_COLORS[chi] : BG, chi ? 0.14 : 1);
             if (tier > 0) {
-                const [face, label, badge] = card.list as [GameObjects.Rectangle, GameObjects.Text, GameObjects.Text];
+                const p = this.parts[i];
                 const el = this.state.elem[i];
                 const hero = heroById(this.state.hero[i]);
-                face.setFillStyle(el ? ELEM_COLORS[el] : CARD, el ? 0.22 : 1).setStrokeStyle(hero ? 6 : 4, hero ? GOLD : tierColor(tier));
-                label.setText(hero ? `${hero.name.split(' ').pop()}\nT${tier}` : `T${tier}`).setColor(hex(tierColor(tier)));
-                label.setFontSize(Math.round(this.cell * (hero ? 0.16 : 0.26)));
-                badge.setText(ELEM_GLYPH[el] + (hero ? '★' : ''));
+                const w = this.cell - 10;
+                const tc = tierColor(tier);
+                p.glow.setTint(hero ? GOLD : tc).setVisible(tier >= 3 || !!hero);
+                p.face.setFillStyle(CARD).setStrokeStyle(hero ? 6 : 3 + Math.min(tier, 6) * 0.5, hero ? GOLD : tc);
+                // Element wash: a coloured inner panel with a thin element-coloured frame.
+                p.wash.setFillStyle(el ? ELEM_COLORS[el] : tc, el ? 0.28 : 0.08).setStrokeStyle(2, el ? ELEM_COLORS[el] : tc, el ? 0.8 : 0.25);
+                p.art.setVisible(!!hero);
+                p.shade.setVisible(!!hero);
+                p.name.setVisible(!!hero).setText(hero ? hero.name.toUpperCase() : '').setScale(1);
+                if (p.name.width > w - 12) {
+                    p.name.setScale((w - 12) / p.name.width);
+                }
+                if (hero) {
+                    p.art.setTexture(`hero-${hero.id}`, 'art').setDisplaySize(w - 8, w - 8);
+                    p.label.setText(`T${tier}`).setFontSize(Math.round(this.cell * 0.17)).setPosition(w / 2 - this.cell * 0.17, -w / 2 + this.cell * 0.13);
+                } else {
+                    p.label.setText(`T${tier}`).setFontSize(Math.round(this.cell * (0.22 + Math.min(tier, 8) * 0.012))).setPosition(0, 0);
+                }
+                p.label.setColor(hex(tc));
+                p.badge.setText(ELEM_GLYPH[el] + (hero ? '★' : ''));
             }
         });
     }
 
     private refresh() {
         const s = this.state;
-        const sig = s.board.join() + s.elem.join();
+        const sig = s.board.join() + s.elem.join() + s.hero.join();
         if (sig !== this.boardSig) {
             this.boardSig = sig;
             this.renderCards();
@@ -493,6 +547,33 @@ export class Board extends Scene {
             const { x, y } = this.slotCenter(slot);
             this.float(x, y - 30, `+${formatNum(gold)}`, hex(GOLD));
         }
+    }
+
+    /** High-tier and hero cards breathe a soft glow in their tier colour. */
+    private pulseCards() {
+        const t = this.time.now / 320;
+        this.state.board.forEach((tier, i) => {
+            const glow = this.parts[i].glow;
+            if (glow.visible) {
+                glow.setAlpha((0.12 + Math.min(tier, 10) * 0.035) * (0.75 + 0.25 * Math.sin(t + i)));
+            }
+        });
+    }
+
+    /** A light sweep runs across one random tier 4+ or hero card. */
+    private shimmer() {
+        const pick = this.state.board
+            .map((tier, i) => ({ tier, i }))
+            .filter(({ tier, i }) => (tier >= 4 || this.state.hero[i]) && isOpen(this.state, i));
+        if (!pick.length) {
+            return;
+        }
+        const { i } = pick[Math.floor(Math.random() * pick.length)];
+        const shine = this.parts[i].shine;
+        const w = this.cell - 10;
+        shine.setPosition(-w / 2 + w * 0.08, 0).setAlpha(0);
+        this.tweens.add({ targets: shine, x: w / 2 - w * 0.08, duration: 520, ease: 'Sine.InOut' });
+        this.tweens.add({ targets: shine, alpha: 0.35, duration: 260, yoyo: true });
     }
 
     private sparks(x: number, y: number, color: number, count: number) {
