@@ -68,3 +68,9 @@ Open balance issue (Phase 6): Shuffle runs stay ~8 min instead of shrinking towa
 - Elements: tiles hold chi (re-rolled each run); cards take tile chi; merge needs same tier + element (neutral merges into any). Enemies have elements; counter wheel ×2 / ×0.5.
 - Heroes: 6 per element, rare summon roll, keep skill when tiering. Fire batch (art in docs-plan/): Fire Bellows (adjacent +25%), Magma Turtle (boss +5 s), Flare Sprite (summon wager: 25% free +1 tier / 10% burns), Ifrit Duelist (every 10th tap ×10), Smelter (merge 2 copies → 3× merge gold), Wildfire Hound (×1.5 vs Earth).
 - Water batch (art in docs-plan/): Drowned Bellringer (after boss kill next 3 foes -30% HP), Tide Clerk (offline gold +50%), Mirror Eel (adjacent merges 10% leave a T1 copy), Rain Smuggler (summon cost -15%), Undertow Siren (shields don't reduce board damage), Abyss Diver (×1.5 vs Fire).
+- Earth/Air/Light/Void batches (art via template generator, sheets in docs-plan/<element>-heroes.png):
+  Earth: Quarry Golem (+10%/Earth card), Root Weaver (neighbours +1 tier/5 min), Moss Hermit (no taps 10 s → ×2), Gem Miner (5% 10× gold kill), Tremor Ram (boss HP −20%), Stone Warden (×1.5 vs Air).
+  Air: Gale Courier (auto-tap 2/s), Kite Thief (taps earn 2% dmg as gold), Storm Bard (combo cap +5), Feather Monk (+3% lucky merge), Thunder Hawk (every 5 s burst), Cyclone Dervish (×1.5 vs Water).
+  Light: Lantern Saint (all +10%), Prism Knight (neighbours +30% of its power), Dawn Herald (first foe/stage 1 HP), Mirror Oracle (pity 7), Sun Forger (Essence +20%), Radiant Judge (×2 vs Void).
+  Void: Hollow King (merges into it 15% +2), Null Jester (kill gold ×3 or ×0), Rift Walker (merges any element), Ink Wraith (enemies −1% HP/s), Eclipse Widow (bosses no regen/split), Abyssal Seer (×2 vs Light).
+- Counter wheel: Fire>Earth>Air>Water>Fire; Light and Void counter each other.
