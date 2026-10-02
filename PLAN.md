@@ -62,3 +62,8 @@ Each layer also automates the one below (auto-Shuffle at X Essence, auto-Ascend�
 Done: Phases 1–3. Phase 3 = Shuffle at stage 25, Essence shop (Might/Fortune/Headstart), goal ladder, WebAudio sfx, particles.
 Next: Phase 4 (Ascend + elements/synergies, Codex + card skills).
 Open balance issue (Phase 6): Shuffle runs stay ~8 min instead of shrinking toward 90 s.
+
+## Phase 4 design (agreed)
+- Ascend: any time after 1st Shuffle; resets run + Essence + shop; pays 1 token = 1 random hero unlock; each Ascend adds next element (Fire→Water→Earth→Air→Light→Void).
+- Elements: tiles hold chi (re-rolled each run); cards take tile chi; merge needs same tier + element (neutral merges into any). Enemies have elements; counter wheel ×2 / ×0.5.
+- Heroes: 6 per element, rare summon roll, keep skill when tiering. Fire batch (art in docs-plan/): Fire Bellows (adjacent +25%), Magma Turtle (boss +5 s), Flare Sprite (summon wager: 25% free +1 tier / 10% burns), Ifrit Duelist (every 10th tap ×10), Smelter (merge 2 copies → 3× merge gold), Wildfire Hound (×1.5 vs Earth).
