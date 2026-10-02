@@ -1,7 +1,8 @@
 import { Display, GameObjects, Scene } from 'phaser';
-import { BOARD_SIZE, BOARD_STRIDE, KILLS_PER_STAGE, POWER_TILE, WIDTH } from '../sim/constants.ts';
+import { RENDER_SCALE, BOARD_SIZE, BOARD_STRIDE, KILLS_PER_STAGE, POWER_TILE, WIDTH } from '../sim/constants.ts';
 import { loadGame, persistGame } from '../sim/save.ts';
 import { sfx, unlockAudio } from '../audio.ts';
+import { PATTERNS, rumble } from '../../canon-lane/haptics.ts';
 import {
     UPGRADES,
     boardCols,
@@ -179,6 +180,10 @@ export class Board extends Scene {
     }
 
     create() {
+        // High-DPI: the canvas is RENDER_SCALE× the layout, so zoom the camera and rasterise text to match.
+        this.cameras.main.setZoom(RENDER_SCALE).centerOn(WIDTH / 2, 640);
+        const addText = this.add.text.bind(this.add);
+        this.add.text = (...args: Parameters<typeof addText>) => addText(...args).setResolution(RENDER_SCALE);
         const { state, offline } = loadGame();
         this.state = state;
         this.cameras.main.setBackgroundColor(BG);
@@ -188,7 +193,7 @@ export class Board extends Scene {
         for (const h of HEROES) {
             const tex = this.textures.get(`hero-${h.id}`);
             if (!tex.has('art')) {
-                tex.add('art', 0, 15, 45, 270, 246);
+                tex.add('art', 0, 30, 90, 540, 492);
             }
         }
 
@@ -230,7 +235,16 @@ export class Board extends Scene {
     private button(x: number, y: number, w: number, h: number, color: number, size: string, onDown: () => void): Button {
         const box = this.add.rectangle(x, y, w, h, color).setInteractive({ useHandCursor: true });
         const text = this.add.text(x, y, '', { fontFamily: DISPLAY, fontSize: size, color: '#11131a', align: 'center' }).setOrigin(0.5);
-        box.on('pointerdown', onDown);
+        // Tactile press: the button sinks while held and springs back on release.
+        const press = (down: boolean) =>
+            this.tweens.add({ targets: [box, text], scale: down ? 0.93 : 1, duration: down ? 50 : 160, ease: down ? 'Quad.Out' : 'Back.Out' });
+        box.on('pointerdown', () => {
+            press(true);
+            rumble(PATTERNS.gold);
+            onDown();
+        });
+        box.on('pointerup', () => press(false));
+        box.on('pointerout', () => press(false));
         return { box, text };
     }
 
@@ -288,22 +302,31 @@ export class Board extends Scene {
             this.cards.push(card);
         }
         this.input.on('dragstart', (_p: Phaser.Input.Pointer, card: GameObjects.Container) => {
-            card.setDepth(10).setScale(1.08);
+            card.setDepth(10);
+            this.tweens.add({ targets: card, scale: 1.14, angle: -3, duration: 110, ease: 'Back.Out' });
+            rumble(PATTERNS.tap);
         });
-        this.input.on('drag', (_p: Phaser.Input.Pointer, card: GameObjects.Container, x: number, y: number) => {
+        this.input.on('drag', (p: Phaser.Input.Pointer, card: GameObjects.Container, x: number, y: number) => {
             card.setPosition(x, y);
+            this.highlightTarget(card.getData('slot') as number, this.slotAt(p.worldX, p.worldY));
         });
         this.input.on('dragend', (p: Phaser.Input.Pointer, card: GameObjects.Container) => {
             const from = card.getData('slot') as number;
             const home = this.slotCenter(from);
-            card.setDepth(0).setScale(1).setPosition(home.x, home.y);
-            const to = this.slotAt(p.x, p.y);
+            this.highlightTarget(from, -1);
+            card.setDepth(0);
+            // Snap back home with a little spring rather than teleporting.
+            this.tweens.add({ targets: card, x: home.x, y: home.y, scale: 1, angle: 0, duration: 140, ease: 'Back.Out' });
+            const to = this.slotAt(p.worldX, p.worldY);
             const gold = this.state.gold;
             const result = to >= 0 ? moveCard(this.state, from, to) : 'none';
             if (result === 'merge') {
                 this.onMerge(to, this.state.gold - gold);
             } else if (result === 'none' && to >= 0) {
                 sfx.deny();
+                rumble([6]);
+            } else if (result !== 'none') {
+                rumble(PATTERNS.gold);
             }
             this.renderCards();
         });
@@ -341,6 +364,30 @@ export class Board extends Scene {
             }
         }
         this.renderCards();
+    }
+
+    private hoverSlot = -1;
+
+    /** While dragging, outline the slot under the finger: green for a merge, white for a move, red if blocked. */
+    private highlightTarget(from: number, to: number) {
+        if (to === this.hoverSlot) {
+            return;
+        }
+        if (this.hoverSlot >= 0) {
+            const tile = has(this.state, 'board5') && this.hoverSlot === POWER_TILE;
+            this.slots[this.hoverSlot].setStrokeStyle(tile ? 4 : 2, tile ? GOLD : LINE);
+        }
+        this.hoverSlot = to;
+        if (to < 0 || to === from) {
+            return;
+        }
+        const s = this.state;
+        const merge = s.board[to] === s.board[from] && s.challenge !== 'nomerge' &&
+            (!s.elem[to] || !s.elem[from] || s.elem[to] === s.elem[from] || s.hero[to] === 'rift-walker' || s.hero[from] === 'rift-walker');
+        this.slots[to].setStrokeStyle(5, merge ? GREEN : !s.board[to] || s.board[to] !== s.board[from] ? 0xffffff : PINK);
+        if (merge) {
+            rumble([5]);
+        }
     }
 
     private slotCenter(i: number) {
@@ -510,11 +557,12 @@ export class Board extends Scene {
         sfx.tap();
         // Ifrit Duelist's 10th tap is a real ×10 crit; show it like one.
         const crit = heroOnBoard(this.state, 'ifrit-duelist') && this.state.taps % 10 === 0;
-        this.damageNumber(p.x, p.y - 20, dmg * (crit ? 10 : 1), crit);
+        this.damageNumber(p.worldX, p.worldY - 20, dmg * (crit ? 10 : 1), crit);
         this.hitFlash.setAlpha(crit ? 0.8 : 0.35);
         this.tweens.add({ targets: this.hitFlash, alpha: 0, duration: crit ? 220 : 90 });
         this.tweens.add({ targets: this.enemy, scale: crit ? 0.85 : 0.95, angle: (Math.random() - 0.5) * (crit ? 8 : 3), duration: 50, yoyo: true });
-        this.burstFx(p.x, p.y, crit ? GOLD : 0xffffff, crit ? 30 : 5, crit ? 420 : 180, 380);
+        this.burstFx(p.worldX, p.worldY, crit ? GOLD : 0xffffff, crit ? 30 : 5, crit ? 420 : 180, 380);
+        rumble(crit ? PATTERNS.crit : PATTERNS.tap);
         if (crit) {
             this.cameras.main.shake(120, 0.008);
             sfx.merge(8);
@@ -536,6 +584,7 @@ export class Board extends Scene {
         this.tweens.add({ targets: this.enemy, scale: 1, alpha: 1, duration: 260, ease: 'Back.Out', delay: 80 });
         if (kill.boss) {
             sfx.fanfare();
+            rumble(PATTERNS.victory);
         } else {
             sfx.kill();
         }
@@ -568,6 +617,7 @@ export class Board extends Scene {
             this.cameras.main.flash(180 + tier * 20, col.red, col.green, col.blue);
         }
         sfx.merge(tier);
+        rumble(tier >= 5 ? PATTERNS.tier : PATTERNS.upgrade, 1 + tier * 0.1);
         if (gold > 0) {
             const { x, y } = this.slotCenter(slot);
             this.float(x, y - 30, `+${formatNum(gold)}`, hex(GOLD));
@@ -721,6 +771,7 @@ export class Board extends Scene {
 
     /** Boss arrives: card slams down, red flash, warning banner sweeps across. */
     private bossEntrance() {
+        rumble(PATTERNS.omen);
         this.enemy.setY(ENEMY_Y - 320).setScale(1.3);
         this.tweens.add({ targets: this.enemy, y: ENEMY_Y, scale: 1, duration: 420, ease: 'Bounce.Out' });
         this.time.delayedCall(260, () => {

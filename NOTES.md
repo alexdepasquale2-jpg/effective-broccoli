@@ -5,7 +5,7 @@
 - Board is stored 5×5 (stride 5) always; 4×4 just closes column/row 5. Save v1→v2 migrates the old stride-4 board.
 - Essence must stay polynomial in stage: an exponential formula with exponential shop boosts ran away to 1e203 by Shuffle 7.
 - Shuffle bot (stall 60 s then Shuffle, greedy shop): 10 Shuffles, best stage 68, ~8 min per run.
-- Hero art for the game lives in public/assets/mergeborn/heroes/<id>.jpg (300×420, made from docs-plan/<id>.png). Regenerate thumbs if card art changes.
+- Hero art for the game lives in public/assets/mergeborn/heroes/<id>.jpg (600×840, made from docs-plan/<id>.png). Regenerate thumbs if card art changes.
 - Era reset wipes Ascends, so elements re-lock; collected heroes only roll again once their element is re-Ascended.
 - Balance: run `npm run balance 48` after any economy change; compare milestone times with PLAN.md status.
 - Automation must never reset past a better reset: auto-Shuffle skips when an Era or Revolution is available (bot caught a 13 h stall).

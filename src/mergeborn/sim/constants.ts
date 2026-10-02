@@ -1,5 +1,7 @@
 export const WIDTH = 720;
 export const HEIGHT = 1280;
+/** The canvas renders at this multiple of the logical 720×1280 layout; the camera zooms to match. */
+export const RENDER_SCALE = 2;
 
 /** The board is stored as a 5×5 grid (stride 5); early on only the top-left 4×4 is open. */
 export const BOARD_STRIDE = 5;
