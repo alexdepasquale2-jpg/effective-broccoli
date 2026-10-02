@@ -1,9 +1,12 @@
 export const WIDTH = 720;
 export const HEIGHT = 1280;
 
-export const BOARD_COLS = 4;
-export const BOARD_ROWS = 4;
-export const BOARD_SIZE = BOARD_COLS * BOARD_ROWS;
+/** The board is stored as a 5×5 grid (stride 5); early on only the top-left 4×4 is open. */
+export const BOARD_STRIDE = 5;
+export const BOARD_SIZE = BOARD_STRIDE * BOARD_STRIDE;
+/** Centre slot of the 5×5 board doubles the power of the card on it. */
+export const POWER_TILE = 12;
+export const POWER_TILE_MULT = 2;
 
 /** Merged card is this many times stronger than one of its inputs. */
 export const MERGE_POWER_RATE = 2.5;
@@ -29,4 +32,26 @@ export const OFFLINE_CAP_SECONDS = 8 * 60 * 60;
 /** Offline earns a fraction of online income. */
 export const OFFLINE_RATE = 0.5;
 export const SAVE_KEY = 'mergeborn-v1';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+
+/** Tap combo: taps within this window chain; each link adds COMBO_STEP to the multiplier. */
+export const COMBO_WINDOW = 1;
+export const COMBO_STEP = 0.1;
+export const COMBO_CAP = 10;
+
+export const MULTI_SUMMON = 5;
+/** Every Nth summon is guaranteed tier 2 once pity is unlocked. */
+export const PITY_EVERY = 10;
+export const LUCK_PER_LEVEL = 0.02;
+export const LUCK_CAP = 0.5;
+
+/** Each merge pays this share of kill gold per resulting tier. */
+export const MERGE_BOUNTY = 0.5;
+export const LUCKY_MERGE_CHANCE = 0.05;
+
+/** Enemy traits begin here. */
+export const SHIELD_MULT = 0.5;
+export const REGEN_PER_SEC = 0.03;
+export const SPLIT_HP = 0.5;
+
+export const UPGRADE_COST_RATE = 1.5;

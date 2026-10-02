@@ -59,5 +59,6 @@ Each layer also automates the one below (auto-Shuffle at X Essence, auto-Ascend�
 6. Balance pass: headless sim script that plays optimally and prints time-to-each-unlock vs the pacing targets.
 
 ## Status
-Done: plan, visual plan, Phase 1 (sim + tests, Board scene, `?game=merge`).
-Next: Phase 2 (bosses rewards, system tracks stages 1–2, offline summary polish). Blockers: none.
+Done: plan, visual plan, Phase 1 (core loop), Phase 2 (boss unlocks at stages 3/6/10/14/18, 4 gold upgrades, traits, 5×5 board).
+Next: Phase 3 (Shuffle + Essence shop, goal ladder, juice). Progress walls at ~stage 25–30 by design until Shuffle exists.
+Blockers: none.
