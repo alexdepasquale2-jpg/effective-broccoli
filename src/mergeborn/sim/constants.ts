@@ -32,7 +32,7 @@ export const OFFLINE_CAP_SECONDS = 8 * 60 * 60;
 /** Offline earns a fraction of online income. */
 export const OFFLINE_RATE = 0.5;
 export const SAVE_KEY = 'mergeborn-v1';
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 /** Tap combo: taps within this window chain; each link adds COMBO_STEP to the multiplier. */
 export const COMBO_WINDOW = 1;
@@ -64,3 +64,12 @@ export const ESSENCE_POW = 1.6;
 
 /** Ascend (layer 2): chance a summon is one of your unlocked heroes of the tile's element. */
 export const HERO_SUMMON_CHANCE = 0.04;
+
+/** Era (layer 4): reached at this stage; each completed Era multiplies damage and gold. */
+export const ERA_STAGE = 60;
+export const MAX_ERA = 5;
+export const ERA_DAMAGE = 3;
+export const ERA_GOLD = 2;
+export const DECAY_SECONDS = 90;
+export const FUSE_SECONDS = 8;
+export const TURNCOAT_CHANCE = 0.1;

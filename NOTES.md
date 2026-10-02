@@ -6,3 +6,4 @@
 - Essence must stay polynomial in stage: an exponential formula with exponential shop boosts ran away to 1e203 by Shuffle 7.
 - Shuffle bot (stall 60 s then Shuffle, greedy shop): 10 Shuffles, best stage 68, ~8 min per run.
 - Hero art for the game lives in public/assets/mergeborn/heroes/<id>.jpg (300×420, made from docs-plan/<id>.png). Regenerate thumbs if card art changes.
+- Era reset wipes Ascends, so elements re-lock; collected heroes only roll again once their element is re-Ascended.

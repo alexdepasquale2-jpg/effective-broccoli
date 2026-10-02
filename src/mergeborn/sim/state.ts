@@ -37,6 +37,13 @@ import {
     TAP_DPS_SHARE,
     UPGRADE_COST_RATE,
     HERO_SUMMON_CHANCE,
+    DECAY_SECONDS,
+    ERA_DAMAGE,
+    ERA_GOLD,
+    ERA_STAGE,
+    FUSE_SECONDS,
+    MAX_ERA,
+    TURNCOAT_CHANCE,
 } from './constants.ts';
 import { ELEMENTS, HEROES, counterMult, elementId, heroById } from './heroes.ts';
 
@@ -83,11 +90,19 @@ export interface GameState {
     /** Layer 2 (Ascend): kept across Ascends. */
     ascends: number;
     heroes: string[];
+    /** Layer 4 (Era): current Era, 1–5. Each Era changes a rule. */
+    era: number;
+    /** Era II: seconds since each card last merged. Era IV: how long the current foe has lived. */
+    age: number[];
+    foeAge: number;
+    fused: boolean;
 }
 
 export interface Kill {
     gold: number;
     boss: boolean;
+    /** Era V: slot a defecting enemy card landed on. */
+    turncoat?: number;
     /** Set when this boss kill reached a stage that unlocks something. */
     unlock?: Unlock;
 }
@@ -153,6 +168,10 @@ export function createGame(now = Date.now()): GameState {
         weakened: 0,
         ascends: 0,
         heroes: [],
+        era: 1,
+        age: new Array(BOARD_SIZE).fill(0),
+        foeAge: 0,
+        fused: false,
     };
     spawnEnemy(state);
     return state;
@@ -168,13 +187,25 @@ export const freeSlot = (s: GameState) => s.board.findIndex((t, i) => t === 0 &&
 /** Elements unlocked so far: one per Ascend. */
 export const unlockedElements = (s: GameState) => Math.min(s.ascends, ELEMENTS.length);
 export const heroOnBoard = (s: GameState, id: string) => s.hero.some((x, i) => x === id && s.board[i] > 0);
-const neighbours = (slot: number) => {
+export const isHex = (s: GameState) => s.era === 3;
+/** Grid neighbours; on the Era III hex board odd rows sit half a cell right, so each slot has six. */
+export const neighbours = (slot: number, hex = false) => {
     const c = slot % BOARD_STRIDE;
-    return [slot - BOARD_STRIDE, slot + BOARD_STRIDE, c > 0 ? slot - 1 : -1, c < BOARD_STRIDE - 1 ? slot + 1 : -1].filter(
-        (n) => n >= 0 && n < BOARD_SIZE,
-    );
+    const r = Math.floor(slot / BOARD_STRIDE);
+    const at = (rr: number, cc: number) => (rr >= 0 && rr < BOARD_STRIDE && cc >= 0 && cc < BOARD_STRIDE ? rr * BOARD_STRIDE + cc : -1);
+    const out = [at(r - 1, c), at(r + 1, c), at(r, c - 1), at(r, c + 1)];
+    if (hex) {
+        const d = r % 2 ? 1 : -1;
+        out.push(at(r - 1, c + d), at(r + 1, c + d));
+    }
+    return out.filter((n) => n >= 0);
 };
-const nextTo = (s: GameState, slot: number, id: string) => neighbours(slot).some((n) => s.hero[n] === id && s.board[n] > 0);
+const nextTo = (s: GameState, slot: number, id: string) => neighbours(slot, isHex(s)).some((n) => s.hero[n] === id && s.board[n] > 0);
+export const eraDamage = (s: GameState) => ERA_DAMAGE ** (s.era - 1);
+export const eraGold = (s: GameState) => ERA_GOLD ** (s.era - 1);
+/** Era III: +10% per same-element neighbour. */
+const hexSynergy = (s: GameState, slot: number) =>
+    isHex(s) && s.elem[slot] ? 1 + 0.1 * neighbours(slot, true).filter((n) => s.board[n] && s.elem[n] === s.elem[slot]).length : 1;
 
 /** Enemy element: cycles through unlocked elements; neutral before the first Ascend. */
 export const enemyElement = (s: GameState) => {
@@ -187,11 +218,12 @@ export const slotPower = (s: GameState, slot: number) =>
     cardPower(s.board[slot]) *
     (slot === POWER_TILE && has(s, 'board5') ? POWER_TILE_MULT : 1) *
     (nextTo(s, slot, 'fire-bellows') ? 1.25 : 1) *
-    counterMult(s.elem[slot], enemyElement(s)) +
+    counterMult(s.elem[slot], enemyElement(s)) *
+    hexSynergy(s, slot) +
     prismShare(s, slot);
 /** Prism Knight: each adjacent knight lends 30% of its card power. */
 const prismShare = (s: GameState, slot: number) =>
-    s.board[slot] ? neighbours(slot).reduce((sum, n) => sum + (s.hero[n] === 'prism-knight' && s.board[n] ? 0.3 * cardPower(s.board[n]) : 0), 0) : 0;
+    s.board[slot] ? neighbours(slot, isHex(s)).reduce((sum, n) => sum + (s.hero[n] === 'prism-knight' && s.board[n] ? 0.3 * cardPower(s.board[n]) : 0), 0) : 0;
 export const mightMult = (s: GameState) => 1.5 ** s.shop.might;
 export const fortuneMult = (s: GameState) => 1.25 ** s.shop.fortune;
 /** Whole-board multiplier from hunter heroes against the current enemy's element. */
@@ -215,9 +247,9 @@ const supportMult = (s: GameState) => {
     return m;
 };
 export const boardDps = (s: GameState) =>
-    s.board.reduce((sum, _t, i) => sum + slotPower(s, i), 0) * (1 + 0.1 * s.upgrades.battle) * mightMult(s) * huntMult(s) * supportMult(s);
+    s.board.reduce((sum, _t, i) => sum + slotPower(s, i), 0) * (1 + 0.1 * s.upgrades.battle) * mightMult(s) * huntMult(s) * supportMult(s) * eraDamage(s);
 export const comboMult = (s: GameState) => (has(s, 'combo') ? 1 + COMBO_STEP * Math.max(0, s.combo - 1) : 1);
-export const tapDamage = (s: GameState) => (1 + s.upgrades.tap) * comboMult(s) * mightMult(s) + TAP_DPS_SHARE * boardDps(s);
+export const tapDamage = (s: GameState) => (1 + s.upgrades.tap) * comboMult(s) * mightMult(s) * eraDamage(s) + TAP_DPS_SHARE * boardDps(s);
 export const summonCost = (s: GameState, count = 1) => {
     let total = 0;
     const discount = heroOnBoard(s, 'rain-smuggler') ? 0.85 : 1;
@@ -236,7 +268,7 @@ export const isBoss = (s: GameState) => s.kills === KILLS_PER_STAGE - 1;
 export const enemyMaxHp = (s: GameState) =>
     ENEMY_BASE_HP * ENEMY_HP_RATE ** (s.stage - 1) * (isBoss(s) ? BOSS_HP_MULT * (heroOnBoard(s, 'tremor-ram') ? 0.8 : 1) : 1);
 export const killGold = (s: GameState) =>
-    Math.ceil(KILL_BASE_GOLD * KILL_GOLD_RATE ** (s.stage - 1) * fortuneMult(s)) * (isBoss(s) ? BOSS_GOLD_MULT : 1);
+    Math.ceil(KILL_BASE_GOLD * KILL_GOLD_RATE ** (s.stage - 1) * fortuneMult(s) * eraGold(s)) * (isBoss(s) ? BOSS_GOLD_MULT : 1);
 const TRAIT_CYCLE: Trait[] = ['none', 'shield', 'regen', 'split'];
 export const enemyTrait = (s: GameState): Trait => {
     const t = has(s, 'traits') ? TRAIT_CYCLE[(s.stage + s.kills) % TRAIT_CYCLE.length] : 'none';
@@ -254,6 +286,8 @@ function spawnEnemy(s: GameState) {
         s.weakened -= 1;
     }
     s.split = false;
+    s.foeAge = 0;
+    s.fused = false;
     s.bossTimer = isBoss(s) ? BOSS_SECONDS + (heroOnBoard(s, 'magma-turtle') ? 5 : 0) : 0;
 }
 
@@ -273,10 +307,19 @@ export function damageEnemy(s: GameState, amount: number, rng: Rng = Math.random
         s.enemyHp = enemyMaxHp(s) * SPLIT_HP;
         return null;
     }
-    let gold = killGold(s);
+    let gold = killGold(s) * (s.fused ? 2 : 1);
     if (heroOnBoard(s, 'gem-miner') && rng() < 0.05) gold *= 10;
     if (heroOnBoard(s, 'null-jester')) gold = rng() < 0.5 ? gold * 3 : 0;
     const kill: Kill = { gold, boss: isBoss(s) };
+    // Era V: the beaten foe may defect onto your board.
+    const free = freeSlot(s);
+    if (s.era === 5 && free >= 0 && rng() < TURNCOAT_CHANCE) {
+        s.board[free] = Math.max(1, Math.ceil(s.stage / 10));
+        s.elem[free] = enemyElement(s);
+        s.hero[free] = '';
+        s.age[free] = 0;
+        kill.turncoat = free;
+    }
     addGold(s, kill.gold);
     if (kill.boss) {
         s.stage += 1;
@@ -337,6 +380,7 @@ export function summon(s: GameState, count = 1, rng: Rng = Math.random): number[
 /** Puts a card on a slot: it takes the tile's chi, and may roll as an unlocked hero of that element. */
 function placeCard(s: GameState, slot: number, tier: number, rng: Rng) {
     s.board[slot] = tier;
+    s.age[slot] = 0;
     s.elem[slot] = s.chi[slot];
     s.hero[slot] = '';
     const pool = s.heroes.filter((id) => elementId(heroById(id)!.element) === s.chi[slot]);
@@ -370,6 +414,7 @@ export function moveCard(s: GameState, from: number, to: number, rng: Rng = Math
         s.hero[to] = s.hero[to] || s.hero[from];
         s.board[from] = 0;
         s.hero[from] = '';
+        s.age[to] = 0;
         if (eel && rng() < 0.1) {
             s.board[from] = 1;
             s.elem[from] = s.elem[to];
@@ -383,11 +428,12 @@ export function moveCard(s: GameState, from: number, to: number, rng: Rng = Math
     swap(s.board);
     swap(s.elem);
     swap(s.hero);
+    swap(s.age);
     return b ? 'swap' : 'move';
 }
 
 export const mergeGold = (s: GameState, tier: number) =>
-    Math.ceil(KILL_BASE_GOLD * KILL_GOLD_RATE ** (s.stage - 1) * MERGE_BOUNTY * tier * (1 + 0.25 * s.upgrades.merge) * fortuneMult(s));
+    Math.ceil(KILL_BASE_GOLD * KILL_GOLD_RATE ** (s.stage - 1) * MERGE_BOUNTY * tier * (1 + 0.25 * s.upgrades.merge) * fortuneMult(s) * eraGold(s));
 
 export function buyUpgrade(s: GameState, key: UpgradeKey): boolean {
     const cost = upgradeCost(s, key);
@@ -405,9 +451,30 @@ export function tick(s: GameState, dt: number): Kill[] {
     const before = s.clock;
     s.clock += dt;
     s.idle += dt;
+    if (s.era === 2) {
+        // Decay: cards left unmerged too long lose a tier.
+        s.board.forEach((t, i) => {
+            if (!t) return;
+            s.age[i] += dt;
+            if (s.age[i] >= DECAY_SECONDS) {
+                s.age[i] = 0;
+                s.board[i] = Math.max(1, t - 1);
+            }
+        });
+    }
+    if (s.era === 4 && !isBoss(s) && s.kills < KILLS_PER_STAGE - 2) {
+        // Enemies merge: a foe left alive absorbs the next one.
+        s.foeAge += dt;
+        if (s.foeAge >= FUSE_SECONDS) {
+            s.foeAge = 0;
+            s.kills += 1;
+            s.enemyHp += enemyMaxHp(s);
+            s.fused = true;
+        }
+    }
     if (heroOnBoard(s, 'root-weaver') && Math.floor(s.clock / 300) > Math.floor(before / 300)) {
         s.board.forEach((_t, i) => s.hero[i] === 'root-weaver' && s.board[i] &&
-            neighbours(i).forEach((n) => s.board[n] && isOpen(s, n) && (s.board[n] += 1)));
+            neighbours(i, isHex(s)).forEach((n) => s.board[n] && isOpen(s, n) && (s.board[n] += 1)));
     }
     if (heroOnBoard(s, 'gale-courier')) {
         s.autoTap += dt * 2;
@@ -477,7 +544,7 @@ export function deserialize(raw: string | null): GameState | null {
             const board = new Array(BOARD_SIZE).fill(0);
             data.board.forEach((t: number, i: number) => (board[Math.floor(i / 4) * BOARD_STRIDE + (i % 4)] = t));
             data.board = board;
-        } else if (![2, 3, SAVE_VERSION].includes(v) || !Array.isArray(data.board) || data.board.length !== BOARD_SIZE) {
+        } else if (![2, 3, 4, SAVE_VERSION].includes(v) || !Array.isArray(data.board) || data.board.length !== BOARD_SIZE) {
             return null;
         }
         const base = createGame(data.savedAt);
@@ -506,6 +573,7 @@ export function shuffle(s: GameState): number {
         shop: s.shop,
         ascends: s.ascends,
         heroes: s.heroes,
+        era: s.era,
     });
     rollChi(s);
     return gain;
@@ -532,7 +600,7 @@ export function ascend(s: GameState, rng: Rng = Math.random): string | null {
         return null;
     }
     const fresh = createGame(s.savedAt);
-    Object.assign(s, { ...fresh, bestStage: s.bestStage, ascends: s.ascends + 1, heroes: s.heroes });
+    Object.assign(s, { ...fresh, bestStage: s.bestStage, ascends: s.ascends + 1, heroes: s.heroes, era: s.era });
     const pool = heroPool(s);
     const pick = pool.length ? pool[Math.floor(rng() * pool.length) % pool.length].id : '';
     if (pick) {
@@ -571,4 +639,23 @@ export function goals(s: GameState): Goal[] {
             : { label: `Stage ${SHUFFLE_STAGE}: Shuffle`, progress: s.stage / SHUFFLE_STAGE },
     );
     return list.slice(0, 3);
+}
+
+export const ERAS = [
+    { name: 'Origin', rule: 'Base rules' },
+    { name: 'Decay', rule: 'Cards unmerged for 90 s lose a tier' },
+    { name: 'Hex', rule: 'Six neighbours per tile; +10% per same-element neighbour' },
+    { name: 'Fusion', rule: 'A foe alive 8 s absorbs the next one (double gold)' },
+    { name: 'Turncoat', rule: 'Kills: 10% chance the enemy card joins your board' },
+];
+export const canEra = (s: GameState) => s.stage >= ERA_STAGE && s.era < MAX_ERA;
+
+/** Layer 4 reset: everything below (run, Essence, shop, Ascends) for the next Era's rules. Heroes stay collected. */
+export function nextEra(s: GameState): boolean {
+    if (!canEra(s)) {
+        return false;
+    }
+    const fresh = createGame(s.savedAt);
+    Object.assign(s, { ...fresh, bestStage: s.bestStage, heroes: s.heroes, era: s.era + 1 });
+    return true;
 }

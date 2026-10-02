@@ -1,5 +1,5 @@
 import { GameObjects, Scene } from 'phaser';
-import { BOARD_SIZE, BOARD_STRIDE, KILLS_PER_STAGE, POWER_TILE, WIDTH } from '../sim/constants.ts';
+import { ERA_STAGE, BOARD_SIZE, BOARD_STRIDE, KILLS_PER_STAGE, POWER_TILE, WIDTH } from '../sim/constants.ts';
 import { loadGame, persistGame } from '../sim/save.ts';
 import { sfx, unlockAudio } from '../audio.ts';
 import {
@@ -24,6 +24,10 @@ import {
     ascend,
     canAscend,
     enemyElement,
+    ERAS,
+    canEra,
+    isHex,
+    nextEra,
     shopCost,
     shuffle,
     summon,
@@ -116,6 +120,10 @@ export class Board extends Scene {
     private shuffleArmed = 0;
     private ascendBtn: Button;
     private ascendArmed = 0;
+    private hex = false;
+    private boardSig = '';
+    private eraBtn: Button;
+    private eraArmed = 0;
     private heroPanel: GameObjects.Container;
     private heroTiles: { img: GameObjects.Image; lock: GameObjects.Text }[] = [];
     private heroTitle: GameObjects.Text;
@@ -241,7 +249,9 @@ export class Board extends Scene {
     /** Sizes and places slots for the current board width (4×4, later 5×5). */
     private layoutBoard() {
         this.cols = boardCols(this.state);
-        this.cell = (GRID_W - GAP * (this.cols - 1)) / this.cols;
+        this.hex = isHex(this.state);
+        // Hex rows shift half a cell, so cells shrink to keep the board width.
+        this.cell = (GRID_W - GAP * (this.cols - 1)) / (this.cols + (this.hex ? 0.5 : 0));
         const power = has(this.state, 'board5');
         for (let i = 0; i < BOARD_SIZE; i++) {
             const open = isOpen(this.state, i);
@@ -267,14 +277,15 @@ export class Board extends Scene {
         const col = i % BOARD_STRIDE;
         const row = Math.floor(i / BOARD_STRIDE);
         return {
-            x: GRID_X + col * (this.cell + GAP) + this.cell / 2,
+            x: GRID_X + col * (this.cell + GAP) + this.cell / 2 + (this.hex && row % 2 ? (this.cell + GAP) / 2 : 0),
             y: GRID_Y + row * (this.cell + GAP) + this.cell / 2,
         };
     }
 
     private slotAt(x: number, y: number): number {
-        const col = Math.floor((x - GRID_X) / (this.cell + GAP));
         const row = Math.floor((y - GRID_Y) / (this.cell + GAP));
+        const shift = this.hex && row % 2 ? (this.cell + GAP) / 2 : 0;
+        const col = Math.floor((x - GRID_X - shift) / (this.cell + GAP));
         if (col < 0 || col >= this.cols || row < 0 || row >= this.cols) {
             return -1;
         }
@@ -339,11 +350,16 @@ export class Board extends Scene {
 
     private refresh() {
         const s = this.state;
-        if (boardCols(s) !== this.cols) {
+        const sig = s.board.join() + s.elem.join();
+        if (sig !== this.boardSig) {
+            this.boardSig = sig;
+            this.renderCards();
+        }
+        if (boardCols(s) !== this.cols || isHex(s) !== this.hex) {
             this.layoutBoard();
         }
         this.goldText.setText(`${formatNum(s.gold)} gold`);
-        this.stageText.setText(`Stage ${s.stage}  ·  best ${s.bestStage}  ·  ${formatNum(s.essence)} Essence`);
+        this.stageText.setText(`Era ${s.era} ${ERAS[s.era - 1].name}  ·  Stage ${s.stage}  ·  best ${s.bestStage}  ·  ${formatNum(s.essence)} Essence`);
         goals(s).forEach((g, i) => {
             this.ladder[i].text.setText(g.label).setVisible(true);
             this.ladder[i].track.setVisible(true);
@@ -405,6 +421,10 @@ export class Board extends Scene {
 
     private onKill(kill: Kill) {
         this.float(ENEMY_X, ENEMY_Y - 60, `+${formatNum(kill.gold)}`, hex(GOLD));
+        if (kill.turncoat !== undefined) {
+            this.renderCards();
+            this.burst(kill.turncoat, PINK);
+        }
         this.sparks(ENEMY_X, ENEMY_Y, kill.boss ? GOLD : PINK, kill.boss ? 24 : 8);
         if (kill.boss) {
             sfx.fanfare();
@@ -538,11 +558,11 @@ export class Board extends Scene {
         open.text.setText('Essence\nshop').setColor(hex(GOLD)).setFontFamily(FONT);
 
         const shade = this.add.rectangle(WIDTH / 2, 640, WIDTH, 1280, 0x000000, 0.7).setInteractive();
-        const panel = this.add.rectangle(WIDTH / 2, 640, 640, 760, CARD).setStrokeStyle(3, GOLD);
-        this.shopTitle = this.add.text(WIDTH / 2, 320, '', { fontFamily: DISPLAY, fontSize: '28px', color: hex(GOLD), align: 'center' }).setOrigin(0.5);
+        const panel = this.add.rectangle(WIDTH / 2, 640, 640, 980, CARD).setStrokeStyle(3, GOLD);
+        this.shopTitle = this.add.text(WIDTH / 2, 215, '', { fontFamily: DISPLAY, fontSize: '28px', color: hex(GOLD), align: 'center' }).setOrigin(0.5);
         const items: GameObjects.GameObject[] = [shade, panel, this.shopTitle];
         (Object.keys(SHOP) as ShopKey[]).forEach((key, i) => {
-            const btn = this.button(WIDTH / 2, 440 + i * 110, 560, 96, BG, '19px', () => {
+            const btn = this.button(WIDTH / 2, 330 + i * 110, 560, 96, BG, '19px', () => {
                 if (buyShop(this.state, key)) {
                     sfx.summon();
                     persistGame(this.state);
@@ -556,11 +576,12 @@ export class Board extends Scene {
             this.shopBtns.set(key, btn);
             items.push(btn.box, btn.text);
         });
-        this.shuffleBtn = this.button(WIDTH / 2, 775, 560, 86, GOLD, '22px', () => this.onShuffle());
-        this.ascendBtn = this.button(WIDTH / 2, 875, 560, 86, 0xb07cff, '20px', () => this.onAscend());
-        const close = this.button(WIDTH / 2, 970, 240, 56, LINE, '20px', () => this.shopPanel.setVisible(false));
+        this.shuffleBtn = this.button(WIDTH / 2, 665, 560, 86, GOLD, '22px', () => this.onShuffle());
+        this.ascendBtn = this.button(WIDTH / 2, 765, 560, 86, 0xb07cff, '20px', () => this.onAscend());
+        this.eraBtn = this.button(WIDTH / 2, 885, 560, 110, 0xff5a8a, '18px', () => this.onEra());
+        const close = this.button(WIDTH / 2, 1060, 240, 56, LINE, '20px', () => this.shopPanel.setVisible(false));
         close.text.setText('Close').setColor(FG);
-        items.push(this.shuffleBtn.box, this.shuffleBtn.text, this.ascendBtn.box, this.ascendBtn.text, close.box, close.text);
+        items.push(this.shuffleBtn.box, this.shuffleBtn.text, this.ascendBtn.box, this.ascendBtn.text, this.eraBtn.box, this.eraBtn.text, close.box, close.text);
         this.shopPanel = this.add.container(0, 0, items).setDepth(50).setVisible(false);
     }
 
@@ -577,6 +598,15 @@ export class Board extends Scene {
                 : `Ascend ${s.ascends + 1}: ${nextEl ? `+${nextEl} element, ` : ''}+1 hero`,
         );
         this.ascendBtn.box.setAlpha(canAscend(s) ? 1 : 0.4);
+        const next = ERAS[s.era];
+        const eArmed = this.time.now < this.eraArmed;
+        this.eraBtn.text.setText(
+            !next ? 'Final Era reached'
+                : !canEra(s) ? `Era ${s.era + 1} ${next.name} opens at stage ${ERA_STAGE}\n${next.rule}`
+                : eArmed ? 'Tap again: resets Shuffles, Ascends, Essence\n(heroes stay collected)'
+                : `Begin Era ${s.era + 1}: ${next.name} (×3 dmg, ×2 gold)\n${next.rule}`,
+        );
+        this.eraBtn.box.setAlpha(canEra(s) ? 1 : 0.4);
         for (const [key, btn] of this.shopBtns) {
             const cost = shopCost(s, key);
             btn.text.setText(`${SHOP[key].label} ${s.shop[key]}  ·  ${SHOP[key].effect}\n${formatNum(cost)} Essence`);
@@ -589,6 +619,29 @@ export class Board extends Scene {
                 : `Shuffle: +${essenceGain(s)} Essence`,
         );
         this.shuffleBtn.box.setAlpha(canShuffle(s) ? 1 : 0.4);
+    }
+
+    private onEra() {
+        if (!canEra(this.state)) {
+            sfx.deny();
+            return;
+        }
+        if (this.time.now >= this.eraArmed) {
+            this.eraArmed = this.time.now + 3000;
+            this.refreshShop();
+            return;
+        }
+        this.eraArmed = 0;
+        nextEra(this.state);
+        persistGame(this.state);
+        this.layoutBoard();
+        this.refreshShop();
+        sfx.fanfare();
+        this.cameras.main.flash(800, 255, 90, 138);
+        this.cameras.main.shake(400, 0.012);
+        this.sparks(WIDTH / 2, 640, PINK, 80);
+        const era = ERAS[this.state.era - 1];
+        this.toast(`Era ${this.state.era}: ${era.name}. ${era.rule}`, 5000);
     }
 
     private onAscend() {

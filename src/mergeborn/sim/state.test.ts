@@ -8,6 +8,9 @@ import {
     canAscend,
     enemyElement,
     rollChi,
+    canEra,
+    neighbours,
+    nextEra,
     damageEnemy,
     buyShop,
     essenceGain,
@@ -508,3 +511,70 @@ describe('earth to void hero skills', () => {
         assert.equal(essenceGain(f), Math.floor(((40 - 20) / 2.5) ** 1.6 * 1.2));
     });
 });
+
+describe('eras', () => {
+    const inEra = (era: number) => {
+        const s = createGame(0);
+        s.era = era;
+        return s;
+    };
+    it('opens at stage 60, resets everything below, keeps heroes, multiplies damage and gold', () => {
+        const s = atStage(59);
+        assert.equal(nextEra(s), false);
+        s.stage = 60;
+        s.essence = 99;
+        s.ascends = 3;
+        s.shuffles = 5;
+        s.heroes = ['smelter'];
+        s.bestStage = 80;
+        const gold = killGold(createGame(0));
+        assert.ok(canEra(s) && nextEra(s));
+        assert.deepEqual([s.era, s.stage, s.essence, s.ascends, s.shuffles, s.bestStage], [2, 1, 0, 0, 0, 80]);
+        assert.deepEqual(s.heroes, ['smelter']);
+        assert.equal(tapDamage(s), 3);
+        assert.equal(killGold(s), gold * 2);
+        s.era = 5;
+        s.stage = 90;
+        assert.equal(canEra(s), false);
+    });
+    it('Era II: unmerged cards decay a tier after 90 s; merging resets the clock', () => {
+        const s = inEra(2);
+        s.board[0] = 3;
+        s.board[1] = 2;
+        s.board[2] = 2;
+        s.enemyHp = 1e12;
+        tick(s, 60);
+        moveCard(s, 1, 2, never);
+        tick(s, 31);
+        assert.deepEqual([s.board[0], s.board[2]], [2, 3]);
+    });
+    it('Era III: six neighbours and same-element synergy', () => {
+        assert.equal(neighbours(6, false).length, 4);
+        assert.equal(neighbours(6, true).length, 6);
+        const s = inEra(3);
+        s.board[6] = 1;
+        s.board[7] = 1;
+        s.elem[6] = 1;
+        s.elem[7] = 1;
+        assert.ok(Math.abs(boardDps(s) / eraDps(s) - 2.2) < 1e-9);
+    });
+    it('Era IV: a foe left alive 8 s absorbs the next and pays double', () => {
+        const s = inEra(4);
+        const hp = s.enemyHp;
+        tick(s, 8);
+        assert.equal(s.kills, 1);
+        assert.ok(s.enemyHp > hp * 1.9);
+        const expected = killGold(s) * 2;
+        s.enemyHp = 0.1;
+        assert.equal(tap(s)?.gold, expected);
+    });
+    it('Era V: kills can drop an enemy card onto your board', () => {
+        const s = inEra(5);
+        s.stage = 25;
+        s.enemyHp = 0.1;
+        const k = damageEnemy(s, 1, always);
+        assert.equal(k?.turncoat, 0);
+        assert.equal(s.board[0], 3);
+    });
+});
+const eraDps = (s: ReturnType<typeof createGame>) => 3 ** (s.era - 1);
