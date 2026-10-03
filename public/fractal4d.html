@@ -335,7 +335,7 @@ function makeGenome(seed, depth = 0){
 function makeSpecies(R, g, i){
   const t = { social: R(), curious: R(), shy: R(), drift: R() }, temper = TEMPER[Math.floor(R()*4)];
   t[temper] = 0.75+0.25*R(); // one dominant temperament
-  return { name: nameFrom(R), temper, ...t, shape: R()*4.999, size: 0.03+R()*0.07, span: 0.12+R()*0.7,
+  return { el: Math.floor(R()*16), name: nameFrom(R), temper, ...t, shape: R()*4.999, size: 0.03+R()*0.07, span: 0.12+R()*0.7,
     osc: 1+R()*8, life: 15+R()*30, hue: (i/PHI + R()*0.2) % 1, gen: 0,
     motif: Array.from({length: 3+Math.floor(R()*3)}, () => Math.floor(R()*g.ratios.length*1.5)) };
 }
@@ -474,7 +474,7 @@ function emitWave(p, f, amp, player){ waves.push({p:p.slice(), f, amp, t0:clock,
 function waveAt(p){
   let s = 0;
   for (const w of waves){ const age = clock-w.t0, r = dist4(p,w.p);
-    s += w.amp*Math.exp(-age*0.5)*Math.exp(-((r-age*1.2)**2)*8)*Math.sin(r*12-age*8); }
+    s += w.amp*Math.exp(-age*0.5)*Math.exp(-((r-age*laws.waveSpeed)**2)*8)*Math.sin(r*12-age*8); }
   return s;
 }
 
@@ -489,9 +489,10 @@ function aroundPlayer(){ // Fibonacci sphere: golden-angle steps give even, neve
   return [cam.target[0]+Math.cos(th)*rr*d, cam.target[1]+y*d, cam.target[2]+Math.sin(th)*rr*d];
 }
 function individual(sp, g, w0, p){
+  if (sp.el == null) sp.el = 0;
   const deg = sp.motif[Math.floor(rng()*sp.motif.length)];
   p = p || [...aroundPlayer(), w0];
-  return { sp, g, deg, f: pitch(g, deg+g.ratios.length), p, anc: p.slice(0,3), v:[0,0,0,0], home: w0,
+  return { el: sp.el, sp, g, deg, f: pitch(g, deg+g.ratios.length), p, anc: p.slice(0,3), v:[0,0,0,0], home: w0,
     span: jitter(sp.span,.1), size: jitter(sp.size,.1), kind: sp.shape, osc: jitter(sp.osc,.1), max: jitter(sp.life,.2),
     life: 0, phase: rng()*6.28, excite: 0, attuned: 0, amp: 0, bred: -99, gen: sp.gen };
 }
@@ -504,13 +505,14 @@ function makeHeart(){ // the region's landmark: large, long-lived, spans most of
 }
 function reseed(){ ents.length = 0; ents.push(makeHeart()); for (let i=1;i<MAX_ENT-1;i++) ents.push(spawn()); }
 function breed(a, b){
-  const g = region(curRegion), m = g.mutation, mix = (x,y) => Math.max(0.01, (x+y)/2*(1+(rng()-.5)*2*m));
+  const g = region(curRegion), m = g.mutation, mix = (x,y) => Math.max(0.01, (x+y)/2*(1+(rng()-.5)*2*m*laws.mutation*(worldMind.state === 'chaos' ? 2 : 1)));
   const key = [a.sp.name, b.sp.name].sort().join('+');
   let sp = hybrids.get(key);
   if (!sp){
     const A = a.sp.name, B = b.sp.name.toLowerCase(), name = A.slice(0, Math.ceil(A.length/2)) + B.slice(Math.floor(B.length/2));
     const motif = a.sp.motif.flatMap((d,i) => [d, b.sp.motif[i % b.sp.motif.length]]).slice(0,6).map(d => rng() < m*3 ? d+(rng()<.5?1:-1) : d);
-    sp = { name, temper: rng()<.5 ? a.sp.temper : b.sp.temper, shape: Math.min(4.999, Math.max(0, (a.sp.shape+b.sp.shape)/2 + (rng()-.5)*m*10)), motif, hue: (a.sp.hue+b.sp.hue)/2,
+    const elA = a.sp.el % laws.elements.length, elB = b.sp.el % laws.elements.length;
+    sp = { el: laws.transmute[elA][elB], name, temper: rng()<.5 ? a.sp.temper : b.sp.temper, shape: Math.min(4.999, Math.max(0, (a.sp.shape+b.sp.shape)/2 + (rng()-.5)*m*10)), motif, hue: (a.sp.hue+b.sp.hue)/2,
       gen: Math.max(a.gen, b.gen)+1, ...Object.fromEntries(['social','curious','shy','drift','size','span','osc','life'].map(k => [k, mix(a.sp[k], b.sp[k])])) };
     if (a.sp.mem && b.sp.mem && a.sp.mem.length === b.sp.mem.length){ // offspring inherit a blend of what their parents learned
       sp.mem = a.sp.mem.map((v,i) => (v + b.sp.mem[i])/2); sp.val = a.sp.val.map((v,i) => (v + b.sp.val[i])/2); }
@@ -532,7 +534,7 @@ function stepEnts(dt, t){
     if (!e.heart && ((e.life > e.max && e.attuned <= 0) || dist3(e.p, cam.target) > 3.6 || Math.abs(e.p[3]-W) > 1.8)) e = ents[i] = spawn();
     const sp = e.sp, listen = analyser ? freq[binOf(e.f)]/255 : 0.5+0.5*Math.sin(t*e.osc*0.3+e.phase);
     // wave fronts that pass an entity excite it if they agree with its pitch; player waves attune it, shy ones flee dissonance
-    for (const w of waves) if (!w.hit.has(e) && Math.abs(dist4(e.p,w.p)-(clock-w.t0)*1.2) < 0.15){
+    for (const w of waves) if (!w.hit.has(e) && Math.abs(dist4(e.p,w.p)-(clock-w.t0)*laws.waveSpeed) < 0.15){
       w.hit.add(e); const c = consonance(w.f, e.f);
       if (c > 0.3){ e.excite = 1;
         if (w.player){ e.attuned = 10; const n = e.g.ratios.length, sp = mind(e.sp, n); sp.val[mod(snapToScale(w.f, e.g), n)] += 0.25; // it learns to value this note
@@ -548,17 +550,17 @@ function stepEnts(dt, t){
     for (let a=0;a<4;a++){
       const q = e.p.slice(); q[a] += eps;
       const grad = (field(...q,t)-f0)/eps, wgrad = (waveAt(q)-w0)/eps;
-      const spring = -0.4*(e.p[a] - (a<3 ? e.anc[a] : e.home));
-      let f = spring + (0.2+0.6*sp.drift)*grad - 0.8*wgrad + 2*listen*band.flux*Math.sin(e.phase+a*1.7+t*e.osc) + lure*(P[a]-e.p[a]);
+      const spring = -laws.spring*(e.p[a] - (a<3 ? e.anc[a] : e.home));
+      let f = spring + (0.2+0.6*sp.drift)*laws.drift*grad - 0.8*wgrad + 2*listen*band.flux*Math.sin(e.phase+a*1.7+t*e.osc) + lure*(P[a]-e.p[a]);
       if (e.attuned > 0) f += (0.6+sp.curious)*(P[a] + 0.35*Math.sin(e.phase+a*2.1+t*0.8) - e.p[a]); // orbit the player
       if (e.flee > 0) f -= 1.5*(P[a]-e.p[a]);
-      e.v[a] += dt*f; e.v[a] *= 1 - 1.2*dt; e.p[a] += e.v[a]*dt;
+      e.v[a] += dt*f; e.v[a] *= Math.max(0, 1 - laws.drag*dt); e.p[a] += e.v[a]*dt;
     }
     // harmony: consonant pairs gather into places, dissonant pairs push apart; excited consonant pairs that touch breed
     for (let j=i+1;j<ents.length;j++){ const o = ents[j]; if (o.heart) continue; const d = dist4(e.p,o.p); if (d > 1.2 || d < 1e-4) continue;
-      const c = consonance(e.f, o.f);
-      if (d < 0.2 && c > 0.3 && e.excite > 0.4 && o.excite > 0.4 && t-e.bred > 8 && t-o.bred > 8) breed(e, o);
-      const k0 = (d < 0.12 ? -1 : c)*0.6*(0.3+(sp.social+o.sp.social)/2)*dt/d;
+      const c = consonance(e.f, o.f), el = laws.affinity[e.el % laws.elements.length][o.el % laws.elements.length];
+      if (d < 0.2 && c > laws.breedNeed && el > -0.2 && e.excite > 0.4 && o.excite > 0.4 && t-e.bred > 8 && t-o.bred > 8) breed(e, o);
+      const k0 = (d < 0.12 ? -1 : c*laws.harmony + el)*0.6*(0.3+(sp.social+o.sp.social)/2)*dt/d;
       for (let a=0;a<4;a++){ const k = k0*(o.p[a]-e.p[a]); e.v[a]+=k; o.v[a]-=k; } }
   }
 }
@@ -643,9 +645,11 @@ function tap(x, y){
 }
 
 // ================= 1. Hyperspace: regions along w =================
-function setWorld(seed, name, hint, cOff){
+function setWorld(seed, name, hint, cOff, parent){
+  if (saveData.worlds[world.seed]) saveMinds(); // keep what this world's creatures learned
   world.seed = seed >>> 0; genomes.clear(); hybrids.clear(); lastTapped = null;
-  saveData.worlds[world.seed] = saveData.worlds[world.seed] || { name, unlocked: 0, chords: [], hint, cOff };
+  saveData.worlds[world.seed] = saveData.worlds[world.seed] || { name, unlocked: 0, chords: [], hint, cOff, parent };
+  laws = lawsFor(world.seed); worldMind.order = 0; worldMind.state = 'quiet';
   world.famHint = saveData.worlds[world.seed].hint ?? null; world.cOff = saveData.worlds[world.seed].cOff || null;
   cur().seen = cur().seen || []; saveData.last = world.seed; save();
   Object.assign(nav4, {w:0, rot:0, vw:0, vr:0, tw:0, tr:0}); curRegion = 0; tone = 0; waves.length = 0;
@@ -680,7 +684,7 @@ function hiveReset(){
   const R = mulberry(hash2(world.seed, 777));
   hive.w = (R()<.5 ? -1 : 1)*(1.15+R()*0.35); hive.core = [0,0,0].map(() => (R()-.5)*0.8);
   for (const f of [hive.home, hive.trail, hive.scent]) f.fill(0);
-  hive.mind = { mem: new Float32Array(144).fill(1), last: null, hits: 0, total: 0, seen: 0 }; lastPlayerPc = null; // a new world's hive knows nothing of you
+  hive.mind = { mem: cur().hiveMind ? Float32Array.from(cur().hiveMind) : new Float32Array(144).fill(1), last: null, hits: 0, total: 0, seen: 0 }; lastPlayerPc = null; // a new world's hive knows nothing of you
   hive.ants.length = 0; hive.food = 0; hive.met = false; hive.inside = false; hive.announced = false;
   for (let i=0;i<260;i++) hive.ants.push(newAnt());
 }
@@ -816,7 +820,10 @@ function drawAnts(eye, fwd, right, upv, w, h){
 // (b) values for notes that have attuned it, which bias where it goes. The hive learns your sequences and predicts you.
 const mod = (a, n) => ((a % n) + n) % n;
 function mind(sp, n){
-  if (!sp.mem || sp.mem.length !== n*n){ sp.mem = new Float32Array(n*n).fill(1); sp.val = new Float32Array(n); }
+  if (!sp.mem || sp.mem.length !== n*n){
+    const saved = cur().minds && cur().minds[sp.name];
+    if (saved && saved.mem.length === n*n){ sp.mem = Float32Array.from(saved.mem); sp.val = Float32Array.from(saved.val); } // it remembers you
+    else { sp.mem = new Float32Array(n*n).fill(1); sp.val = new Float32Array(n); } }
   return sp;
 }
 let lastPlayerPc = null;
@@ -827,7 +834,7 @@ function learnFromPlayer(f){
   for (const e of ents){ if (e.heart || Math.abs(e.p[3]-W) >= e.span || e.g !== g) continue;
     const sp = mind(e.sp, n), k = 1/(1 + dist3(e.p, cam.target));
     if (lastPlayerPc !== null) sp.mem[lastPlayerPc*n + pc] += 2*k;
-    for (let i=0;i<sp.mem.length;i++) sp.mem[i] = 1 + (sp.mem[i]-1)*0.995; } // slow forgetting
+  } // forgetting is the world's law now (stepMinds)
   lastPlayerPc = pc;
   // the hive: predict, then learn
   const h = hive.mind, p12 = pc12(f);
@@ -886,7 +893,7 @@ function stepFall(dt){
     if (fall.dir > 0){
       const b = fall.b, seed = hash2(world.seed, hshJ(b.cid[0]*73856093 ^ b.cid[1]*19349663 ^ b.cid[2]*83492791));
       stack.push({ seed: world.seed, name: cur().name, exit: b.ctr.map((v,k) => v + (cam.target[k]-v)/(b.d||1)*(1.9*b.sc+0.6)) });
-      setWorld(seed, '↳'.repeat(stack.length) + ' ' + FAMILY[b.fa] + ' block', b.fa, b.cOff);
+      setWorld(seed, '↳'.repeat(stack.length) + ' ' + FAMILY[b.fa] + ' block', b.fa, b.cOff, stack[stack.length-1].seed);
       cam.target = [0,0,0]; // a lattice corner: the farthest point from every block
       say(`You fell into a ${FAMILY[b.fa]} block. Universe depth ${stack.length}. Rise ↑ (X) to climb out.`);
     } else {
@@ -898,6 +905,97 @@ function stepFall(dt){
 }
 function rise(){ if (stack.length && !fall){ ensureCtx(); startFall(-1, null); } else if (!stack.length) say('This is the outermost universe.'); }
 document.getElementById('rise').onclick = rise;
+
+// ================= 14. Laws: every world's physics, elements and laws, fractally generated =================
+// Each law is self-similar noise over the seed (octaves shrinking by 1/φ). A universe inside a block inherits its
+// parent's laws plus variation that shrinks by 1/φ per level, so laws form a fractal across the tree of universes.
+const LAW_RANGES = {            // [min, max]
+  drag:        [0.5, 2.2],      // how quickly motion dies
+  spring:      [0.1, 0.8],      // pull back to birthplace
+  harmony:     [-0.6, 1.2],     // >0 consonance attracts, <0 it repels (strange worlds)
+  waveSpeed:   [0.6, 2.0],      // how fast tones travel through 4D
+  drift:       [0.0, 1.4],      // how strongly the probability field carries things
+  breedNeed:   [0.15, 0.6],     // how much agreement two beings need to have offspring
+  mutation:    [0.4, 2.5],      // multiplier on inherited variation
+  decay:       [0.002, 0.03],   // second law: memories fade toward noise each second
+  teach:       [0.0, 0.08],     // how readily ordered minds pass structure to neighbours
+  chaosAt:     [0.08, 0.35],    // order below this and the world slides into chaos
+  timeScale:   [0.6, 1.5],      // how fast this world's life runs
+};
+const ELEM_SYL = ['ae','or','yx','ul','eth','ka','sil','vo','rhe','um','zi','qua'];
+function makeLaws(seed, parent, depth){
+  const R = mulberry(hash2(seed, 4242));
+  const fbm = () => { let v = 0, a = 0.5; for (let o=0;o<5;o++){ v += a*(R()*2-1); a /= PHI; } return v; }; // self-similar, about -1..1
+  const L = {};
+  for (const [k, [lo, hi]] of Object.entries(LAW_RANGES)){
+    const mid = (lo+hi)/2, half = (hi-lo)/2;
+    const v = parent ? parent[k] + fbm()*half*0.6/PHI**depth : mid + fbm()*half*1.6;
+    L[k] = Math.max(lo, Math.min(hi, v));
+  }
+  // elements: each a resonance; affinity follows harmony between them, bent by this world's law
+  const n = 3 + Math.floor(R()*5);
+  L.elements = Array.from({length: n}, (_, i) => ({ name: ELEM_SYL[Math.floor(R()*ELEM_SYL.length)] + ELEM_SYL[Math.floor(R()*ELEM_SYL.length)],
+    ratio: INTERVALS[Math.floor(R()*INTERVALS.length)], hue: (i/PHI) % 1 }));
+  L.affinity = L.elements.map(a => L.elements.map(b => L.harmony*consonance(a.ratio, b.ratio) + fbm()*0.3));
+  L.transmute = L.elements.map((_, i) => L.elements.map((_, j) => Math.floor(((i*PHI + j*PHI*PHI + R()) % 1)*n))); // what two elements make together
+  return L;
+}
+function lawsFor(seed, depth = 0){ // walk up the chain of parent universes
+  const e = saveData.worlds[seed], parent = e && e.parent != null && depth < 32 ? lawsFor(e.parent, depth+1) : null;
+  return makeLaws(seed, parent, parent ? depth+1 : 0);
+}
+let laws = makeLaws(1, null, 0);
+const describeLaws = L => `laws: drag ${L.drag.toFixed(2)} · harmony ${L.harmony >= 0 ? '+' : ''}${L.harmony.toFixed(2)} · waves ${L.waveSpeed.toFixed(2)} · decay ${(L.decay*100).toFixed(1)}%/s · chaos<${L.chaosAt.toFixed(2)}\n` +
+  `elements: ${L.elements.map(e => e.name).join(' ')}`;
+
+// ================= 15. Entropy and mind =================
+// A species' order = 1 - mean normalised entropy of its memory rows. Memories fade toward noise (the law's decay).
+// Above the world's chaos threshold, ordered minds teach their neighbours and sing together: order spreads.
+// Below it, noise floods memories and mutation runs high: the world collapses into chaos.
+function speciesOrder(sp){
+  if (!sp.mem) return 0;
+  const n = Math.round(Math.sqrt(sp.mem.length)); let H = 0;
+  for (let i=0;i<n;i++){ let sum = 0; for (let j=0;j<n;j++) sum += sp.mem[i*n+j];
+    let h = 0; for (let j=0;j<n;j++){ const q = sp.mem[i*n+j]/sum; if (q > 0) h -= q*Math.log(q); } H += h/Math.log(n); }
+  return 1 - H/n;
+}
+const worldMind = { order: 0, state: 'quiet', t: 0, choirT: 0 };
+let mindsDirty = false, mindsSaveT = 0;
+function stepMinds(dt){
+  worldMind.t += dt; if (worldMind.t < 1) return; const step = worldMind.t; worldMind.t = 0;
+  const present = new Map(); for (const e of ents) if (!e.heart && e.sp.mem && Math.abs(e.p[3]-W) < 1.2) present.set(e.sp, (present.get(e.sp)||[]).concat(e));
+  if (!present.size){ worldMind.order = 0; worldMind.state = 'quiet'; return; }
+  let tot = 0, cnt = 0; for (const [sp, es] of present){ tot += speciesOrder(sp)*es.length; cnt += es.length; }
+  worldMind.order = tot/cnt;
+  const sps = [...present.keys()];
+  for (const sp of sps){ // the second law: everything fades toward noise
+    const k = Math.pow(1 - laws.decay, step); for (let i=0;i<sp.mem.length;i++) sp.mem[i] = 1 + (sp.mem[i]-1)*k; }
+  if (worldMind.order >= laws.chaosAt){
+    worldMind.state = 'ordering';
+    // teaching: each species leans toward the most ordered one nearby (structure spreads, entropy falls)
+    const best = sps.reduce((a, b) => speciesOrder(b) > speciesOrder(a) ? b : a);
+    for (const sp of sps) if (sp !== best && sp.mem.length === best.mem.length)
+      for (let i=0;i<sp.mem.length;i++) sp.mem[i] += laws.teach*step*(best.mem[i] - sp.mem[i]);
+    // aware species sing together
+    worldMind.choirT -= step;
+    if (worldMind.choirT <= 0 && speciesOrder(best) > 0.45){ worldMind.choirT = 6;
+      for (const e of present.get(best).slice(0,3)) sing(e);
+      if (msgT <= 0) say(`${best.name} are singing in order. Entropy is falling.`); }
+  } else {
+    worldMind.state = 'chaos';
+    const amt = (laws.chaosAt - worldMind.order)*3*step; // noise floods in
+    for (const sp of sps) for (let i=0;i<sp.mem.length;i++) sp.mem[i] += rng()*amt*4;
+    if (msgT <= 0 && rng() < 0.15) say('Memories are dissolving. This world is sliding into chaos.');
+  }
+  mindsDirty = true; mindsSaveT -= step; if (mindsSaveT <= 0){ saveMinds(); mindsSaveT = 5; }
+}
+function saveMinds(){ // per world, by species name, plus the hive
+  if (!mindsDirty) return; mindsDirty = false;
+  const out = {}, all = new Set(); for (const g of genomes.values()) for (const sp of g.species) all.add(sp); for (const sp of hybrids.values()) all.add(sp);
+  for (const sp of all) if (sp.mem) out[sp.name] = { mem: Array.from(sp.mem, v => +v.toFixed(2)), val: Array.from(sp.val, v => +v.toFixed(2)) };
+  cur().minds = out; cur().hiveMind = Array.from(hive.mind.mem, v => +v.toFixed(2)); save();
+}
+addEventListener('pagehide', () => { mindsDirty = true; saveMinds(); });
 // ================= 10. Smoothness + 2. Rendering loop =================
 const fpsWin = {t0: performance.now(), n: 0};
 let scale = 0.6, last = performance.now(), fpsAvg = 60, frames = 0, W = 0, humT = 0, humDeg = null, humCount = 0;
@@ -960,7 +1058,8 @@ function frame(){
       if (humCount >= 2 && t-humT > 0.5){ humT = t; tone = pitch(region(curRegion), d); emitWave(player(), tone, 1, true); learnFromPlayer(tone); } }
     else humCount = 0;
   }
-  stepEnts(dt, t);
+  stepEnts(dt*laws.timeScale, t);
+  stepMinds(dt);
   stepHive(dt, t);
   checkEnter(dt); stepFall(dt);
   if (actx) checkChord(W);
@@ -1018,6 +1117,7 @@ function frame(){
       `tone ${tone ? tone.toFixed(0)+' Hz' : '-'}  attuned ${att}  chords ${cur().chords.length}\n` +
       `sun ${daylight > 0.5 ? 'day' : 'night'} drift ${sunDrift>=0?'+':''}${sunDrift.toFixed(2)}  hive w ${hive.w.toFixed(2)}\n` +
       `ants ${hive.ants.length} (${hive.seenHere} in slice)  order ${hive.order.toFixed(2)}  predicts you ${hive.mind.total ? Math.round(100*hive.mind.hits/hive.mind.total)+'%' : '-'}${hive.inside ? '  INSIDE THE HIVE MIND' : ''}\n` +
+      `mind ${worldMind.order.toFixed(2)} · ${worldMind.state}\n${describeLaws(laws)}\n` +
       `universe depth ${stack.length}${stack.length ? ' (' + cur().name + ')' : ''}\n` +
       `audio: ${!actx ? 'tap to start' : micAn ? 'mic + synth' : 'synth'}  ${rapid ? 'rapid' : 'sensitive'}`;
   }

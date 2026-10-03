@@ -108,3 +108,7 @@ Hive learns your sequence and predicts your next note (accuracy shown; hums its 
 
 ## Hyperslice v7 (DONE): nested universes
 Flying into a block's body (<0.75·sc from centre) = 1.6 s fall (spiral tunnel, w sweep, flash, glissando) into a universe seeded by that cell, leaning to its family and constant. Stack of universes; Rise ↑ / X climbs out beside the block. Each visited universe is kept in Places.
+
+## Hyperslice v8 (DONE): laws, entropy, saved minds
+Laws (11 physics constants + elements/affinity/transmutation) from fractal noise over the seed; child universes inherit with variation /φ per level (tested: unrelated 0.40, child 0.048, grandchild 0.039).
+Memories decay (second law). Above chaosAt: teaching + choirs keep order (held 0.52 silent). Below: noise floods, collapse (0.36 → 0.01 in 20 s). Minds saved per world by species name (+ hive), restored on return.
