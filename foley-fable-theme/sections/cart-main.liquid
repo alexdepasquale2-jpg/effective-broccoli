@@ -1,0 +1,42 @@
+<section class="section">
+  <div class="page-width">
+    <h1 class="display-heading display-heading--md" style="margin-bottom: 2rem;">{{ 'cart.general.title' | t }}</h1>
+
+    {%- if cart.item_count == 0 -%}
+      <p class="lead">{{ 'cart.general.empty' | t }}</p>
+      <a href="{{ routes.all_products_collection_url }}" class="btn btn--primary" style="margin-top: 1.5rem;">{{ 'cart.general.continue_shopping' | t }}</a>
+    {%- else -%}
+      <div class="checkout__layout">
+        <div>
+          {%- for item in cart.items -%}
+            <div class="cart-item">
+              <div class="cart-item__image">
+                {%- if item.image -%}
+                  {{ item.image | image_url: width: 200 | image_tag: loading: 'lazy', alt: item.title }}
+                {%- endif -%}
+              </div>
+              <div>
+                <h3 class="cart-item__title"><a href="{{ item.url }}">{{ item.product.title }}</a></h3>
+                <p class="cart-item__price">{{ item.final_line_price | money }} · Qty {{ item.quantity }}</p>
+              </div>
+            </div>
+          {%- endfor -%}
+
+          <p class="product-card__price" style="font-size: 1rem; margin: 1.5rem 0 2rem;">
+            {{ 'cart.general.subtotal' | t }}: {{ cart.total_price | money }}
+          </p>
+
+          {% render 'email-order-form' %}
+        </div>
+      </div>
+    {%- endif -%}
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Cart",
+  "tag": "section",
+  "class": "section-cart"
+}
+{% endschema %}

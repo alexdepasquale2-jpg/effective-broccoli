@@ -1,0 +1,65 @@
+{
+  "general": {
+    "404": {
+      "title": "Page not found",
+      "subtext": "This chapter seems to be missing from our collection.",
+      "link": "Return home",
+      "eyebrow": "Lost in the stacks"
+    },
+    "search": {
+      "title": "Search",
+      "placeholder": "Search our collection..."
+    }
+  },
+  "accessibility": {
+    "skip_to_content": "Skip to content",
+    "close": "Close",
+    "menu": "Menu",
+    "main_navigation": "Main navigation",
+    "mobile_navigation": "Mobile navigation"
+  },
+  "products": {
+    "product": {
+      "add_to_cart": "Add to cart",
+      "sold_out": "Sold out",
+      "quantity": "Quantity",
+      "from": "From"
+    }
+  },
+  "collections": {
+    "general": {
+      "items": "items",
+      "no_matches": "No products found"
+    }
+  },
+  "cart": {
+    "general": {
+      "title": "Your cart",
+      "empty": "Your cart is empty",
+      "subtotal": "Subtotal",
+      "checkout": "Request this order",
+      "continue_shopping": "Continue shopping"
+    },
+    "request": {
+      "intro": "Send your request to Foley & Fable. We reply to close the sale and arrange payment — no card is charged here.",
+      "name": "Full name",
+      "email": "Email",
+      "phone": "Phone",
+      "address": "Street address",
+      "city": "City",
+      "state": "State",
+      "zip": "ZIP",
+      "notes": "Notes for Ashley",
+      "submit": "Send request to Foley & Fable",
+      "drawer_note": "We close the sale by email — no card required yet."
+    }
+  },
+  "footer": {
+    "shop": "Shop",
+    "connect": "Connect",
+    "rights": "All rights reserved."
+  },
+  "newsletter": {
+    "email_label": "Email address"
+  }
+}

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Foley & Fable — Blind Book Dates</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/base.css">
+</head>
+<body>
+  <div class="announcement-bar">Each book arrives wrapped &amp; wax-sealed · Request by email, we close the sale</div>
+
+  <header class="site-header">
+    <div class="page-width">
+      <div class="site-header__inner">
+        <nav class="site-header__nav">
+          <a href="#shop" data-go-home>Shop</a>
+          <a href="#how" data-go-home>How It Works</a>
+          <a href="#story" data-go-home>Our Story</a>
+        </nav>
+        <a href="#home" class="site-header__logo" data-go-home>
+          <span class="site-header__logo-text">Foley &amp; Fable</span>
+          <span class="site-header__logo-tagline">Stories &amp; Shadows</span>
+        </a>
+        <div class="site-header__actions">
+          <button type="button" class="site-header__icon-btn" data-cart-open aria-label="Cart">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+            <span class="cart-count" id="CartCount" hidden>0</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="view is-active" data-view="home" id="home">
+      <section class="hero">
+        <div class="hero__bg">
+          <img class="hero__bg-image" src="https://images.unsplash.com/photo-1481627834876-b7833e8f5570?auto=format&fit=crop&w=2000&q=80" alt="">
+          <div class="hero__overlay"></div>
+        </div>
+        <div class="page-width hero__content reveal is-visible">
+          <div style="text-align: center; max-width: 52rem; margin: 0 auto;">
+            <p class="eyebrow">Blind Book Dates</p>
+            <h1 class="display-heading display-heading--xl" style="margin-top: 1rem;">Where stories linger and shadows muse</h1>
+            <p class="lead" style="margin: 1.5rem auto 0;">Discover handpicked volumes, elegantly wrapped and wax-sealed — a literary surprise crafted for those who cherish thoughtful ambiance and enduring words.</p>
+            <div class="hero__actions" style="justify-content: center;">
+              <a href="#shop" class="btn btn--primary">Shop Blind Dates</a>
+              <a href="#how" class="btn btn--secondary">How It Works</a>
+            </div>
+            <div class="hero__ornament"></div>
+          </div>
+        </div>
+        <span class="hero__scroll-hint">Scroll to discover</span>
+      </section>
+
+      <section class="section" id="shop">
+        <div class="page-width">
+          <div class="section__header reveal is-visible">
+            <p class="eyebrow">Curated for you</p>
+            <h2 class="display-heading display-heading--lg">Featured Blind Book Dates</h2>
+            <p class="lead" style="margin: 1rem auto 0;">Choose your mood — romance, darkness, or cozy curiosity. Add to cart, then send a request. We close the sale by email.</p>
+          </div>
+          <div class="product-grid" id="ProductGrid"></div>
+        </div>
+      </section>
+
+      <section class="section section--parchment" id="how">
+        <div class="page-width">
+          <div class="section__header reveal is-visible">
+            <p class="eyebrow" style="color: var(--wine);">The ritual</p>
+            <h2 class="display-heading display-heading--lg" style="color: var(--ink);">How your blind date arrives</h2>
+          </div>
+          <div class="steps">
+            <div class="step reveal is-visible">
+              <span class="step__number">1</span>
+              <h3 class="step__title">Choose your mood</h3>
+              <p class="step__text">Select from romance, dark &amp; twisted, or cozy &amp; curious — standard or deluxe editions.</p>
+            </div>
+            <div class="step reveal is-visible">
+              <span class="step__number">2</span>
+              <h3 class="step__title">Request your date</h3>
+              <p class="step__text">Send your order by email checkout. We reply to confirm, arrange payment, and pack with care.</p>
+            </div>
+            <div class="step reveal is-visible">
+              <span class="step__number">3</span>
+              <h3 class="step__title">Unwrap the mystery</h3>
+              <p class="step__text">Your book arrives wrapped in elegant paper and finished with a wax seal.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="story">
+        <div class="page-width">
+          <div class="story-split">
+            <div class="story-split__media reveal is-visible">
+              <img src="https://images.unsplash.com/photo-1519682337058-a94d519337bc?auto=format&fit=crop&w=1200&q=80" alt="Stacked books and quiet light">
+              <div class="story-split__frame"></div>
+            </div>
+            <div class="story-split__content reveal is-visible">
+              <p class="eyebrow">Our story</p>
+              <h2 class="display-heading display-heading--md">Born from a passion for the written word</h2>
+              <p>We curate spaces where curiosity and nostalgia meet — across worn pages, treasured finds, and the quiet magic of a story you didn't see coming.</p>
+              <p>Every blind book date is an invitation to linger a little longer in the shadows of a good tale.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="view" data-view="checkout" id="checkout">
+      <section class="checkout">
+        <div class="page-width checkout__layout">
+          <div>
+            <div class="checkout__intro">
+              <p class="eyebrow">Email checkout</p>
+              <h1 class="display-heading display-heading--md" style="margin-top: 0.6rem;">Request your order</h1>
+              <p class="checkout__note">Tell us where to send your book date. Your request goes to Foley &amp; Fable at slashleyx06@gmail.com — we reply to close the sale and arrange payment. No card is charged on this page.</p>
+            </div>
+            <form id="CheckoutForm" class="checkout-form" action="https://formsubmit.co/slashleyx06@gmail.com" method="POST">
+              <input type="hidden" name="_subject" id="OrderSubject" value="New Foley &amp; Fable order request">
+              <input type="hidden" name="_template" value="box">
+              <input type="hidden" name="_captcha" value="false">
+              <input type="hidden" name="_next" id="OrderNext">
+              <input type="hidden" name="_replyto" id="OrderReplyTo">
+              <input type="hidden" name="order" id="OrderDetails">
+              <div class="form-row">
+                <div class="form-field">
+                  <label for="name">Full name</label>
+                  <input id="name" name="name" required autocomplete="name">
+                </div>
+                <div class="form-field">
+                  <label for="email">Email</label>
+                  <input id="email" name="email" type="email" required autocomplete="email">
+                </div>
+              </div>
+              <div class="form-field">
+                <label for="phone">Phone</label>
+                <input id="phone" name="phone" type="tel" autocomplete="tel">
+              </div>
+              <div class="form-field">
+                <label for="address">Street address</label>
+                <input id="address" name="address" required autocomplete="street-address">
+              </div>
+              <div class="form-row">
+                <div class="form-field">
+                  <label for="city">City</label>
+                  <input id="city" name="city" required autocomplete="address-level2">
+                </div>
+                <div class="form-field">
+                  <label for="state">State</label>
+                  <input id="state" name="state" required autocomplete="address-level1">
+                </div>
+              </div>
+              <div class="form-field">
+                <label for="zip">ZIP</label>
+                <input id="zip" name="zip" required autocomplete="postal-code">
+              </div>
+              <div class="form-field">
+                <label for="notes">Notes for Ashley</label>
+                <textarea id="notes" name="notes" placeholder="Tropes to avoid, gift wrap, preferred delivery window…"></textarea>
+              </div>
+              <p class="form-status" id="CheckoutStatus" aria-live="polite"></p>
+              <button type="submit" class="btn btn--primary">Send request to Foley &amp; Fable</button>
+              <button type="submit" class="btn btn--gold" data-send-via="gmail">Send with Gmail</button>
+              <button type="button" class="btn btn--secondary" data-go-home>Keep browsing</button>
+            </form>
+          </div>
+          <aside class="order-summary">
+            <h2 class="order-summary__title">Your date</h2>
+            <ul class="order-summary__list" id="CheckoutItems"></ul>
+            <div class="order-summary__total">
+              <span>Subtotal</span>
+              <span id="CheckoutTotal">$0.00</span>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+
+    <div class="view" data-view="success" id="success">
+      <section class="checkout-success page-width">
+        <div class="checkout-success__seal">✓</div>
+        <p class="eyebrow">Request received</p>
+        <h1 class="display-heading display-heading--md" style="margin: 0.75rem 0 1rem;">Your letter is on its way</h1>
+        <p class="lead" style="margin: 0 auto 2rem;">If a Gmail or mail window opened, press Send so Ashley receives the request at slashleyx06@gmail.com. She will reply to confirm the books, arrange payment, and close the sale.</p>
+        <div class="hero__actions" style="justify-content: center;">
+          <a class="btn btn--gold" id="SuccessGmail" href="https://mail.google.com/mail/?view=cm&fs=1&to=slashleyx06@gmail.com" target="_blank" rel="noopener">Open Gmail</a>
+          <a class="btn btn--primary" id="SuccessMailto" href="mailto:slashleyx06@gmail.com">Open email app</a>
+          <button type="button" class="btn btn--secondary" data-go-home>Return to the shop</button>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="page-width">
+      <div class="site-footer__grid">
+        <div class="site-footer__brand">
+          <span class="site-header__logo-text">Foley &amp; Fable</span>
+          <p>Born from a passion for the written word, we curate spaces where curiosity and nostalgia meet across worn pages and treasured finds.</p>
+        </div>
+        <div>
+          <h3 class="site-footer__heading">Shop</h3>
+          <ul class="site-footer__links">
+            <li><a href="#shop" data-go-home>All Blind Dates</a></li>
+            <li><a href="#checkout">Email checkout</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="site-footer__heading">Connect</h3>
+          <ul class="site-footer__links">
+            <li><a href="mailto:slashleyx06@gmail.com">slashleyx06@gmail.com</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="site-footer__bottom">
+        <span>&copy; 2026 Foley &amp; Fable. All rights reserved.</span>
+      </div>
+    </div>
+  </footer>
+
+  <div class="cart-drawer" id="CartDrawer" aria-hidden="true">
+    <div class="cart-drawer__overlay" data-cart-close></div>
+    <div class="cart-drawer__panel" role="dialog" aria-modal="true" aria-label="Your cart">
+      <div class="cart-drawer__header">
+        <h2 class="cart-drawer__title">Your cart</h2>
+        <button type="button" class="cart-drawer__close" data-cart-close aria-label="Close">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="cart-drawer__body" id="CartDrawerContents"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="Toast" role="status"></div>
+  <script src="assets/store.js"></script>
+</body>
+</html>

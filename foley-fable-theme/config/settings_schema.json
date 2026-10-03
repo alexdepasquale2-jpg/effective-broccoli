@@ -1,0 +1,55 @@
+[
+  {
+    "name": "theme_info",
+    "theme_name": "Foley & Fable",
+    "theme_version": "1.0.0",
+    "theme_author": "Custom",
+    "theme_documentation_url": "https://github.com",
+    "theme_support_url": "https://github.com"
+  },
+  {
+    "name": "Colors",
+    "settings": [
+      {
+        "type": "color",
+        "id": "color_ink",
+        "label": "Ink (background)",
+        "default": "#14101c"
+      },
+      {
+        "type": "color",
+        "id": "color_wine",
+        "label": "Wine accent",
+        "default": "#722f37"
+      },
+      {
+        "type": "color",
+        "id": "color_gold",
+        "label": "Gold accent",
+        "default": "#c4a35a"
+      }
+    ]
+  },
+  {
+    "name": "Favicon",
+    "settings": [
+      {
+        "type": "image_picker",
+        "id": "favicon",
+        "label": "Favicon"
+      }
+    ]
+  },
+  {
+    "name": "Email checkout",
+    "settings": [
+      {
+        "type": "text",
+        "id": "order_email",
+        "label": "Order request email",
+        "default": "slashleyx06@gmail.com",
+        "info": "Customer order requests are sent here so you can close the sale."
+      }
+    ]
+  }
+]

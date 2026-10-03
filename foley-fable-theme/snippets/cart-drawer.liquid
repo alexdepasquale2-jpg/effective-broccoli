@@ -1,0 +1,32 @@
+{%- if cart.item_count == 0 -%}
+  <div class="cart-drawer__empty">
+    <p>{{ 'cart.general.empty' | t }}</p>
+    <a href="{{ routes.all_products_collection_url }}" class="btn btn--secondary" style="margin-top: 1.5rem;">{{ 'cart.general.continue_shopping' | t }}</a>
+  </div>
+{%- else -%}
+  {%- for item in cart.items -%}
+    <div class="cart-item">
+      <div class="cart-item__image">
+        {%- if item.image -%}
+          {{ item.image | image_url: width: 200 | image_tag: loading: 'lazy', alt: item.title }}
+        {%- endif -%}
+      </div>
+      <div>
+        <h3 class="cart-item__title">{{ item.product.title }}</h3>
+        {%- unless item.product.has_only_default_variant -%}
+          <p style="font-size: 0.85rem; color: rgba(244,239,230,0.55); margin: 0;">{{ item.variant.title }}</p>
+        {%- endunless -%}
+        <p class="cart-item__price">{{ item.final_line_price | money }} &middot; Qty {{ item.quantity }}</p>
+      </div>
+    </div>
+  {%- endfor -%}
+
+  <div class="cart-drawer__footer">
+    <div class="cart-drawer__subtotal">
+      <span>{{ 'cart.general.subtotal' | t }}</span>
+      <span>{{ cart.total_price | money }}</span>
+    </div>
+    <a href="{{ routes.cart_url }}" class="btn btn--primary cart-drawer__checkout">{{ 'cart.request.submit' | t }}</a>
+    <p style="margin:1rem 0 0;font-size:0.85rem;color:rgba(244,239,230,0.55);text-align:center;">{{ 'cart.request.drawer_note' | t }}</p>
+  </div>
+{%- endif -%}

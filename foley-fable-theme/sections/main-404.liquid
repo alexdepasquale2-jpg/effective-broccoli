@@ -1,0 +1,15 @@
+<section class="error-page page-width reveal">
+  <p class="eyebrow">{{ 'general.404.eyebrow' | t }}</p>
+  <h1 class="error-page__code">404</h1>
+  <h2 class="display-heading display-heading--md" style="margin: 1rem 0;">{{ 'general.404.title' | t }}</h2>
+  <p class="lead" style="margin: 0 auto 2rem;">{{ 'general.404.subtext' | t }}</p>
+  <a href="{{ routes.root_url }}" class="btn btn--primary">{{ 'general.404.link' | t }}</a>
+</section>
+
+{% schema %}
+{
+  "name": "404",
+  "tag": "section",
+  "class": "section-404"
+}
+{% endschema %}

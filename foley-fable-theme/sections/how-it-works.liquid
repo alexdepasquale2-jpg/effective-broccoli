@@ -1,0 +1,88 @@
+<section class="section section--parchment">
+  <div class="page-width">
+    <div class="section__header reveal">
+      <p class="eyebrow" style="color: var(--wine);">{{ section.settings.eyebrow }}</p>
+      <h2 class="display-heading display-heading--lg" style="color: var(--ink);">{{ section.settings.heading }}</h2>
+    </div>
+
+    <div class="steps">
+      {%- for block in section.blocks -%}
+        <div class="step reveal" {{ block.shopify_attributes }} style="transition-delay: {{ forloop.index0 | times: 100 }}ms;">
+          <span class="step__number">{{ forloop.index }}</span>
+          <h3 class="step__title">{{ block.settings.title }}</h3>
+          <p class="step__text">{{ block.settings.text }}</p>
+        </div>
+      {%- endfor -%}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "How it works",
+  "tag": "section",
+  "class": "section-how-it-works",
+  "settings": [
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow",
+      "default": "The ritual"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "How your blind date arrives"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "step",
+      "name": "Step",
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Title",
+          "default": "Choose your mood"
+        },
+        {
+          "type": "textarea",
+          "id": "text",
+          "label": "Description",
+          "default": "Select from romance, dark & twisted, or cozy & curious — standard or deluxe editions."
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "How it works",
+      "blocks": [
+        {
+          "type": "step",
+          "settings": {
+            "title": "Choose your mood",
+            "text": "Select from romance, dark & twisted, or cozy & curious — standard or deluxe editions."
+          }
+        },
+        {
+          "type": "step",
+          "settings": {
+            "title": "We curate with care",
+            "text": "Each volume is hand-selected, wrapped in elegant paper, and finished with a wax seal."
+          }
+        },
+        {
+          "type": "step",
+          "settings": {
+            "title": "Unwrap the mystery",
+            "text": "Your blind book date arrives ready to surprise — a story waiting to be discovered."
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

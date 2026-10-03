@@ -1,0 +1,155 @@
+<section class="product-page">
+  <div class="page-width">
+    <div class="product-page__grid">
+      <div class="product-gallery reveal" data-product-gallery>
+        <div class="product-gallery__main">
+          {%- if product.featured_image -%}
+            {{ product.featured_image | image_url: width: 1000 | image_tag: loading: 'eager', alt: product.featured_image.alt, data-gallery-main: true }}
+          {%- endif -%}
+        </div>
+        {%- if product.images.size > 1 -%}
+          <div class="product-gallery__thumbs">
+            {%- for image in product.images -%}
+              <button
+                type="button"
+                class="product-gallery__thumb{% if forloop.first %} is-active{% endif %}"
+                data-gallery-thumb
+                data-src="{{ image | image_url: width: 1000 }}"
+                data-alt="{{ image.alt | escape }}"
+                aria-label="View image {{ forloop.index }}"
+              >
+                {{ image | image_url: width: 120 | image_tag: loading: 'lazy', alt: image.alt }}
+              </button>
+            {%- endfor -%}
+          </div>
+        {%- endif -%}
+      </div>
+
+      <div class="product-info reveal">
+        <p class="eyebrow">{{ section.settings.eyebrow }}</p>
+        <h1 class="product-info__title">{{ product.title }}</h1>
+        <div class="product-info__price" id="ProductPrice">
+          {{ product.selected_or_first_available_variant.price | money }}
+        </div>
+
+        {%- if product.description != blank -%}
+          <div class="product-info__description rte">{{ product.description }}</div>
+        {%- endif -%}
+
+        {% form 'product', product, class: 'product-form', id: 'ProductForm' %}
+          {%- unless product.has_only_default_variant -%}
+            <div class="variant-picker">
+              {%- for option in product.options_with_values -%}
+                <label class="variant-picker__label">{{ option.name }}</label>
+                <div class="variant-picker__options">
+                  {%- for value in option.values -%}
+                    <div class="variant-picker__option">
+                      <input
+                        type="radio"
+                        id="option-{{ section.id }}-{{ forloop.parentloop.index }}-{{ forloop.index }}"
+                        name="options[{{ option.name | escape }}]"
+                        value="{{ value | escape }}"
+                        {% if option.selected_value == value %}checked{% endif %}
+                      >
+                      <label for="option-{{ section.id }}-{{ forloop.parentloop.index }}-{{ forloop.index }}">{{ value }}</label>
+                    </div>
+                  {%- endfor -%}
+                </div>
+              {%- endfor -%}
+            </div>
+          {%- endunless -%}
+
+          <select name="id" class="visually-hidden" id="ProductSelect">
+            {%- for variant in product.variants -%}
+              <option
+                value="{{ variant.id }}"
+                {% if variant == product.selected_or_first_available_variant %}selected{% endif %}
+                {% unless variant.available %}disabled{% endunless %}
+              >
+                {{ variant.title }} — {{ variant.price | money }}
+              </option>
+            {%- endfor -%}
+          </select>
+
+          <div class="product-form__quantity">
+            <label class="variant-picker__label" for="Quantity">{{ 'products.product.quantity' | t }}</label>
+            <div class="quantity-input">
+              <button type="button" data-quantity-minus aria-label="Decrease quantity">−</button>
+              <input type="number" id="Quantity" name="quantity" value="1" min="1">
+              <button type="button" data-quantity-plus aria-label="Increase quantity">+</button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            name="add"
+            class="btn btn--primary product-form__submit"
+            {% unless product.selected_or_first_available_variant.available %}disabled{% endunless %}
+          >
+            {%- if product.selected_or_first_available_variant.available -%}
+              {% render 'icon-wax-seal' %}
+              {{ 'products.product.add_to_cart' | t }}
+            {%- else -%}
+              {{ 'products.product.sold_out' | t }}
+            {%- endif -%}
+          </button>
+        {% endform %}
+
+        <div class="product-details">
+          <h2 class="product-details__title">{{ section.settings.details_heading }}</h2>
+          <ul>
+            {%- for block in section.blocks -%}
+              <li {{ block.shopify_attributes }}>{{ block.settings.text }}</li>
+            {%- endfor -%}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Product",
+  "tag": "section",
+  "class": "section-product",
+  "settings": [
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow",
+      "default": "Blind Book Date"
+    },
+    {
+      "type": "text",
+      "id": "details_heading",
+      "label": "Details heading",
+      "default": "What's included"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "detail",
+      "name": "Detail",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Text",
+          "default": "Hand-selected book wrapped in elegant paper"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Product",
+      "blocks": [
+        { "type": "detail", "settings": { "text": "Hand-selected book wrapped in elegant paper" } },
+        { "type": "detail", "settings": { "text": "Finished with a wax seal" } },
+        { "type": "detail", "settings": { "text": "Includes a hint card about the genre" } }
+      ]
+    }
+  ]
+}
+{% endschema %}

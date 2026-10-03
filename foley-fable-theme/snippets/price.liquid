@@ -1,0 +1,11 @@
+{%- liquid
+  assign selected_variant = product.selected_or_first_available_variant
+-%}
+
+<span class="product-card__price">
+  {%- if product.price_varies -%}
+    {{ 'products.product.from' | t }} {{ product.price_min | money }}
+  {%- else -%}
+    {{ selected_variant.price | money }}
+  {%- endif -%}
+</span>
