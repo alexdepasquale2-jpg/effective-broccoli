@@ -57,6 +57,7 @@ uniform vec2 uMind;       // how ordered (x) and how chaotic (y) this world's mi
 uniform float uFall;
 uniform float uLanded;    // 1 while standing on a planet: no clearing bubble around the eye
 uniform vec3 uSky;        // planet 'up' at your feet (for the sky gradient)
+uniform sampler2D uLife; uniform vec3 uLifeCid; uniform float uLifeOn; // the living flora field of the planet you're on
 uniform vec3 uPal[4];     // cosine palette a,b,c,d
 uniform vec2 uVib;        // surface vibration frequency, fog density
 uniform vec4 uSun;        // sun direction xyz + daylight
@@ -138,40 +139,37 @@ vec2 fam(int f, vec4 z, vec4 c){
 
 
 // planets: golden fbm on the sphere (Fibonacci frequencies 3,5,8,13,21; amplitudes 1/phi^k). Mirrored exactly in JS (pnoiseJ).
-float pnoise(vec3 d, vec3 ph, float ridge){
+float pnoise(vec3 d, vec3 ph, vec4 P){ // P: ridge, terrace, warp, roughness (octave falloff around 1/phi). Mirrored in pnoiseJ.
+  d += P.z*0.15*sin(d.yzx*5.0 + ph);
   float v = 0.0, a = 1.0, s = 0.0;
   for(int i=0;i<5;i++){
     float fr = i==0 ? 3.0 : i==1 ? 5.0 : i==2 ? 8.0 : i==3 ? 13.0 : 21.0;
     vec3 q = d*fr + ph*float(i+1);
     float n = sin(q.x)*sin(q.y + 1.3*q.z)*sin(q.z + 0.7*q.x);
-    v += a*mix(n, 1.0 - 2.0*abs(n), ridge); s += a; a /= PHI;
+    v += a*mix(n, 1.0 - 2.0*abs(n), P.x); s += a; a *= P.w;
   }
-  return v/s;
+  v /= s;
+  float k = 3.0 + 4.0*P.y; return mix(v, (floor(v*k) + pow(fract(v*k), 4.0))/k, P.y);
+}
+// one plant grammar for every planet: a point in genome space, not a kind.
+// A: branches (2-5), branch angle, scale ratio (~1/phi), thickness;  G: golden twist, cap/fruit, crystal-ness, depth (3-6)
+vec2 plantG(vec3 l, float h, vec4 A, vec4 G){
+  float d = 1e9, s = 1.0; vec3 z = l; float nb = A.x;
+  for(int i=0;i<6;i++){
+    if(float(i) >= G.w) break;
+    vec3 zz = z; zz.y -= clamp(zz.y, 0.0, h);
+    float seg = mix(length(zz), max(max(abs(zz.x), abs(zz.z))*1.2, abs(zz.y)), G.z);           // organic <-> crystalline
+    d = min(d, (seg - h*A.w*(1.0 - 0.12*float(i)))*s);
+    z.y -= h;
+    float an = atan(z.z, z.x) + G.x*float(i+1), sec = 6.2832/nb;                                  // radial branching, twisted
+    an = mod(an + sec*0.5, sec) - sec*0.5; float rr = length(z.xz); z.xz = rr*vec2(cos(an), sin(an));
+    z.xy = rot2(-A.y)*z.xy;
+    z /= A.z; s *= A.z;
+  }
+  if(G.y > 0.15){ vec3 c = l - vec3(0.0, h, 0.0); d = min(d, (length(c*vec3(1.0,1.7,1.0))/1.7 - h*0.45*G.y)*0.8); } // cap or fruit
+  return vec2(d, clamp(l.y/(h*2.2), 0.0, 1.0));
 }
 
-// plants, in a local frame (y = up, base at origin). kind: 0 golden tree, 1 crystal spires, 2 glowing mushrooms
-float capY(vec3 z, float h, float r){ z.y -= clamp(z.y, 0.0, h); return length(z) - r; }
-vec2 plant(vec3 l, float h, float kind, float v){ // returns distance, height fraction (for colour)
-  if(kind < 0.5){ // golden tree: each fork mirrors, tilts and shrinks by 1/phi
-    float d = 1e9, s = 1.0; vec3 z = l; float tilt = 0.45 + 0.3*v;
-    for(int i=0;i<5;i++){
-      d = min(d, capY(z, h, h*(0.055 - 0.008*float(i)))*s);
-      z.y -= h; z.xz = abs(z.xz); z.xy = rot2(-tilt)*z.xy; z.zy = rot2(-tilt)*z.zy; z *= PHI; s /= PHI;
-    }
-    return vec2(d, clamp(l.y/(h*2.6), 0.0, 1.0));
-  }
-  if(kind < 1.5){ // crystal spires: three leaning, tapering prisms
-    float d = 1e9;
-    for(int i=0;i<3;i++){ vec3 z = l; z.xz = rot2(float(i)*2.0944 + v*6.0)*z.xz; z.x -= h*0.12; z.xy = rot2(0.18)*z.xy;
-      float hh = h*(1.0 - 0.25*float(i)); vec2 w = vec2(abs(z.x) + abs(z.z)*0.6, z.y);
-      d = min(d, max(w.x - h*0.08*(1.0 - clamp(z.y/hh, 0.0, 1.0)), abs(z.y - hh*0.5) - hh*0.5)*0.7); }
-    return vec2(d, clamp(l.y/h, 0.0, 1.0));
-  }
-  // mushroom: stalk and a domed cap
-  float stalk = capY(l, h*0.8, h*0.07);
-  vec3 c = l - vec3(0.0, h*0.8, 0.0); float cap = max(length(c*vec3(1.0, 1.8, 1.0))/1.8 - h*0.32, -c.y - h*0.02);
-  return vec2(min(stalk, cap), l.y > h*0.7 ? 1.0 : 0.3);
-}
 // one 4D form, scaled by sc, sliced at w; returns distance, trap
 vec2 form(vec3 q, float sc, float fa, float fb, float m, vec4 c, float spin, float w){
   vec4 z = vec4(q/sc, w);
@@ -196,26 +194,33 @@ vec3 terrain(vec3 p){
   if(g.w > clamp(uBias.z + (B.y-0.5)*0.9, 0.05, 0.95)) return vec3(min(max(wall, bubble), wall), 1e9, 0.0); // open cell (biomes run from voids to nebulae)
   vec4 gp = h4s(cid, 777u);
   if(gp.x < 0.04 + 0.1*B.y){ // a planet: denser biomes hold more of them
-    float R = 1.35 + 0.2*gp.y, amp = 0.12 + 0.1*gp.z, sea = amp*(gp.w*0.9 - 0.5), ridge = step(0.5, fract(gp.y*7.0));
+    vec4 TP = h4s(cid, 778u), TG = vec4(TP.x, TP.y*TP.y, TP.z, 0.45 + 0.3*TP.w);              // terrain genome
+    float R = 1.35 + 0.2*gp.y, amp = 0.12 + 0.1*gp.z, sea = amp*(gp.w*0.9 - 0.5);
     float dc = length(q) - (R + amp + 0.04);
     if(dc > 0.15) return vec3(min(max(dc, bubble), wall), 1e9, 0.0);
-    vec3 dir = normalize(q); float hgt = amp*pnoise(dir, g2.yzw*6.2832, ridge);
+    vec3 dir = normalize(q); float hgt = amp*pnoise(dir, g2.yzw*6.2832, TG);
     float d = (length(q) - (R + max(hgt, sea)))*0.6;
     vec3 res = vec3(d, 1000.0 + (hgt - sea)/amp, fract(g2.z + B.w*0.5)); // trap 1000+ marks planet ground, value = altitude
-    if(length(q) - (R + max(hgt, sea)) < 0.22){ // near the ground: plants on a latitude/longitude grid
+    if(length(q) - (R + max(hgt, sea)) < 0.22){ // near the ground: flora on a latitude/longitude grid
       float cs = 0.11, th = acos(clamp(dir.y, -1.0, 1.0)), phA = atan(dir.z, dir.x);
       vec2 cell = floor(vec2(th, phA)/cs);
       vec4 hp = h4s(vec3(cell, cid.x*31.0 + cid.y*17.0 + cid.z), 909u);
-      if(hp.x < 0.15 + 0.55*gp.z){
+      bool alive = uLifeOn > 0.5 && all(equal(cid, uLifeCid));
+      float bio = alive ? texelFetch(uLife, ivec2(int(cell.y) + 29, int(cell.x)), 0).r : (hp.x < 0.15 + 0.55*gp.z ? 0.7 : 0.0);
+      if(bio > 0.25){
         vec2 cc = (cell + 0.5 + (hp.yz - 0.5)*0.6)*cs;
         vec3 cd = vec3(sin(cc.x)*cos(cc.y), cos(cc.x), sin(cc.x)*sin(cc.y));
-        float ch = amp*pnoise(cd, g2.yzw*6.2832, ridge);
+        float ch = amp*pnoise(cd, g2.yzw*6.2832, TG);
         if(ch > sea + 0.005 && ch < amp*0.72){ // on land, below the snow
           vec3 up = cd, t1 = normalize(cross(up, abs(up.y) < 0.99 ? vec3(0,1,0) : vec3(1,0,0))), t2 = cross(up, t1);
           vec3 lq = q - cd*(R + ch); vec3 l = vec3(dot(lq,t1), dot(lq,up), dot(lq,t2));
-          l.xz += vec2(sin(uT*1.3 + hp.w*6.28), cos(uT*1.1 + hp.y*6.28))*0.22*l.y*l.y/(0.035 + 0.045*hp.w)*(0.6 + uBand.y); // wind
-          vec2 pd = plant(l, 0.035 + 0.045*hp.w, floor(fract(gp.y*13.0)*3.0), hp.w);
-          if(pd.x < res.x) res = vec3(pd.x, 2000.0 + pd.y, res.z);              // trap 2000+ marks plants
+          vec4 FA = h4s(cid, 779u), FB = h4s(cid, 780u);
+          vec4 A = vec4(2.0 + floor(FA.x*4.0), 0.25 + 0.6*FA.y, (0.85 + 0.3*FA.z)/PHI, 0.06 + 0.08*FA.w);
+          vec4 G = vec4(GA*FB.x, FB.y*FB.y, FB.z*FB.z, 3.0 + floor(FB.w*4.0));
+          float hh = (0.035 + 0.045*hp.w)*(0.45 + 0.75*bio);                                    // living plants grow with their biomass
+          l.xz += vec2(sin(uT*1.3 + hp.w*6.28), cos(uT*1.1 + hp.y*6.28))*0.22*l.y*l.y/hh*(0.6 + uBand.y); // wind
+          vec2 pd = plantG(l, hh, A, G);
+          if(pd.x < res.x) res = vec3(pd.x, 2000.0 + pd.y, res.z);                               // trap 2000+ marks plants
         }
       }
       res.x = min(res.x, 0.03); // never step past a neighbouring cell's plant
@@ -401,7 +406,7 @@ gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
 gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
 gl.bindVertexArray(null);
-const U = {}; for (const n of ['uEntW','uDose','uSun','uHive','uBias','uSeedU','uFall','uMind','uLanded','uSky','uBiome','uBiomeO','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
+const U = {}; for (const n of ['uEntW','uDose','uSun','uHive','uBias','uSeedU','uFall','uMind','uLanded','uSky','uLife','uLifeCid','uLifeOn','uBiome','uBiomeO','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
 
 // ================= 6. World generator: one seed per world, one genome per region of w =================
 function mulberry(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
@@ -1186,19 +1191,91 @@ function walk(e, dt, t){
 function bringWalkersDown(){ // as you land, nearby creatures come down to live on the ground with you
   const pl = surf.pl, up0 = norm(cam.target.map((v,k) => v - pl.ctr[k]));
   const t1 = norm(cross(up0, Math.abs(up0[1]) < 0.99 ? [0,1,0] : [1,0,0])), t2 = cross(up0, t1);
-  let k = 0;
+  let k = 0; const fauna = planetSpecies(pl);
   for (const e of ents){ if (e.heart || k >= 10) continue;
     const a = k*GOLDEN_ANGLE, rr = 0.15 + 0.07*k;                                           // golden spiral around you
     const p3 = cam.target.map((v,i) => v + (t1[i]*Math.cos(a) + t2[i]*Math.sin(a))*rr);
-    for (let i=0;i<3;i++) e.p[i] = p3[i]; e.walker = true; e.tv = [0,0,0]; e.size = Math.min(e.size, 0.035); k++; }
+    const sp = fauna[k % fauna.length], g = region(curRegion);
+    e.sp = sp; e.g = g; e.deg = sp.motif[k % sp.motif.length]; e.f = pitch(g, e.deg + g.ratios.length); e.kind = sp.shape; e.osc = sp.osc;
+    for (let i=0;i<3;i++) e.p[i] = p3[i]; e.walker = true; e.tv = [0,0,0]; e.size = Math.min(sp.size, 0.035); k++; }
+  surf.fauna = fauna.map(s => s.name);
+}
+
+// ================= 18. Planet life: a self-organizing ecosystem =================
+// Flora is a Gray-Scott reaction-diffusion field over the planet's latitude/longitude grid: random seedlings
+// organise themselves into spots, stripes or mazes (which one depends on the planet's genome). Walkers graze it and
+// carry seeds. Order = 1 - entropy of the biomass distribution: watch it fall from noise into pattern.
+const LW = 58, LH = 29, LCS = 0.11;
+const life = { on: false, cid: null, A: new Float32Array(LW*LH), B: new Float32Array(LW*LH), land: new Uint8Array(LW*LH),
+  tA: new Float32Array(LW*LH), tB: new Float32Array(LW*LH), data: new Uint8Array(LW*LH), f: 0.03, k: 0.06, order: 0, upT: 0, tex: gl.createTexture() };
+const lifeCell = dir => { const th = Math.acos(Math.max(-1, Math.min(1, dir[1]))), ph = Math.atan2(dir[2], dir[0]);
+  return Math.min(LH-1, Math.floor(th/LCS))*LW + Math.max(0, Math.min(LW-1, Math.floor(ph/LCS) + 29)); };
+function lifeStart(pl){
+  // the planet's pattern regime, from the measured robust band of this grid (>=4 of 5 random starts pattern): [f, kLow, kHigh].
+  // Low k: dense mazes; high k: sparse spots. Every planet picks its own point.
+  const G = h4J(pl.cid, 781), BAND = [[0.026,0.0540,0.0615],[0.030,0.0570,0.0630],[0.034,0.0570,0.0645],[0.038,0.0585,0.0645],[0.042,0.0600,0.0645],[0.046,0.0600,0.0645],[0.050,0.0615,0.0645]];
+  const u = G[0]*(BAND.length-1.001), i0 = Math.floor(u), fr = u - i0, L = (j) => BAND[i0][j] + (BAND[i0+1][j]-BAND[i0][j])*fr;
+  life.f = L(0); life.k = L(1) + G[1]*(L(2) - L(1)); life.kLo = L(1); life.kHi = L(2) + 0.002; // regulation stays inside the healthy band
+  for (let y=0;y<LH;y++) for (let x=0;x<LW;x++){ const i = y*LW + x, th = (y+0.5)*LCS, ph = (x-29+0.5)*LCS;
+    const cd = [Math.sin(th)*Math.cos(ph), Math.cos(th), Math.sin(th)*Math.sin(ph)], ch = pl.amp*pnoiseJ(cd, pl.ph, pl.TG);
+    life.land[i] = ch > pl.sea + 0.005 && ch < pl.amp*0.72 ? 1 : 0;
+    life.A[i] = 1; life.B[i] = 0; }
+  seedPatches(14); // classic start: a few seed patches
+  life.on = true; life.cid = pl.cid; life.order = 0;
+}
+function seedPatches(n){ for (let m=0;m<n;m++){ const cx = Math.floor(Math.random()*LW), cy = 2 + Math.floor(Math.random()*(LH-4));
+  for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){ const i = (cy+dy)*LW + (cx+dx+LW)%LW; if (life.land[i]){ life.A[i] = 0.5; life.B[i] = 0.25 + 0.1*Math.random(); } } } }
+function lifeStep(steps){
+  const { A, B, tA, tB, land, f, k } = life;
+  for (let s=0;s<steps;s++){
+    for (let y=0;y<LH;y++) for (let x=0;x<LW;x++){ const i = y*LW + x;
+      if (!land[i]){ tA[i] = 1; tB[i] = 0; continue; }
+      const xl = y*LW + (x+LW-1)%LW, xr = y*LW + (x+1)%LW, yu = Math.max(0,y-1)*LW + x, yd = Math.min(LH-1,y+1)*LW + x;
+      const lapA = 0.25*(A[xl]+A[xr]+A[yu]+A[yd]) - A[i], lapB = 0.25*(B[xl]+B[xr]+B[yu]+B[yd]) - B[i], abb = A[i]*B[i]*B[i];
+      tA[i] = Math.min(1, Math.max(0, A[i] + 0.9*lapA - abb + f*(1 - A[i])));
+      tB[i] = Math.min(1, Math.max(0, B[i] + 0.45*lapB + abb - (k + f)*B[i]));
+    }
+    A.set(tA); B.set(tB);
+  }
+}
+function lifeTick(dt){
+  if (!life.on) return;
+  lifeStep(6);
+  for (const e of ents) if (e.walker){ // grazing and seed dispersal
+    const pl = surf.pl, i = lifeCell(norm(e.p.slice(0,3).map((v,k) => v - pl.ctr[k])));
+    life.B[i] *= 1 - 0.6*dt;
+    if (Math.random() < dt*0.8){ const j = (i + [1,-1,LW,-LW][Math.floor(Math.random()*4)] + LW*LH) % (LW*LH); if (life.land[j]) life.B[j] = Math.min(1, life.B[j] + 0.5); } }
+  life.upT -= dt; if (life.upT > 0) return; life.upT = 0.2;
+  // structure = LMC complexity of 2x2 blocks of the alive/empty field: 0 for noise AND for uniform, high for real pattern
+  const hist = new Float32Array(16); let n = 0, alive = 0, land = 0, mean = 0;
+  for (let i=0;i<LW*LH;i++){ life.data[i] = Math.round(Math.min(1, life.B[i]*2.2)*255); if (life.land[i]){ land++; mean += life.B[i]; if (life.B[i] > 0.11) alive++; } }
+  for (let y=0;y<LH-1;y++) for (let x=0;x<LW;x++){ const c = [y*LW+x, y*LW+(x+1)%LW, (y+1)*LW+x, (y+1)*LW+(x+1)%LW];
+    if (!c.every(i => life.land[i])) continue; hist[c.reduce((m,i,b) => m | ((life.B[i] > 0.11 ? 1 : 0) << b), 0)]++; n++; }
+  let H = 0; for (const c of hist) if (c){ const q = c/n; H -= q*Math.log(q); }
+  const h = n ? H/Math.log(16) : 0; life.order = 4*h*(1-h);
+  // homeostasis: a choked planet runs short of nutrients and growth eases; a barren one gets new seeds on the wind
+  if (land && mean/land > 0.4) life.k = Math.min(life.kHi, life.k + 0.0004);
+  if (land && alive/land < 0.03){ life.k = Math.max(life.kLo, life.k - 0.0004); if (Math.random() < 0.3) seedPatches(2); } // a barren world softens and seeds blow in
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, life.tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, LW, LH, 0, gl.RED, gl.UNSIGNED_BYTE, life.data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.activeTexture(gl.TEXTURE0);
+}
+// fauna born of the planet itself: species generated from the planet's own seed
+function planetSpecies(pl){
+  const g = region(curRegion), seed = hshJ(pl.cid[0]*73856093 ^ pl.cid[1]*19349663 ^ pl.cid[2]*83492791 ^ world.seed);
+  return [0,1,2].map(i => { const sp = makeSpecies(mulberry(hash2(seed, i)), g, i); sp.size *= 0.5; return sp; });
 }
 // ================= 17. Planets: land and walk =================
-function pnoiseJ(d, ph, ridge){
+function pnoiseJ(d, ph, P){ // exact mirror of pnoise()
+  d = [d[0] + P[2]*0.15*Math.sin(d[1]*5 + ph[0]), d[1] + P[2]*0.15*Math.sin(d[2]*5 + ph[1]), d[2] + P[2]*0.15*Math.sin(d[0]*5 + ph[2])];
   let v = 0, a = 1, s = 0; const FR = [3,5,8,13,21];
   for (let i=0;i<5;i++){ const q = d.map((x,k) => x*FR[i] + ph[k]*(i+1));
     const n = Math.sin(q[0])*Math.sin(q[1] + 1.3*q[2])*Math.sin(q[2] + 0.7*q[0]);
-    v += a*(n + (1 - 2*Math.abs(n) - n)*ridge); s += a; a /= PHI; }
-  return v/s;
+    v += a*(n + (1 - 2*Math.abs(n) - n)*P[0]); s += a; a *= P[3]; }
+  v /= s;
+  const k = 3 + 4*P[1], fr = v*k - Math.floor(v*k);
+  return v + ((Math.floor(v*k) + fr**4)/k - v)*P[1];
 }
 const PL_SYL = ['ka','lu','mi','zor','ve','tha','ny','qui','ro','sa','el','dra','oph','in','xe'];
 function planetAt(p){ // mirrors the shader's planet branch
@@ -1206,11 +1283,11 @@ function planetAt(p){ // mirrors the shader's planet branch
   if (g[3] > Math.max(0.05, Math.min(0.95, curBias[2] + (B[1]-0.5)*0.9))) return null;
   const gp = h4J(cid, 777); if (!(gp[0] < 0.04 + 0.1*B[1])) return null;
   const g2 = h4J(cid.map(v => v+17)), amp = 0.12 + 0.1*gp[2];
-  const ridge = ((gp[1]*7) % 1) >= 0.5 ? 1 : 0, R = gp[1] !== undefined ? 1.35 + 0.2*gp[1] : 1.4;
+  const TP = h4J(cid, 778), TG = [TP[0], TP[1]*TP[1], TP[2], 0.45 + 0.3*TP[3]], R = 1.35 + 0.2*gp[1];
   const R2 = (seedv => { let n = ''; for (let k=0;k<3;k++) n += PL_SYL[hshJ(seedv+k) % PL_SYL.length]; return n[0].toUpperCase() + n.slice(1); })(hshJ(cid[0]*7919 ^ cid[1]*104729 ^ cid[2]*1299709 ^ world.seed));
-  return { cid, ctr: cid.map(v => (v+0.5)*CELLJ), R, amp, sea: amp*(gp[3]*0.9 - 0.5), ridge, ph: [g2[1],g2[2],g2[3]].map(v => v*6.2832), name: R2 };
+  return { cid, ctr: cid.map(v => (v+0.5)*CELLJ), R, amp, sea: amp*(gp[3]*0.9 - 0.5), TG, ph: [g2[1],g2[2],g2[3]].map(v => v*6.2832), name: R2 };
 }
-const groundR = (pl, dir) => pl.R + Math.max(pl.amp*pnoiseJ(dir, pl.ph, pl.ridge), pl.sea);
+const groundR = (pl, dir) => pl.R + Math.max(pl.amp*pnoiseJ(dir, pl.ph, pl.TG), pl.sea);
 const surf = { on: false, pl: null, fwd: [0,0,-1], descend: 0, cool: 0, prevYaw: 0, eyeH: 0.06 };
 function rotAround(v, axis, a){ const c = Math.cos(a), s = Math.sin(a), d = dot(axis, v), x = cross(axis, v);
   return v.map((_,k) => v[k]*c + x[k]*s + axis[k]*d*(1-c)); }
@@ -1219,7 +1296,7 @@ function checkLanding(dt){
   const pl = planetAt(cam.target); if (!pl) return;
   const dist = dist3(cam.target, pl.ctr);
   if (dist < pl.R + pl.amp + 0.35){ // entered the atmosphere: gravity takes you down
-    surf.on = true; surf.pl = pl; surf.descend = 1; surf.prevYaw = cam.yaw; bringWalkersDown();
+    surf.on = true; surf.pl = pl; surf.descend = 1; surf.prevYaw = cam.yaw; bringWalkersDown(); lifeStart(pl);
     const up = norm(cam.target.map((v,k) => v - pl.ctr[k])), f0 = view ? view.fwd : [0,0,-1];
     let f = f0.map((v,k) => v - up[k]*dot(f0, up)); if (Math.hypot(...f) < 1e-3) f = norm(cross(up, [0.3,1,0.1])); surf.fwd = norm(f);
     cam.pitch = 0; say(`Entering the atmosphere of ${pl.name}…`); buzz([15,30,15]);
@@ -1230,7 +1307,7 @@ function launch(){
   const pl = surf.pl, up = norm(cam.target.map((v,k) => v - pl.ctr[k]));
   cam.target = pl.ctr.map((v,k) => v + up[k]*(pl.R + pl.amp + 0.6));
   cam.yaw = Math.atan2(-up[0], -up[2]); cam.pitch = -Math.asin(Math.max(-1, Math.min(1, up[1]))); // face away from the planet
-  for (const e of ents) e.walker = false;
+  for (const e of ents) e.walker = false; life.on = false;
   surf.on = false; surf.pl = null; surf.cool = 4; cam.speed = 0.25; say(`Launched from ${pl.name}.`); buzz(20);
 }
 // on the ground: returns the view basis; you walk on the tangent plane, gravity keeps you at eye height
@@ -1339,6 +1416,7 @@ function frame(){
   stepEnts(dt*laws.timeScale, t);
   stepMinds(dt);
   stepHive(dt, t);
+  lifeTick(dt);
   if (!surf.on) checkEnter(dt); checkLanding(dt); stepFall(dt); drawMap(dt);
   if (actx) checkChord(W);
   chordCool -= dt; msgT -= dt; if (msgT <= 0 && msgEl.textContent && msgT > -0.1) msgEl.textContent = '';
@@ -1375,7 +1453,7 @@ function frame(){
   gl.useProgram(prog); gl.bindVertexArray(mvao); // must be active before its uniforms are set (the ant pass switches programs)
   gl.uniform2f(U.uRes,w,h); gl.uniform1f(U.uT,t);
   gl.uniform3fv(U.uEye,eye); gl.uniform3fv(U.uFwd,fwd); gl.uniform3fv(U.uRight,right); gl.uniform3fv(U.uUp,upv);
-  gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uBias,bias); gl.uniform1ui(U.uSeedU, world.seed>>>0); bakeBiome(); gl.uniform1i(U.uBiome, 1); gl.uniform3fv(U.uBiomeO, biomeO); gl.uniform1f(U.uFall, fallAmt); gl.uniform1f(U.uLanded, surf.on ? 1 : 0); gl.uniform3fv(U.uSky, surf.on ? norm(cam.target.map((v,k) => v - surf.pl.ctr[k])) : [0,1,0]);
+  gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uBias,bias); gl.uniform1ui(U.uSeedU, world.seed>>>0); bakeBiome(); gl.uniform1i(U.uBiome, 1); gl.uniform3fv(U.uBiomeO, biomeO); gl.uniform1f(U.uFall, fallAmt); gl.uniform1f(U.uLanded, surf.on ? 1 : 0); gl.uniform1i(U.uLife, 2); gl.uniform1f(U.uLifeOn, life.on ? 1 : 0); gl.uniform3fv(U.uLifeCid, life.cid || [1e9,1e9,1e9]); gl.uniform3fv(U.uSky, surf.on ? norm(cam.target.map((v,k) => v - surf.pl.ctr[k])) : [0,1,0]);
   { const tgtO = worldMind.state === 'ordering' ? Math.min(1, worldMind.order*1.4) : 0,
           tgtC = worldMind.state === 'chaos' ? Math.min(1, 0.35 + (laws.chaosAt - worldMind.order)/laws.chaosAt) : 0, k = 1 - Math.exp(-dt*0.8);
     mindVis[0] += (tgtO - mindVis[0])*k; mindVis[1] += (tgtC - mindVis[1])*k; gl.uniform2f(U.uMind, mindVis[0], mindVis[1]); } gl.uniform3fv(U.uPal,palette);
@@ -1401,6 +1479,7 @@ function frame(){
       `ants ${hive.ants.length} (${hive.seenHere} in slice)  order ${hive.order.toFixed(2)}  predicts you ${hive.mind.total ? Math.round(100*hive.mind.hits/hive.mind.total)+'%' : '-'}${hive.inside ? '  INSIDE THE HIVE MIND' : ''}\n` +
       `mind ${worldMind.order.toFixed(2)} · ${worldMind.state}\n${describeLaws(laws)}\n` +
       `biome: ${biomeHere}${surf.on ? '  · on ' + surf.pl.name : ''}\n` +
+      (surf.on ? `life order ${life.order.toFixed(2)} · fauna ${(surf.fauna||[]).join(', ')}\n` : '') +
       `universe depth ${stack.length}${stack.length ? ' (' + cur().name + ')' : ''}\n` +
       `audio: ${!actx ? 'tap to start' : micAn ? 'mic + synth' : 'synth'}  ${rapid ? 'rapid' : 'sensitive'}`;
   }

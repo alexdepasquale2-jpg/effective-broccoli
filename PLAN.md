@@ -128,3 +128,8 @@ Walkers: up to 10 nearby creatures land with you (golden spiral), walk with grav
 ## Hyperslice v12 (DONE): fidelity
 Eye 0.06 (trees 1.5–3× eye), thinner trunks. Planet sky (horizon→zenith, sun disk+halo, night stars), aerial fog, star field in space.
 Soft sun shadows + 4-tap AO within 3.5 units; wind sway; sea ripples; 140 drifting motes. Cost ≈25% fps on surface (A/B, same planet).
+
+## Hyperslice v13 (DONE, one known gap): algorithmic planet life
+Terrain genome (ridge, terrace, warp, roughness ~1/φ), one plant grammar (branches, angle, ratio ~1/φ, golden twist, depth, thickness, crystal-ness, caps), fauna species from the planet seed.
+Flora = Gray-Scott field (planet picks f,k in measured robust band), walkers graze + spread seeds, homeostasis bounded to the band. Structure = LMC complexity of 2x2 blocks: 7/8 test planets pattern (0.58–1.0); 1 saturates.
+Gap: from the ground only a few plants are in view (tiny planets, horizon ~0.5); from orbit the pattern covers 74% of land. Next: bigger planets or lower horizon, then re-check flora on the surface.

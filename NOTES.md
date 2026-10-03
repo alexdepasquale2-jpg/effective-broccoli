@@ -21,3 +21,4 @@
 - Icosa-φ redesigned: icosa mirror folds + Mandelbox-style box/sphere folds, scale −φ² (13% cover). Pure fold+scale IFS only ever makes lace; sphere inversion is what gives volume.
 - Terrain hash is integer (hsh/h4 in GLSL, hshJ/h4J in JS) and bit-identical: verified 1024/1024. Never go back to sin()-based hashes, or blockAt() will disagree with what is drawn.
 - Biome field must be baked (16^3 RGBA8 texture around the player, rebaked every 4 cells). Computing it in the shader cost 3× fps because in open space every march step enters a new cell, so per-cell caching never hits.
+- Gray-Scott here is bistable: dense random seeding tips it to all-full. Use classic seed patches; then a broad band patterns (f .026-.050, k ~.054-.0645; table in lifeStart). Scan: scratch gs4.mjs, 5 seeds per point.
