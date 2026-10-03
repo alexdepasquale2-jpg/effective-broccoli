@@ -120,3 +120,7 @@ Biomes: value noise over cell coords at Fibonacci scales 5/13/34, weights 1/φ^k
 ## Hyperslice v10 (DONE): planets
 Planet cells (4–14% of filled cells, more in dense biomes): R 1.35–1.55, golden fbm terrain (Fibonacci freqs 3/5/8/13/21, 1/φ amps), seas, ridged or rolling, snow. Generated names, white on map.
 Fly into atmosphere → descend → walk (tangent-plane movement, gravity at eye height 0.035, drag to look). L / Launch ↑ to leave. Height parity JS↔GPU ≤0.002.
+
+## Hyperslice v11 (DONE): planet life
+Plants: lat/long grid on land below snow, density per planet; kinds golden trees (forks scale 1/φ) / crystal spires / mushrooms; glow at tips.
+Walkers: up to 10 nearby creatures land with you (golden spiral), walk with gravity; social herd, curious come to liked tones, shy scatter. Become floaters again on launch.
