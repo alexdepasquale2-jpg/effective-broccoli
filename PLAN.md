@@ -112,3 +112,7 @@ Flying into a block's body (<0.75·sc from centre) = 1.6 s fall (spiral tunnel, 
 ## Hyperslice v8 (DONE): laws, entropy, saved minds
 Laws (11 physics constants + elements/affinity/transmutation) from fractal noise over the seed; child universes inherit with variation /φ per level (tested: unrelated 0.40, child 0.048, grandchild 0.039).
 Memories decay (second law). Above chaosAt: teaching + choirs keep order (held 0.52 silent). Below: noise floods, collapse (0.36 → 0.01 in 20 s). Minds saved per world by species name (+ hive), restored on return.
+
+## Hyperslice v9 (DONE): order/chaos visuals + galaxy-style biomes
+Ordered worlds: richer, warmer (saturation measured up). Chaotic: boiling surfaces, row glitches, drained red-shifted grain, thicker fog.
+Biomes: value noise over cell coords at Fibonacci scales 5/13/34, weights 1/φ^k; sets density (voids → nebulae), family lean, size, hue; named; 64×64-cell map in panel. JS↔GPU parity 1600/1600.

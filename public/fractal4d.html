@@ -22,6 +22,7 @@
   <button id="dmode">Drag: orbit</button><button id="smode">Mode: sensitive</button><button id="seed">New world</button><button id="rise">Rise ↑</button><br>
   Places <select id="places"></select><br>
   Dose <input id="dose" type="range" min="0" max="1" step="0.01" value="0.7" style="width:140px;vertical-align:middle">
+  <canvas id="map" width="128" height="128" style="display:block;margin-top:4px;border:1px solid #3a6;image-rendering:pixelated;width:128px;height:128px"></canvas>
   <div id="stats"></div>
   <div id="msg" style="color:#ffd;min-height:1.4em"></div>
   <div style="opacity:.6">Tap a creature to take its tone. Hum into the mic to sing. 3 attuned notes = a chord, which unlocks the next region of w.<br>Shift-drag / 4D mode / 2 fingers: move through w · pinch or wheel: zoom · WASD/QE fly · R/F: w<br>The sun drags the slice through w. Something lives nearby along w.</div>
@@ -71,8 +72,16 @@ vec3 pal(float t){ return uPal[0] + uPal[1]*cos(6.2832*(uPal[2]*t + uPal[3])); }
 mat2 rot2(float a){ return mat2(cos(a),-sin(a),sin(a),cos(a)); }
 uint hsh(uint x){ x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; x ^= x >> 16u; return x; }
 // integer hash, bit-identical in JavaScript (h4J), so the game knows exactly which cells hold forms
-vec4 h4(vec3 c){ uvec3 u = uvec3(ivec3(c)); uint h = hsh(u.x ^ hsh(u.y ^ hsh(u.z ^ uSeedU)));
+vec4 h4s(vec3 c, uint salt){ uvec3 u = uvec3(ivec3(c)); uint h = hsh(u.x ^ hsh(u.y ^ hsh(u.z ^ uSeedU ^ salt)));
   return vec4(uvec4(hsh(h), hsh(h^0x9e3779b9u), hsh(h^0x7f4a7c15u), hsh(h^0x94d049bbu)) >> 8u) / 16777216.0; }
+vec4 h4(vec3 c){ return h4s(c, 0u); }
+// biome field (generated in JS at Fibonacci scales 5, 13, 34 cells, weights 1/phi^k) baked into a 16^3 texture around you
+uniform highp sampler3D uBiome; uniform vec3 uBiomeO;
+vec4 biome(vec3 cid){
+  ivec3 i = ivec3(cid - uBiomeO);
+  if(any(lessThan(i, ivec3(0))) || any(greaterThan(i, ivec3(15)))) return vec4(0.5, 0.35, 0.5, 0.5); // beyond the fog
+  return texelFetch(uBiome, i, 0);
+}
 
 // six 4D fractal families, each fitted to radius ~1.4; returns distance, orbit trap
 vec2 fam(int f, vec4 z, vec4 c){
@@ -145,9 +154,10 @@ vec3 terrain(vec3 p){
   vec3 bd = 0.5*CELL - abs(q); float wall = min(bd.x, min(bd.y,bd.z)) + 0.02; // never step past a cell wall
   float bubble = 0.3 - length(p-uEye);                                      // the slice parts around you
   vec4 g = h4(cid), g2 = h4(cid+17.0);
-  if(g.w > uBias.z) return vec3(min(max(wall, bubble), wall), 1e9, 0.0);    // open cell
+  vec4 B = biome(cid);
+  if(g.w > clamp(uBias.z + (B.y-0.5)*0.9, 0.05, 0.95)) return vec3(min(max(wall, bubble), wall), 1e9, 0.0); // open cell (biomes run from voids to nebulae)
   q.xz *= rot2(GA*(cid.x+cid.z*PHI)); q.xy *= rot2(GA*cid.y);
-  float sc = uBias.w*(0.7 + 0.3*g2.x), sc2 = sc/(PHI*PHI);  // forms ~1.4*sc across: up to ~1.5, leaving >=1.2 between
+  float sc = uBias.w*(0.7 + 0.3*g2.x)*(0.8 + 0.25*B.z), sc2 = sc/(PHI*PHI);  // forms ~1.4*sc across: up to ~1.5, leaving >=1.2 between
   bool sat = g2.w < 0.618 && length(p-uEye) < 6.0;                                                  // golden share of cells carry a satellite
   vec3 dir = normalize(vec3(cos(g.x*6.2832), (g.y-0.5)*1.2, sin(g.x*6.2832)));
   vec3 so = dir*min(1.8*(sc+sc2) + 0.2, 0.5*CELL - 1.8*sc2 - 0.1);
@@ -157,7 +167,7 @@ vec3 terrain(vec3 p){
   float w = 0.38*sin(uW*2.2 + distance(p, uEye)/(PHI*PHI)); // distance cycles you through slices, in golden periods
   vec4 c = uC + (g2.yzwx-0.5)*0.25;
   // any family can appear anywhere; the region only leans the odds. Some cells are hybrids of two.
-  float fa = mod(floor(uBias.x*NFAM + (g.x-0.5)*uBias.y*NFAM), NFAM), fb = mod(fa + 1.0 + floor(g.y*(NFAM-1.0)), NFAM);
+  float fa = mod(floor(uBias.x*NFAM + B.x*NFAM*0.999 + (g.x-0.5)*uBias.y*NFAM), NFAM), fb = mod(fa + 1.0 + floor(g.y*(NFAM-1.0)), NFAM);
   float m = smoothstep(0.55, 1.0, g.z);
   if(dc <= 0.15){ vec2 a = form(q, sc, fa, fb, m, c, g2.y*6.2832, w); a.x = max(a.x, dc); if(a.x < r.x) r = a; }
   if(ds <= 0.15){ vec2 a = form(q-so, sc2, fb, fa, 0.0, c.wzyx, g.z*6.2832, w); a.x = max(a.x, ds); if(a.x < r.x) r = a; }
@@ -167,7 +177,7 @@ vec3 terrain(vec3 p){
     float rr=length(p-uRip[i].xyz); d += 0.02*exp(-a*0.6)*sin(30.0*rr-a*14.0)*exp(-abs(rr-a*1.2)*5.0); }
   if(uMind.y > 0.01) d += uMind.y*0.05*sin(p.x*11.0+uT*7.0)*sin(p.y*13.0-uT*9.0)*sin(p.z*12.0+uT*8.0); // chaos boils the surfaces
   d = max(d, bubble);
-  return vec3(min(d, wall), r.y, fract(g2.z + fa/PHI));
+  return vec3(min(d, wall), r.y, fract(g2.z + fa/PHI + B.w*0.5));
 }
 
 float sdTorus(vec3 p, float R, float r){ return length(vec2(length(p.xz)-R,p.y))-r; }
@@ -302,7 +312,7 @@ gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
 gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
 gl.bindVertexArray(null);
-const U = {}; for (const n of ['uEntW','uDose','uSun','uHive','uBias','uSeedU','uFall','uMind','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
+const U = {}; for (const n of ['uEntW','uDose','uSun','uHive','uBias','uSeedU','uFall','uMind','uBiome','uBiomeO','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
 
 // ================= 6. World generator: one seed per world, one genome per region of w =================
 function mulberry(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
@@ -872,15 +882,28 @@ function sing(e){ // answer with a phrase from the species' learned memory
 // ================= 13. Nested universes: every block holds one =================
 const CELLJ = PHI**3;
 function hshJ(x){ x >>>= 0; x ^= x>>>16; x = Math.imul(x,0x7feb352d)>>>0; x ^= x>>>15; x = Math.imul(x,0x846ca68b)>>>0; x ^= x>>>16; return x>>>0; }
-function h4J(c){ const u = c.map(v => (v|0)>>>0), h = hshJ(u[0] ^ hshJ(u[1] ^ hshJ(u[2] ^ (world.seed>>>0))));
+function h4J(c, salt = 0){ const u = c.map(v => (v|0)>>>0), h = hshJ(u[0] ^ hshJ(u[1] ^ hshJ(u[2] ^ (world.seed>>>0) ^ salt)));
   return [h, h^0x9e3779b9, h^0x7f4a7c15, h^0x94d049bb].map(v => (hshJ(v)>>>8)/16777216); }
 const mindVis = [0, 0];
 let curBias = [0.5,0.5,0.6,1], fallAmt = 0, fall = null, stack = [], enterCool = 3;
+function vnoiseJ(x, sc, salt){
+  const q = x.map(v => v/sc), i = q.map(Math.floor), f = q.map((v,k) => { const t = v - i[k]; return t*t*(3-2*t); });
+  const H = (a,b,c) => h4J([i[0]+a, i[1]+b, i[2]+c], salt), L = (A,B,t) => A.map((v,k) => v + (B[k]-v)*t);
+  return L(L(L(H(0,0,0),H(1,0,0),f[0]), L(H(0,1,0),H(1,1,0),f[0]), f[1]), L(L(H(0,0,1),H(1,0,1),f[0]), L(H(0,1,1),H(1,1,1),f[0]), f[1]), f[2]);
+}
+function biomeJ(cid){
+  const a = vnoiseJ(cid,5,101), b = vnoiseJ(cid,13,202), c = vnoiseJ(cid,34,303), n = 1 + 1/PHI + 1/(PHI*PHI);
+  return a.map((v,k) => Math.round(255*Math.max(0, Math.min(1, ((v + b[k]/PHI + c[k]/(PHI*PHI))/n - 0.5)*2.2 + 0.5)))/255); // 8-bit, same as the texture
+}
+const BIOME_ADJ = ['Void', 'Sparse', 'Drifting', 'Dense', 'Teeming'], BIOME_NOUN = ['Reach', 'Expanse', 'Nebula', 'Garden', 'Abyss'];
+function biomeName(B){ const fam = (((Math.floor(curBias[0]*6 + B[0]*6*0.999)) % 6) + 6) % 6;
+  return `${BIOME_ADJ[Math.min(4, Math.floor(B[1]*5))]} ${FAMILY[fam]} ${BIOME_NOUN[Math.min(4, Math.floor(B[2]*5))]}`; }
 function blockAt(p){ // mirrors the shader's terrain(): which block (if any) holds this point
   const cid = p.map(v => Math.floor(v/CELLJ)), g = h4J(cid), g2 = h4J(cid.map(v => v+17));
-  if (g[3] > curBias[2]) return null;
-  const sc = curBias[3]*(0.7 + 0.3*g2[0]), ctr = cid.map(v => (v+0.5)*CELLJ), d = dist3(p, ctr);
-  const fa = (((Math.floor(curBias[0]*6 + (g[0]-0.5)*curBias[1]*6)) % 6) + 6) % 6;
+  const B = biomeJ(cid);
+  if (g[3] > Math.max(0.05, Math.min(0.95, curBias[2] + (B[1]-0.5)*0.9))) return null;
+  const sc = curBias[3]*(0.7 + 0.3*g2[0])*(0.8 + 0.25*B[2]), ctr = cid.map(v => (v+0.5)*CELLJ), d = dist3(p, ctr);
+  const fa = (((Math.floor(curBias[0]*6 + B[0]*6*0.999 + (g[0]-0.5)*curBias[1]*6)) % 6) + 6) % 6;
   return { cid, ctr, sc, d, fa, cOff: [g2[1],g2[2],g2[3],g2[0]].map(v => (v-0.5)*0.25) };
 }
 function checkEnter(dt){
@@ -1006,6 +1029,41 @@ function saveMinds(){ // per world, by species name, plus the hive
   cur().minds = out; cur().hiveMind = Array.from(hive.mind.mem, v => +v.toFixed(2)); save();
 }
 addEventListener('pagehide', () => { mindsDirty = true; saveMinds(); });
+
+
+// the biome texture: 16^3 cells around you, re-baked when you move 4 cells
+const biomeTex = gl.createTexture(), biomeData = new Uint8Array(16*16*16*4);
+let biomeO = null, biomeSeed = -1;
+function bakeBiome(){
+  const c0 = cam.target.map(v => Math.floor(v/CELLJ));
+  if (biomeO && biomeSeed === world.seed && c0.every((v,k) => Math.abs(v - (biomeO[k]+8)) < 4)) return;
+  biomeO = c0.map(v => v - 8); biomeSeed = world.seed;
+  for (let z=0;z<16;z++) for (let y=0;y<16;y++) for (let x=0;x<16;x++){
+    const B = biomeJ([biomeO[0]+x, biomeO[1]+y, biomeO[2]+z]), i = ((z*16+y)*16+x)*4;
+    for (let k=0;k<4;k++) biomeData[i+k] = Math.round(B[k]*255); }
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_3D, biomeTex);
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8, 16, 16, 16, 0, gl.RGBA, gl.UNSIGNED_BYTE, biomeData);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.activeTexture(gl.TEXTURE0);
+}
+// ================= 16. Map: biomes and blocks around you, top-down at your height =================
+const mapCv = document.getElementById('map'), mapCx = mapCv.getContext('2d'), mapImg = mapCx.createImageData(64, 64);
+let mapT = 0, biomeHere = '';
+function drawMap(dt){
+  mapT -= dt; if (mapT > 0) return; mapT = 0.5;
+  const c0 = cam.target.map(v => Math.floor(v/CELLJ));
+  for (let y=0;y<64;y++) for (let x=0;x<64;x++){
+    const cid = [c0[0]+x-32, c0[1], c0[2]+y-32], B = biomeJ(cid), g = h4J(cid);
+    const filled = g[3] <= Math.max(0.05, Math.min(0.95, curBias[2] + (B[1]-0.5)*0.9));
+    const hueRGB = [0, 2, 4].map(o => 0.5 + 0.5*Math.cos(6.2832*(B[3]*0.5 + o/6))), v = filled ? 0.95 : 0.18 + 0.25*B[1];
+    const i = (y*64+x)*4; mapImg.data[i] = 255*hueRGB[0]*v; mapImg.data[i+1] = 255*hueRGB[1]*v; mapImg.data[i+2] = 255*hueRGB[2]*v; mapImg.data[i+3] = 255;
+  }
+  mapCx.putImageData(mapImg, 0, 0); mapCx.drawImage(mapCv, 0, 0, 64, 64, 0, 0, 128, 128);
+  const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);   // you, and where you're heading
+  mapCx.fillStyle = '#fff'; mapCx.fillRect(63, 63, 3, 3);
+  mapCx.strokeStyle = '#fff'; mapCx.beginPath(); mapCx.moveTo(64.5, 64.5); mapCx.lineTo(64.5 + fx*10, 64.5 + fz*10); mapCx.stroke();
+  biomeHere = biomeName(biomeJ(c0));
+}
 // ================= 10. Smoothness + 2. Rendering loop =================
 const fpsWin = {t0: performance.now(), n: 0};
 let scale = 0.6, last = performance.now(), fpsAvg = 60, frames = 0, W = 0, humT = 0, humDeg = null, humCount = 0;
@@ -1071,7 +1129,7 @@ function frame(){
   stepEnts(dt*laws.timeScale, t);
   stepMinds(dt);
   stepHive(dt, t);
-  checkEnter(dt); stepFall(dt);
+  checkEnter(dt); stepFall(dt); drawMap(dt);
   if (actx) checkChord(W);
   chordCool -= dt; msgT -= dt; if (msgT <= 0 && msgEl.textContent && msgT > -0.1) msgEl.textContent = '';
   while (waves.length && t - waves[0].t0 > 6) waves.shift();
@@ -1106,7 +1164,7 @@ function frame(){
   gl.useProgram(prog); gl.bindVertexArray(mvao); // must be active before its uniforms are set (the ant pass switches programs)
   gl.uniform2f(U.uRes,w,h); gl.uniform1f(U.uT,t);
   gl.uniform3fv(U.uEye,eye); gl.uniform3fv(U.uFwd,fwd); gl.uniform3fv(U.uRight,right); gl.uniform3fv(U.uUp,upv);
-  gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uBias,bias); gl.uniform1ui(U.uSeedU, world.seed>>>0); gl.uniform1f(U.uFall, fallAmt);
+  gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uBias,bias); gl.uniform1ui(U.uSeedU, world.seed>>>0); bakeBiome(); gl.uniform1i(U.uBiome, 1); gl.uniform3fv(U.uBiomeO, biomeO); gl.uniform1f(U.uFall, fallAmt);
   { const tgtO = worldMind.state === 'ordering' ? Math.min(1, worldMind.order*1.4) : 0,
           tgtC = worldMind.state === 'chaos' ? Math.min(1, 0.35 + (laws.chaosAt - worldMind.order)/laws.chaosAt) : 0, k = 1 - Math.exp(-dt*0.8);
     mindVis[0] += (tgtO - mindVis[0])*k; mindVis[1] += (tgtC - mindVis[1])*k; gl.uniform2f(U.uMind, mindVis[0], mindVis[1]); } gl.uniform3fv(U.uPal,palette);
@@ -1131,6 +1189,7 @@ function frame(){
       `sun ${daylight > 0.5 ? 'day' : 'night'} drift ${sunDrift>=0?'+':''}${sunDrift.toFixed(2)}  hive w ${hive.w.toFixed(2)}\n` +
       `ants ${hive.ants.length} (${hive.seenHere} in slice)  order ${hive.order.toFixed(2)}  predicts you ${hive.mind.total ? Math.round(100*hive.mind.hits/hive.mind.total)+'%' : '-'}${hive.inside ? '  INSIDE THE HIVE MIND' : ''}\n` +
       `mind ${worldMind.order.toFixed(2)} · ${worldMind.state}\n${describeLaws(laws)}\n` +
+      `biome: ${biomeHere}\n` +
       `universe depth ${stack.length}${stack.length ? ' (' + cur().name + ')' : ''}\n` +
       `audio: ${!actx ? 'tap to start' : micAn ? 'mic + synth' : 'synth'}  ${rapid ? 'rapid' : 'sensitive'}`;
   }
