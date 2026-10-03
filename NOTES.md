@@ -12,3 +12,4 @@
 - Every layer multiplier needs a rising gate, or that layer collapses to minutes (Era gates now rise +15/Era and +20/Revolution).
 - Species Chess: buying a tech that would give check is blocked (the opponent's king could otherwise be captured). Perks live outside FEN/undo.
 - Species Chess AI: use pseudoRaw + illegalRaw in search; legalRaw per node was ~7x slower. Hard (depth 3) is ~650 ms/move.
+- Species Chess hosted as artifact https://claude.ai/artifact/MGQgi4BHidBhiuxni9QmDe: esbuild-bundle src/species-chess/main.ts (IIFE, calls Start('game-container')) and inline it into one HTML. GitHub Pages only deploys main (?game=chess after merge).
