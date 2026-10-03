@@ -14,3 +14,6 @@
 - Hyperslice: every scale must contain a pairwise-consonant triad or chords (and region unlocks) become impossible. Whole-tone failed this.
 - Hyperslice: every terrain family must fit radius ~1.5 or the camera sits inside it and rays never converge (Kaleido hung swiftshader). Crossing between two different families renders both: the slowest spot.
 - Hive tuning: trail evaporation must be slow (~8%/s) or no trail survives. Foragers must not climb trail gradients (nest is the max), so they use a home vector. Ants sharing one grid cell move in lockstep unless they get individual traits and jittered sensing.
+- FPS must be measured over wall-clock seconds: the GPU accepts ~20 frames fast then stalls, so per-frame dt reported 40+ fps while real was ~1–5. All fps numbers before this fix were wrong.
+- Swiftshader compiles the shader on first draw (~5–10 s); time steady-state frames, never the first draw.
+- Raymarch cost: test rays against creature bounding spheres once per pixel (gIds), and give each terrain cell a bounding sphere. Checking all 24 creatures per step was 5× the cost.

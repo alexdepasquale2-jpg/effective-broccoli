@@ -39,119 +39,144 @@ precision highp float;
 out vec4 o;
 uniform vec2 uRes; uniform float uT;
 uniform vec3 uEye, uFwd, uRight, uUp;
-uniform vec4 uC;          // Julia constant (4D)
-uniform float uW;         // slice position along w
+uniform vec4 uC;          // region's 4D constant (audio-driven); every cell bends it its own way
+uniform float uW;         // slice position along w at the eye
 uniform vec2 uRot;        // xw, yw rotation angles
 uniform vec4 uBand;       // bass, mid, high, flux
 uniform float uHue;
 uniform vec4 uEnt[${MAX_ENT}];   // xyz + slice radius
-uniform vec4 uEntK[${MAX_ENT}];  // kind, hue, vib freq, vib amp
+uniform vec4 uEntK[${MAX_ENT}];  // kind (continuous shape), hue, vib freq, vib amp
 uniform int uNEnt;
 uniform vec4 uRip[4];     // wave ripples: xyz + age (age<0 = off)
-
-uniform ivec2 uFam;       // terrain family of the two blended regions
-uniform float uBlend;     // 0 = region A, 1 = region B
-uniform vec4 uC2;         // region B constant
-uniform vec4 uFP, uFP2;   // family params A, B
-uniform vec3 uPal[4];     // cosine palette a,b,c,d (already blended)
+uniform vec4 uBias;       // region bias: family centre, family spread, density, scale
+uniform float uSeed;
+uniform vec3 uPal[4];     // cosine palette a,b,c,d
 uniform vec2 uVib;        // surface vibration frequency, fog density
 uniform vec4 uSun;        // sun direction xyz + daylight
 uniform vec2 uHive;       // hive nearness, hive order
 
+#define PHI 1.6180339887
+#define GA 2.3999632297    // golden angle
+#define CELL 5.2360679775  // 2*phi^2
+#define NFAM 6.0
+
 vec4 qsq(vec4 a){ return vec4(a.x*a.x-dot(a.yzw,a.yzw), 2.0*a.x*a.yzw); }
 vec4 qcube(vec4 a){ float r2=dot(a.yzw,a.yzw); return vec4(a.x*(a.x*a.x-3.0*r2), a.yzw*(3.0*a.x*a.x-r2)); }
 vec3 pal(float t){ return uPal[0] + uPal[1]*cos(6.2832*(uPal[2]*t + uPal[3])); }
+mat2 rot2(float a){ return mat2(cos(a),-sin(a),sin(a),cos(a)); }
+vec4 h4(vec3 c){ return fract(sin(vec4(dot(c,vec3(127.1,311.7,74.7)),dot(c,vec3(269.5,183.3,246.1)),dot(c,vec3(113.5,271.9,124.6)),dot(c,vec3(19.3,47.1,91.7)))+uSeed)*43758.5453); }
 
-vec4 to4(vec3 p){
-  vec4 z = vec4(p, uW);
-  float c=cos(uRot.x), s=sin(uRot.x); z.xw = mat2(c,-s,s,c)*z.xw;
-  c=cos(uRot.y); s=sin(uRot.y); z.yw = mat2(c,-s,s,c)*z.yw;
-  return z;
-}
-
-// four 4D fractal families; returns distance, orbit trap
-vec2 fam(int f, vec4 z, vec4 c, vec4 fp){
+// six 4D fractal families, each fitted to radius ~1.4; returns distance, orbit trap
+vec2 fam(int f, vec4 z, vec4 c){
   float trap = 1e9;
-  if(f==0 || f==1){                       // quaternion Julia, power 2 or 3
-    float md2 = 1.0, pw = f==0 ? 4.0 : 9.0;
-    for(int i=0;i<10;i++){
-      float r2 = dot(z,z);
-      md2 *= pw*(f==0 ? r2 : r2*r2);
+  if(f<=1){                                   // 0,1: quaternion Julia z^2+c, z^3+c
+    float md2 = 1.0;
+    for(int i=0;i<8;i++){
+      float r2 = dot(z,z); md2 *= f==0 ? 4.0*r2 : 9.0*r2*r2;
       z = (f==0 ? qsq(z) : qcube(z)) + c;
-      trap = min(trap, dot(z.xyz,z.xyz));
-      if(dot(z,z) > 16.0) break;
+      trap = min(trap, dot(z.xyz,z.xyz)); if(dot(z,z) > 16.0) break;
     }
-    float r2 = dot(z,z);
-    return vec2(0.25*log(r2)*sqrt(r2/md2), trap);
+    float r2 = dot(z,z); return vec2(0.25*log(r2)*sqrt(r2/md2), trap);
   }
-  if(f==2){                               // 4D Mandelbox, Julia-style offset
-    float k = fp.y; z *= k; vec4 z0 = z; float dr = 1.0;
-    for(int i=0;i<9;i++){
-      z = clamp(z,-1.0,1.0)*2.0 - z;
-      float r2 = dot(z,z);
+  if(f==2){                                   // 4D Mandelbox, scale -phi^2
+    float k = 3.8; z *= k; vec4 z0 = z; float dr = 1.0, s = -PHI*PHI;
+    for(int i=0;i<8;i++){
+      z = clamp(z,-1.0,1.0)*2.0 - z; float r2 = dot(z,z);
       if(r2<0.25){ z*=4.0; dr*=4.0; } else if(r2<1.0){ z/=r2; dr/=r2; }
-      z = z*fp.x + z0 + c*0.4; dr = dr*abs(fp.x) + 1.0;
-      trap = min(trap, r2);
+      z = z*s + z0 + c*0.4; dr = dr*abs(s) + 1.0; trap = min(trap, r2);
     }
     return vec2(length(z)/abs(dr)/k, trap);
   }
-  // 4D kaleidoscopic IFS: fold, rotate, scale
-  float s = fp.x; float ca=cos(c.x*2.0), sa=sin(c.x*2.0); z *= 2.2; // fit to the same size as the Julia sets
-  for(int i=0;i<6;i++){
-    z = abs(z);
-    if(z.x<z.y) z.xy=z.yx; if(z.x<z.z) z.xz=z.zx; if(z.y<z.z) z.yz=z.zy; if(z.x<z.w) z.xw=z.wx;
-    z.xy = mat2(ca,-sa,sa,ca)*z.xy;
-    z = z*s - vec4(1.0+c.y*0.3)*(s-1.0);
+  if(f==3){                                   // 4D tetrahedral KIFS, golden-angle twist
+    float s = 2.0, ca=cos(GA+c.x), sa=sin(GA+c.x); z *= 2.2;
+    for(int i=0;i<6;i++){
+      z = abs(z); if(z.x<z.y) z.xy=z.yx; if(z.x<z.z) z.xz=z.zx; if(z.y<z.z) z.yz=z.zy; if(z.x<z.w) z.xw=z.wx;
+      z.xy = mat2(ca,-sa,sa,ca)*z.xy; z = z*s - vec4(1.0+c.y*0.3)*(s-1.0); trap = min(trap, dot(z,z)*0.05);
+    }
+    return vec2((length(z)-2.0)*pow(s,-6.0)/2.2, trap);
+  }
+  if(f==4){                                   // 4D Menger sponge
+    z *= 1.4; z.xy *= rot2(c.z);
+    for(int i=0;i<5;i++){
+      z = abs(z); if(z.x<z.y) z.xy=z.yx; if(z.x<z.z) z.xz=z.zx; if(z.y<z.z) z.yz=z.zy; if(z.z<z.w) z.zw=z.wz;
+      z = z*3.0 - vec4(2.0); if(z.w < -1.0) z.w += 2.0; trap = min(trap, dot(z,z)*0.02);
+    }
+    vec4 q = abs(z)-vec4(1.0); return vec2(length(max(q,0.0))*pow(3.0,-5.0)/1.4, trap);
+  }
+  // 5: icosahedral golden fold (planes built from phi), w twisted by the golden angle
+  vec3 n1 = normalize(vec3(-PHI, PHI-1.0, 1.0)), n2 = normalize(vec3(PHI-1.0, 1.0, -PHI));
+  float s = pow(PHI, 1.5); z *= 1.5;
+  for(int i=0;i<7;i++){
+    z.xyz = abs(z.xyz); z.xyz -= 2.0*min(0.0,dot(z.xyz,n1))*n1; z.xyz -= 2.0*min(0.0,dot(z.xyz,n2))*n2;
+    z.w = abs(z.w); z.xw *= rot2(GA*0.5 + c.w); z = z*s - vec4(1.0, 1.0/PHI, 0.6+c.y*0.2, 0.5)*(s-1.0);
     trap = min(trap, dot(z,z)*0.05);
   }
-  return vec2((length(z)-2.0)*pow(s,-6.0)/2.2, trap);
+  return vec2((length(z)-1.6)*pow(s,-7.0)/1.5, trap);
 }
 
-vec2 terrain(vec3 p){
-  vec4 z = to4(p);
-  vec2 r;
-  if(uBlend<0.001) r = fam(uFam.x, z, uC, uFP);
-  else if(uBlend>0.999) r = fam(uFam.y, z, uC2, uFP2);
-  else { vec2 a = fam(uFam.x, z, uC, uFP), b = fam(uFam.y, z, uC2, uFP2); r = mix(a, b, uBlend); }
-  float d = r.x;
-  // vibrational surface: standing waves driven by audio bands, frequency set by the region
+// The world: an endless lattice of golden cells. Each cell holds one 4D object, and distance from your eye is depth in w,
+// so what lies ahead is a later slice that becomes the present as you arrive. x: dist, y: trap, z: cell hue
+vec3 terrain(vec3 p){
+  vec3 cid = floor(p/CELL), q = p - (cid+0.5)*CELL;
+  vec3 bd = 0.5*CELL - abs(q); float wall = min(bd.x, min(bd.y,bd.z)) + 0.02; // never step past a cell wall
+  vec4 g = h4(cid), g2 = h4(cid+17.0);
+  if(g.w > uBias.z) return vec3(wall, 1e9, 0.0);                             // open cell
+  float sc = uBias.w*(0.55 + 0.6*g2.x);
+  float dc = length(q) - 1.8*sc;                                            // bounding sphere of this cell's object
+  if(dc > 0.15) return vec3(min(max(dc, 0.3 - length(p-uEye)), wall), 1e9, 0.0); // empty space is cheap
+  q.xz *= rot2(GA*(cid.x+cid.z*PHI)); q.xy *= rot2(GA*cid.y);
+  vec3 r3 = q/sc;
+  float w = uW + distance(p, uEye)/(PHI*PHI*PHI);
+  vec4 z = vec4(r3, w);
+  float cr=cos(uRot.x+g2.y*6.28), sr=sin(uRot.x+g2.y*6.28); z.xw = mat2(cr,-sr,sr,cr)*z.xw;
+  cr=cos(uRot.y); sr=sin(uRot.y); z.yw = mat2(cr,-sr,sr,cr)*z.yw;
+  vec4 c = uC + (g2.yzwx-0.5)*0.25;
+  // any family can appear anywhere; the region only leans the odds. Some cells are hybrids of two.
+  float fa = mod(floor(uBias.x*NFAM + (g.x-0.5)*uBias.y*NFAM), NFAM), fb = mod(fa + 1.0 + floor(g.y*(NFAM-1.0)), NFAM);
+  float m = smoothstep(0.55, 1.0, g.z);
+  vec2 r = fam(int(fa), z, c);
+  if(m > 0.01) r = mix(r, fam(int(fb), z, c), m);
+  float d = r.x*sc;
   d += 0.012*uBand.y*sin(uVib.x*p.x+uT*6.0)*sin(uVib.x*p.y-uT*5.0)*sin(uVib.x*p.z+uT*4.0);
   for(int i=0;i<4;i++){ float a=uRip[i].w; if(a<0.0) continue;
-    float rr=length(p-uRip[i].xyz);
-    d += 0.02*exp(-a*0.6)*sin(30.0*rr-a*14.0)*exp(-abs(rr-a*1.2)*5.0); }
-  return vec2(d, r.y);
+    float rr=length(p-uRip[i].xyz); d += 0.02*exp(-a*0.6)*sin(30.0*rr-a*14.0)*exp(-abs(rr-a*1.2)*5.0); }
+  d = max(max(d, dc), 0.3 - length(p-uEye));   // clip to the bound; the slice parts around you
+  return vec3(min(d, wall), r.y, fract(g2.z + fa/PHI));
 }
 
 float sdTorus(vec3 p, float R, float r){ return length(vec2(length(p.xz)-R,p.y))-r; }
 float sdBox(vec3 p, float b){ vec3 q=abs(p)-b; return length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0); }
 float sdOcta(vec3 p, float s){ p=abs(p); return (p.x+p.y+p.z-s)*0.57735; }
-mat2 rot2(float a){ return mat2(cos(a),-sin(a),sin(a),cos(a)); }
+float shape(int i, vec3 q, float r, float a){
+  if(i==0) return length(q) - r;
+  if(i==1){ q.xz=rot2(a)*q.xz; return sdBox(q, r*0.7)-0.01; }
+  if(i==2){ q.xy=rot2(a)*q.xy; return sdTorus(q, r, r*0.3); }
+  if(i==3){ q.xz=rot2(a)*q.xz; q.xy=rot2(a*0.7)*q.xy; return sdOcta(q, r*1.3); }
+  vec3 n=normalize(q+1e-5); return 0.6*(length(q) - r*(0.75+0.35*sin(6.0*atan(n.z,n.x)+a*4.0)*sin(5.0*acos(clamp(n.y,-1.0,1.0)))));
+}
 
-// x: dist, y: material (0 terrain, 1+i entity), z: trap
-// kinds: 0 sphere, 1 box, 2 torus, 3 octahedron, 4 star, 5 region heart, 9 player
-vec3 map(vec3 p){
-  vec2 j = terrain(p);
-  vec3 r = vec3(j.x, 0.0, j.y);
-  for(int i=0;i<${MAX_ENT};i++){
-    if(i>=uNEnt) break;
-    vec4 e = uEnt[i]; if(e.w<=0.0) continue;
+// x: dist, y: material (0 terrain, 1+i entity), z: trap, w: cell hue
+// kinds: [0,5) continuous creature shape (morphs between neighbours), 5 heart, 6 hive core, 9 player
+int gIds[4]; int gN = 0; // entities this pixel's ray actually passes near (found once per pixel in main)
+vec4 map(vec3 p){
+  vec3 j = terrain(p);
+  vec4 r = vec4(j.x, 0.0, j.y, j.z);
+  for(int n=0;n<4;n++){
+    if(n>=gN) break;
+    int i = gIds[n];
+    vec4 e = uEnt[i];
     vec4 k = uEntK[i];
     vec3 q = p - e.xyz;
-    if(dot(q,q) > (e.w*2.5+0.05)*(e.w*2.5+0.05)){ r.x = min(r.x, length(q)-e.w*2.0); continue; } // cheap bound
+    if(dot(q,q) > (e.w*2.5+0.05)*(e.w*2.5+0.05)){ r.x = min(r.x, length(q)-e.w*2.0); continue; }
     float wob = k.w*sin(k.z*uT + 20.0*q.x)*sin(k.z*0.7*uT + 20.0*q.y);
     float d, a = uT*k.z*0.25;
-    if(k.x<0.5 || k.x>8.5) d = length(q) - e.w;
-    else if(k.x<1.5){ q.xz=rot2(a)*q.xz; d = sdBox(q, e.w*0.7)-0.01; }
-    else if(k.x<2.5){ q.xy=rot2(a)*q.xy; d = sdTorus(q, e.w, e.w*0.3); }
-    else if(k.x<3.5){ q.xz=rot2(a)*q.xz; q.xy=rot2(a*0.7)*q.xy; d = sdOcta(q, e.w*1.3); }
-    else if(k.x<4.5){ vec3 n=normalize(q+1e-5); d = length(q) - e.w*(0.75+0.35*sin(6.0*atan(n.z,n.x)+a*4.0)*sin(5.0*acos(clamp(n.y,-1.0,1.0)))); d*=0.6; }
-    else if(k.x>5.5 && k.x<6.5){ // hive core: a hollow shell eaten through by a gyroid comb
-      q.xz=rot2(a*0.3)*q.xz; float sc = 9.0/max(e.w,0.05); vec3 g3 = q*sc;
-      float gy = (abs(dot(sin(g3), cos(g3.yzx))) - 0.35)/sc;
-      d = max(abs(length(q)-e.w*0.8)-e.w*0.2, gy)*0.7; }
+    if(k.x<5.0){ float s0 = floor(k.x); d = mix(shape(int(s0), q, e.w, a), shape(int(mod(s0+1.0,5.0)), q, e.w, a), fract(k.x)); }
+    else if(k.x>8.5) d = length(q) - e.w;
+    else if(k.x>5.5){ q.xz=rot2(a*0.3)*q.xz; float sc = 9.0/max(e.w,0.05); vec3 g3 = q*sc;
+      float gy = (abs(dot(sin(g3), cos(g3.yzx))) - 0.35)/sc; d = max(abs(length(q)-e.w*0.8)-e.w*0.2, gy)*0.7; }
     else { q.yz=rot2(a*0.5)*q.yz; d = min(length(q)-e.w*0.55, sdTorus(q, e.w, e.w*0.06)); q.xy=rot2(1.57)*q.xy; d = min(d, sdTorus(q, e.w*1.25, e.w*0.04)); }
     d += wob*e.w;
-    if(d<r.x) r = vec3(d, float(i+1), 0.0);
+    if(d<r.x) r = vec4(d, float(i+1), 0.0, 0.0);
   }
   return r;
 }
@@ -159,23 +184,28 @@ vec3 map(vec3 p){
 vec3 hsv(float h,float s,float v){ return v*mix(vec3(1),clamp(abs(fract(h+vec3(0,2,1)/3.)*6.-3.)-1.,0.,1.),s); }
 
 vec3 normal(vec3 p){
-  vec2 e = vec2(0.0015,0);
-  return normalize(vec3(map(p+e.xyy).x-map(p-e.xyy).x, map(p+e.yxy).x-map(p-e.yxy).x, map(p+e.yyx).x-map(p-e.yyx).x));
+  const vec2 k = vec2(1,-1); const float e = 0.0015; // tetrahedral normal: 4 samples instead of 6
+  return normalize(k.xyy*map(p+k.xyy*e).x + k.yyx*map(p+k.yyx*e).x + k.yxy*map(p+k.yxy*e).x + k.xxx*map(p+k.xxx*e).x);
 }
 
 void main(){
   vec2 uv = (2.0*gl_FragCoord.xy - uRes)/uRes.y;
   vec3 rd = normalize(uFwd*1.6 + uRight*uv.x + uUp*uv.y);
   vec3 ro = uEye;
-  // background: probability field haze
   vec3 bg = pal(uHue+0.5) * (0.04+0.06*uSun.w+0.08*uBand.x) * (0.6+0.4*rd.y);
-  float t = 0.0; vec3 h; bool hit=false; float glow=0.0;
-  for(int i=0;i<110;i++){
+  for(int i=0;i<${MAX_ENT};i++){ // ray vs bounding sphere: keep at most 4 candidates
+    if(i>=uNEnt || gN>=4) break;
+    vec4 e = uEnt[i]; if(e.w<=0.0) continue;
+    vec3 oc = ro-e.xyz; float R = e.w*1.7+0.03, b = dot(oc,rd), c = dot(oc,oc)-R*R;
+    if(c < 0.0 || (b < 0.0 && b*b > c)) gIds[gN++] = i;
+  }
+  float t = 0.0; vec4 h; bool hit=false; float glow=0.0;
+  for(int i=0;i<96;i++){
     h = map(ro+rd*t);
     glow += 0.012/(0.02+abs(h.x));
     if(h.x < 0.0008*t){ hit=true; break; }
     t += h.x*0.9;
-    if(t>8.0) break;
+    if(t>13.0) break;
   }
   vec3 col = bg;
   if(hit){
@@ -184,16 +214,16 @@ void main(){
     float dif = max(dot(n,L),0.0), amb = 0.5+0.5*n.y;
     float fres = pow(1.0-max(dot(n,-rd),0.0), 3.0);
     vec3 base;
-    if(h.y<0.5) base = pal(uHue + 0.3*sqrt(h.z) + 0.15*uBand.z);
-    else { int id=int(h.y)-1; float kk=uEntK[id].x; base = kk>5.5 && kk<6.5 ? vec3(1.0,0.62,0.18)*(1.0+4.0*uHive.y) : hsv(uEntK[id].y, kk>8.5?0.3:0.9, 1.0) * (kk>8.5 ? 5.0 : kk>4.5 ? 2.5+3.0*uBand.x : 1.5 + 2.0*uBand.w + 20.0*uEntK[id].w); }
+    if(h.y<0.5) base = pal(uHue + h.w + 0.3*sqrt(h.z) + 0.15*uBand.z);
+    else { int id=int(h.y)-1; float kk=uEntK[id].x; base = kk>5.5 && kk<6.5 ? vec3(1.0,0.62,0.18)*(1.0+4.0*uHive.y) : hsv(uEntK[id].y, kk>8.5?0.3:0.9, 1.0) * (kk>8.5 ? 5.0 : kk>=5.0 ? 2.5+3.0*uBand.x : 1.5 + 2.0*uBand.w + 20.0*uEntK[id].w); }
     col = base*(0.25*amb + (0.35+0.6*uSun.w)*dif) + fres*pal(uHue+0.6)*(0.4+uBand.x);
-    col = mix(col, bg, 1.0-exp(-uVib.y*t*t));
+    col = mix(col, bg, 1.0-exp(-uVib.y*t*t*0.35));
   }
-  col += pal(uHue+0.1) * glow * 0.004 * (0.3 + uBand.w*2.0);
+  col += pal(uHue+0.1) * glow * 0.003 * (0.3 + uBand.w*2.0);
   col = pow(col/(1.0+col), vec3(0.4545));
   col = mix(col, col*vec3(1.25,0.95,0.55) + vec3(0.05,0.03,0.0), uHive.x*0.6); // amber cast near the hive
   o = vec4(col,1);
-  gl_FragDepth = hit ? clamp(t*dot(rd,uFwd)/8.0, 0.0, 1.0) : 1.0;
+  gl_FragDepth = hit ? clamp(t*dot(rd,uFwd)/16.0, 0.0, 1.0) : 1.0;
 }`;
 
 function sh(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
@@ -206,44 +236,50 @@ gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
 gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
 gl.bindVertexArray(null);
-const U = {}; for (const n of ['uSun','uHive','uFam','uBlend','uC2','uFP','uFP2','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
+const U = {}; for (const n of ['uSun','uHive','uBias','uSeed','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
 
 // ================= 6. World generator: one seed per world, one genome per region of w =================
 function mulberry(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 function hash2(a,b){ let h=Math.imul(a^0x9e3779b9,0x85ebca6b)^Math.imul((b|0)+0x632be5ab,0xc2b2ae35); h^=h>>>15; h=Math.imul(h,0x2c1b3c6d); return (h^h>>>13)>>>0; }
 function hashStr(s){ let h=2166136261; for (const c of s) h=Math.imul(h^c.charCodeAt(0),16777619); return h>>>0; }
 const SCALES = {pentatonic:[1,9/8,5/4,3/2,5/3], harmonic:[1,5/4,3/2,7/4,2,9/4], major:[1,9/8,5/4,4/3,3/2,5/3,15/8], minor:[1,9/8,6/5,4/3,3/2,8/5,9/5]};
-const DEEP_SCALES = {phrygian:[1,16/15,6/5,4/3,3/2,8/5,9/5], lydian:[1,9/8,5/4,45/32,3/2,5/3,15/8]}; // only from depth 2
-const FAMILY = ['Julia²','Julia³','Mandelbox','Kaleido'];
+const PHI = (1+Math.sqrt(5))/2, GOLDEN_ANGLE = Math.PI*(3-Math.sqrt(5));
+// just-intonation intervals any scale may draw from; deeper regions lean toward the stranger ones
+const INTERVALS = [16/15,10/9,9/8,7/6,6/5,5/4,4/3,11/8,45/32,3/2,8/5,13/8,5/3,7/4,16/9,9/5,15/8];
+const FAMILY = ['Julia²','Julia³','Mandelbox','Kaleido','Menger','Icosa-φ'];
 const TEMPER = ['social','curious','shy','drift'];
 const SYL = ['va','lo','ri','sen','tha','mor','ae','qu','zel','ny','dra','oph','ul','kai','ve','sho'];
 function nameFrom(R){ let n=''; for (let i=0, k=2+Math.floor(R()*2); i<k; i++) n += SYL[Math.floor(R()*SYL.length)]; return n[0].toUpperCase()+n.slice(1); }
 // depth tier = |region|: deeper regions unlock more terrain families, species, voices, scales and mutation
 function makeGenome(seed, depth = 0){
   const R = mulberry(seed), pick = a => a[Math.floor(R()*a.length)];
-  const scales = depth >= 2 ? {...SCALES, ...DEEP_SCALES} : SCALES;
-  const scale = pick(Object.keys(scales)), ratios = scales[scale];
-  const steps = 8+Math.floor(R()*9), hits = 3+Math.floor(R()*(steps-4));
-  const rhythm = Array.from({length:steps}, (_,i) => (i*hits)%steps < hits); // Euclidean rhythm
-  const family = depth === 0 ? 0 : Math.min(3, Math.floor(R()*(Math.min(depth,3)+1)));
+  // scale: generated, not chosen. Always holds root + a third + a fifth (so chords exist), then anything else.
+  const set = new Set([1, R()<.5 ? 5/4 : 6/5, 3/2]), extra = 2 + Math.floor(R()*3 + depth*0.4);
+  while (set.size < 3+extra){ const k = Math.floor((R()**(1/(1+depth*0.3)))*INTERVALS.length); set.add(INTERVALS[Math.min(INTERVALS.length-1, k)]); }
+  const ratios = [...set].sort((a,b) => a-b), scale = ratios.length + '-tone';
+  // rhythm: Fibonacci step counts, hits at golden proportion (Euclidean spread)
+  const steps = pick([5,8,13]), hits = Math.max(2, Math.round(steps/(R()<.6 ? PHI : PHI*PHI)));
+  const rhythm = Array.from({length:steps}, (_,i) => (i*hits)%steps < hits);
+  // terrain: every family can appear in every region; the region leans the odds and depth widens them
+  const bias = [R(), Math.min(1, 0.35+0.2*depth+0.45*R()), 0.3+0.35*R(), 0.8+0.6*R()];
+  const family = Math.floor(bias[0]*FAMILY.length);
   const g = { seed, depth, scale, ratios, root: 55*2**(R()*2), bpm: 70+R()*80, rhythm, step: 0, mstep: 0,
     wave: pick(['sine','triangle','sawtooth','square']),
     wf: [0,1,2,3].map(i => 0.05+0.04*ratios[i%ratios.length]*(0.5+R())), // visual wave speeds share the musical ratios
-    ph: [0,1,2,3].map(() => R()*6.28), hue: R(), family,
-    fp: family === 2 ? [-1.6-R()*0.8, 3.5+R(), 0, 0] : family === 3 ? [1.8+R()*0.4, 0, 0, 0] : [0,0,0,0],
+    ph: [0,1,2,3].map(() => R()*6.28), hue: R(), family, bias,
     palette: [[0,0,0].map(() => 0.4+R()*0.2), [0,0,0].map(() => 0.3+R()*0.3), [0,0,0].map(() => 0.5+R()*1.2), [0,0,0].map(() => R())],
     vib: 10+R()*20, fog: 0.03+R()*0.1, mutation: 0.05+0.05*depth,
-    heartPos: [(R()-.5)*1.4, (R()-.5)*1.4, (R()-.5)*1.4], voices: 1+Math.min(2, depth) };
-  g.species = Array.from({length: Math.min(5, 2+depth)}, (_,i) => makeSpecies(mulberry(hash2(seed, 100+i)), g));
+    voices: 1+Math.min(2, depth) };
+  g.species = Array.from({length: Math.min(8, 2+depth)}, (_,i) => makeSpecies(mulberry(hash2(seed, 100+i)), g, i));
   g.prog = [0, ...Array.from({length:3}, () => Math.floor(R()*Math.min(6, ratios.length)))]; // chord roots, one per bar
   g.phrase = lsystem(R, g.species[0].motif, depth);
   return g;
 }
-function makeSpecies(R, g){
+function makeSpecies(R, g, i){
   const t = { social: R(), curious: R(), shy: R(), drift: R() }, temper = TEMPER[Math.floor(R()*4)];
   t[temper] = 0.75+0.25*R(); // one dominant temperament
-  return { name: nameFrom(R), temper, ...t, shape: Math.floor(R()*5), size: 0.03+R()*0.07, span: 0.12+R()*0.7,
-    osc: 1+R()*8, life: 15+R()*30, hue: R(), gen: 0,
+  return { name: nameFrom(R), temper, ...t, shape: R()*4.999, size: 0.03+R()*0.07, span: 0.12+R()*0.7,
+    osc: 1+R()*8, life: 15+R()*30, hue: (i/PHI + R()*0.2) % 1, gen: 0,
     motif: Array.from({length: 3+Math.floor(R()*3)}, () => Math.floor(R()*g.ratios.length*1.5)) };
 }
 // L-system melody: A = motif, B = motif transposed, C = motif inverted and reversed
@@ -385,9 +421,15 @@ const ents = []; let entCap = MAX_ENT-1; const rng = Math.random;
 let tone = 0, curRegion = 0, lastTapped = null;
 const player = () => [cam.target[0], cam.target[1], cam.target[2], W];
 const jitter = (x, k) => x*(1+(rng()-.5)*2*k);
+let spiral = 0;
+function aroundPlayer(){ // Fibonacci sphere: golden-angle steps give even, never-repeating placement
+  const k = spiral++, y = 1 - 2*((k*0.618034) % 1), rr = Math.sqrt(1-y*y), th = k*GOLDEN_ANGLE, d = 0.6 + 1.6*((k/PHI/PHI) % 1);
+  return [cam.target[0]+Math.cos(th)*rr*d, cam.target[1]+y*d, cam.target[2]+Math.sin(th)*rr*d];
+}
 function individual(sp, g, w0, p){
   const deg = sp.motif[Math.floor(rng()*sp.motif.length)];
-  return { sp, g, deg, f: pitch(g, deg+g.ratios.length), p: p || [(rng()-.5)*2.4,(rng()-.5)*2.4,(rng()-.5)*2.4,w0], v:[0,0,0,0], home: w0,
+  p = p || [...aroundPlayer(), w0];
+  return { sp, g, deg, f: pitch(g, deg+g.ratios.length), p, anc: p.slice(0,3), v:[0,0,0,0], home: w0,
     span: jitter(sp.span,.1), size: jitter(sp.size,.1), kind: sp.shape, osc: jitter(sp.osc,.1), max: jitter(sp.life,.2),
     life: 0, phase: rng()*6.28, excite: 0, attuned: 0, amp: 0, bred: -99, gen: sp.gen };
 }
@@ -395,7 +437,7 @@ function spawn(){ const g = region(curRegion); return individual(g.species[Math.
 function makeHeart(){ // the region's landmark: large, long-lived, spans most of the region's w, sings the root
   const g = region(curRegion);
   const h = individual({ name: 'Heart ' + curRegion, temper: 'anchor', social:0, curious:0, shy:0, drift:0, shape:5, size:0.16, span:0.9,
-    osc:0.5, life:1e9, hue:g.hue, gen:0, motif:[0] }, g, curRegion, [...g.heartPos, curRegion]);
+    osc:0.5, life:1e9, hue:g.hue, gen:0, motif:[0] }, g, curRegion, [...view0(1.8), curRegion]);
   h.heart = true; h.f = g.root; return h;
 }
 function reseed(){ ents.length = 0; ents.push(makeHeart()); for (let i=1;i<MAX_ENT-1;i++) ents.push(spawn()); }
@@ -406,7 +448,7 @@ function breed(a, b){
   if (!sp){
     const A = a.sp.name, B = b.sp.name.toLowerCase(), name = A.slice(0, Math.ceil(A.length/2)) + B.slice(Math.floor(B.length/2));
     const motif = a.sp.motif.flatMap((d,i) => [d, b.sp.motif[i % b.sp.motif.length]]).slice(0,6).map(d => rng() < m*3 ? d+(rng()<.5?1:-1) : d);
-    sp = { name, temper: rng()<.5 ? a.sp.temper : b.sp.temper, shape: rng()<.5 ? a.sp.shape : b.sp.shape, motif, hue: (a.sp.hue+b.sp.hue)/2,
+    sp = { name, temper: rng()<.5 ? a.sp.temper : b.sp.temper, shape: Math.min(4.999, Math.max(0, (a.sp.shape+b.sp.shape)/2 + (rng()-.5)*m*10)), motif, hue: (a.sp.hue+b.sp.hue)/2,
       gen: Math.max(a.gen, b.gen)+1, ...Object.fromEntries(['social','curious','shy','drift','size','span','osc','life'].map(k => [k, mix(a.sp[k], b.sp[k])])) };
     hybrids.set(key, sp); say(`Hybrid born: ${sp.name} (gen ${sp.gen}, ${sp.temper})`); buzz([10,30,10]);
   }
@@ -423,7 +465,7 @@ function stepEnts(dt, t){
   const P = player();
   for (let i=0;i<ents.length;i++){
     let e = ents[i]; e.life += dt;
-    if (!e.heart && ((e.life > e.max && e.attuned <= 0) || Math.hypot(e.p[0],e.p[1],e.p[2]) > 2.4 || Math.abs(e.p[3]-W) > 1.8)) e = ents[i] = spawn();
+    if (!e.heart && ((e.life > e.max && e.attuned <= 0) || dist3(e.p, cam.target) > 3.6 || Math.abs(e.p[3]-W) > 1.8)) e = ents[i] = spawn();
     const sp = e.sp, listen = analyser ? freq[binOf(e.f)]/255 : 0.5+0.5*Math.sin(t*e.osc*0.3+e.phase);
     // wave fronts that pass an entity excite it if they agree with its pitch; player waves attune it, shy ones flee dissonance
     for (const w of waves) if (!w.hit.has(e) && Math.abs(dist4(e.p,w.p)-(clock-w.t0)*1.2) < 0.15){
@@ -433,13 +475,13 @@ function stepEnts(dt, t){
     }
     e.excite = Math.max(0, e.excite - dt*0.8); e.attuned = Math.max(0, e.attuned - dt); e.flee = Math.max(0, (e.flee||0) - dt);
     e.amp = Math.max(listen*0.6, e.excite);
-    if (e.heart){ for (let a=0;a<4;a++){ const h = a<3 ? e.g.heartPos[a] : e.home; e.v[a] = (e.v[a] + dt*2*(h-e.p[a]))*(1-2*dt); e.p[a] += e.v[a]*dt; } continue; }
+    if (e.heart){ for (let a=0;a<4;a++){ const h = a<3 ? e.anc[a] : e.home; e.v[a] = (e.v[a] + dt*2*(h-e.p[a]))*(1-2*dt); e.p[a] += e.v[a]*dt; } continue; }
     const eps = 0.05, f0 = field(...e.p,t), w0 = waveAt(e.p);
     const lure = tone && consonance(tone, e.f) > 0 ? 0.4*sp.curious : 0; // curious ones drift toward a tone they like
     for (let a=0;a<4;a++){
       const q = e.p.slice(); q[a] += eps;
       const grad = (field(...q,t)-f0)/eps, wgrad = (waveAt(q)-w0)/eps;
-      const spring = a<3 ? -0.4*e.p[a] : -0.4*(e.p[a]-e.home);
+      const spring = -0.4*(e.p[a] - (a<3 ? e.anc[a] : e.home));
       let f = spring + (0.2+0.6*sp.drift)*grad - 0.8*wgrad + 2*listen*band.flux*Math.sin(e.phase+a*1.7+t*e.osc) + lure*(P[a]-e.p[a]);
       if (e.attuned > 0) f += (0.6+sp.curious)*(P[a] + 0.35*Math.sin(e.phase+a*2.1+t*0.8) - e.p[a]); // orbit the player
       if (e.flee > 0) f -= 1.5*(P[a]-e.p[a]);
@@ -478,7 +520,9 @@ function checkChord(W){
 }
 
 // ================= 8. Player and input =================
-const cam = {yaw:0.6, pitch:0.3, dist:3.2, target:[0,0,0]};
+const cam = {yaw:0.6, pitch:0.1, speed:0.35, target:[0,0,0]};
+const dist3 = (a,b) => Math.hypot(a[0]-b[0], a[1]-b[1], a[2]-b[2]);
+function view0(d){ const cp=Math.cos(cam.pitch); return [cam.target[0]-Math.sin(cam.yaw)*cp*d, cam.target[1]-Math.sin(cam.pitch)*d, cam.target[2]-Math.cos(cam.yaw)*cp*d]; }
 const keys = {}, pts = new Map();
 let dragMode = 'orbit', rapid = false, pinch = 0, mid = null, lastMove = 0;
 const nav4 = {w:0, rot:0, vw:0, vr:0, tw:0, tr:0};
@@ -499,7 +543,7 @@ cv.onpointermove = e => {
   const dx = e.clientX-p.x, dy = e.clientY-p.y; p.x = e.clientX; p.y = e.clientY;
   if (pts.size === 2){ // two fingers: pinch zooms, moving together travels through w
     const [a,b] = [...pts.values()], d = Math.hypot(a.x-b.x, a.y-b.y), m = [(a.x+b.x)/2, (a.y+b.y)/2];
-    if (pinch) cam.dist = Math.max(0.4, Math.min(7, cam.dist*pinch/d));
+    if (pinch) cam.speed = Math.max(0, Math.min(2, cam.speed*d/pinch));
     if (mid) move4D(m[0]-mid[0], m[1]-mid[1]);
     pinch = d; mid = m; return;
   }
@@ -510,7 +554,7 @@ cv.onpointerup = cv.onpointercancel = e => {
   const p = pts.get(e.pointerId); pts.delete(e.pointerId); pinch = 0; mid = null;
   if (p && pts.size === 0 && Math.hypot(e.clientX-p.x0, e.clientY-p.y0) < 8 && performance.now()-p.t0 < 300) tap(e.clientX, e.clientY);
 };
-cv.onwheel = e => { cam.dist = Math.max(0.4, Math.min(7, cam.dist*Math.exp(e.deltaY*0.001))); };
+cv.onwheel = e => { cam.speed = Math.max(0, Math.min(2, (cam.speed+0.02)*Math.exp(-e.deltaY*0.001)-0.02)); }; // wheel sets cruise speed
 onkeydown = e => { keys[e.key.toLowerCase()] = 1; if (e.key === ' ') reseed(); };
 onkeyup = e => keys[e.key.toLowerCase()] = 0;
 
@@ -657,7 +701,7 @@ uniform vec3 uEye, uFwd, uRight, uUp; uniform vec2 uRes;
 out vec3 vc;
 void main(){
   vec3 v = a.xyz - uEye; float z = dot(v, uFwd);
-  gl_Position = vec4(1.6*dot(v,uRight)*uRes.y/uRes.x, 1.6*dot(v,uUp), (clamp(z/8.0,0.0,1.0)*2.0-1.0)*z, z);
+  gl_Position = vec4(1.6*dot(v,uRight)*uRes.y/uRes.x, 1.6*dot(v,uUp), (clamp(z/16.0,0.0,1.0)*2.0-1.0)*z, z);
   gl_PointSize = max(1.5, 0.8*a.w*uRes.y/max(z,0.1)); vc = c;
 }`;
 const PFS = `#version 300 es
@@ -691,6 +735,7 @@ function drawAnts(eye, fwd, right, upv, w, h){
 }
 
 // ================= 10. Smoothness + 2. Rendering loop =================
+const fpsWin = {t0: performance.now(), n: 0};
 let scale = 0.6, last = performance.now(), fpsAvg = 60, frames = 0, W = 0, humT = 0, humDeg = null, humCount = 0;
 const ent = new Float32Array(MAX_ENT*4), entK = new Float32Array(MAX_ENT*4), rip = new Float32Array(16);
 const smooth = x => x*x*(3-2*x);
@@ -698,13 +743,18 @@ function juliaC(g, t){
   const cb = 0.15+0.25*band.centroid;
   return [-0.2+0.25*Math.sin(t*g.wf[1]*2+g.ph[1])+0.15*band.bass, 0.55*Math.cos(t*g.wf[2]*1.5+g.ph[2]+band.mid), cb*Math.sin(t*g.wf[3]*2+g.ph[3]), 0.2*Math.cos(t*g.wf[0]+g.ph[0])+0.1*band.high];
 }
-function frame(now){
-  const dt = Math.min(0.05, (now-last)/1000); last = now; const t = now/1000; clock = t;
-  fpsAvg += (1/Math.max(dt,1e-3) - fpsAvg)*0.05;
-  if (++frames % 20 === 0){
-    if (fpsAvg < 40) scale = Math.max(0.25, scale-0.05); else if (fpsAvg > 55) scale = Math.min(1, scale+0.03);
-    if (scale <= 0.3 && fpsAvg < 35) entCap = Math.max(6, entCap-1); else if (fpsAvg > 55) entCap = Math.min(MAX_ENT-1, entCap+1);
+function frame(){
+  const now = performance.now(); // real time, so slow frames are seen as slow
+  const rawDt = (now-last)/1000, dt = Math.min(0.05, rawDt); last = now; const t = now/1000; clock = t;
+  // fps over whole wall-clock seconds: the GPU can accept frames quickly and then stall, so per-frame timing lies
+  fpsWin.n++;
+  if (now - fpsWin.t0 >= 1000){
+    fpsAvg = fpsWin.n*1000/(now - fpsWin.t0); fpsWin.t0 = now; fpsWin.n = 0;
+    // pixel cost goes with scale^2, so steer scale by sqrt(fps/target)
+    scale = Math.max(0.12, Math.min(1, scale*Math.max(0.6, Math.min(1.15, Math.sqrt(fpsAvg/42)))));
+    if (scale <= 0.15 && fpsAvg < 30) entCap = Math.max(6, entCap-2); else if (fpsAvg > 50) entCap = Math.min(MAX_ENT-1, entCap+1);
   }
+  frames++;
   const w = Math.floor(innerWidth*devicePixelRatio*scale), h = Math.floor(innerHeight*devicePixelRatio*scale);
   if (cv.width!==w || cv.height!==h){ cv.width=w; cv.height=h; gl.viewport(0,0,w,h); }
   readAudio(t);
@@ -731,8 +781,8 @@ function frame(now){
   const i0 = Math.floor(W), s = smooth(Math.min(1, Math.max(0, (W-i0-0.3)/0.4)));
   const ga = region(i0), gb = region(i0+1), Ca = juliaC(ga,t), Cb = juliaC(gb,t);
   const lerp = (a,b) => a.map((x,k) => x+(b[k]-x)*s);
-  // same family: morph parameters smoothly; different families: blend the two distance fields
-  const same = ga.family === gb.family, C = same ? lerp(Ca,Cb) : Ca, FP = same ? lerp(ga.fp,gb.fp) : ga.fp;
+  // regions blend smoothly: constant, family odds, density, scale, palette
+  const C = lerp(Ca,Cb), bias = lerp(ga.bias, gb.bias);
   const palette = ga.palette.flatMap((v,k) => lerp(v, gb.palette[k]));
   const sliceW = 0.45*Math.sin(W*2.2) + 0.3*Math.sin(t*ga.wf[0]+ga.ph[0]) + 0.2*band.bass;
   const rot = [t*ga.wf[3]*0.5 + band.mid*0.3 + nav4.rot, Math.sin(t*0.04)*0.8];
@@ -756,13 +806,13 @@ function frame(now){
   const fwdKey = (keys.w?1:0)-(keys.s?1:0), side=(keys.d?1:0)-(keys.a?1:0), up=(keys.e?1:0)-(keys.q?1:0);
   const cp=Math.cos(cam.pitch), eye0=[Math.sin(cam.yaw)*cp, Math.sin(cam.pitch), Math.cos(cam.yaw)*cp];
   const fwd = eye0.map(x=>-x), right = norm(cross(fwd,[0,1,0])), upv = cross(right,fwd);
-  for (let a=0;a<3;a++) cam.target[a] += dt*1.2*(fwd[a]*fwdKey + right[a]*side + upv[a]*up);
-  const eye = cam.target.map((x,a)=>x+eye0[a]*cam.dist);
+  for (let a=0;a<3;a++) cam.target[a] += dt*(fwd[a]*(cam.speed + 1.2*fwdKey) + 1.2*(right[a]*side + upv[a]*up)); // cruise through the slices
+  const eye = cam.target.slice();
   view = {eye, fwd, right, up: upv};
 
   // slot 0: the player's glowing self, coloured by its tone
   const toneHue = tone ? (Math.log2(tone)%1) : hue;
-  ent.set([...cam.target, 0.045*(1+0.3*Math.sin(t*6))], 0); entK.set([9, toneHue, 2, 0], 0);
+  ent.set([...cam.target, 0], 0); // first person: your own orb is behind your eyes entK.set([9, toneHue, 2, 0], 0);
   let n = 1;
   { const dw = hive.w-W, span = 0.6; if (Math.abs(dw) < span){ ent.set([...hive.core, 0.32*Math.sqrt(1-(dw/span)**2)*(1+0.08*Math.sin(t*3*(0.5+hive.order)))], 4); entK.set([6, 0.1, 1, 0], 4); n = 2; } }
   for (const e of ents){
@@ -779,8 +829,7 @@ function frame(now){
 
   gl.uniform2f(U.uRes,w,h); gl.uniform1f(U.uT,t);
   gl.uniform3fv(U.uEye,eye); gl.uniform3fv(U.uFwd,fwd); gl.uniform3fv(U.uRight,right); gl.uniform3fv(U.uUp,upv);
-  gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uC2,Cb); gl.uniform4fv(U.uFP,FP); gl.uniform4fv(U.uFP2,gb.fp);
-  gl.uniform2i(U.uFam,ga.family,gb.family); gl.uniform1f(U.uBlend, same ? 0 : s); gl.uniform3fv(U.uPal,palette);
+  gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uBias,bias); gl.uniform1f(U.uSeed,(world.seed%9973)/97.0); gl.uniform3fv(U.uPal,palette);
   gl.uniform2f(U.uVib, ga.vib+(gb.vib-ga.vib)*s, ga.fog+(gb.fog-ga.fog)*s); gl.uniform1f(U.uW,sliceW); gl.uniform2fv(U.uRot,rot);
   gl.uniform4f(U.uBand,band.bass,band.mid,band.high,band.flux); gl.uniform1f(U.uHue,hue);
   gl.uniform4fv(U.uEnt,ent); gl.uniform4fv(U.uEntK,entK); gl.uniform1i(U.uNEnt,n); gl.uniform4fv(U.uRip,rip);
