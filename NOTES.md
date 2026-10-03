@@ -10,3 +10,4 @@
 - Balance: run `npm run balance 48` after any economy change; compare milestone times with PLAN.md status.
 - Automation must never reset past a better reset: auto-Shuffle skips when an Era or Revolution is available (bot caught a 13 h stall).
 - Every layer multiplier needs a rising gate, or that layer collapses to minutes (Era gates now rise +15/Era and +20/Revolution).
+- Hyperslice (4D fractal, audio-reactive): public/fractal4d.html, standalone WebGL2, open /fractal4d.html. Adaptive res keeps >=30fps.

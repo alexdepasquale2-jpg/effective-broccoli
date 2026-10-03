@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hyperslice</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font:12px/1.4 ui-monospace,monospace;color:#cfe}
+  canvas{display:block;width:100vw;height:100vh;touch-action:none}
+  #ui{position:fixed;left:12px;top:12px;background:#0008;padding:8px 10px;border-radius:6px;max-width:300px}
+  #ui button,#ui label{background:#123;color:#cfe;border:1px solid #3a6;border-radius:4px;padding:3px 8px;margin:2px 2px 2px 0;cursor:pointer;font:inherit;display:inline-block}
+  #ui input[type=file]{display:none}
+  #stats{white-space:pre;margin-top:4px;opacity:.85}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <b>Hyperslice</b>: 4D Julia, 3D slices<br>
+  <button id="mic">Mic</button><label>Audio file<input id="file" type="file" accept="audio/*"></label><button id="hide">Hide</button>
+  <div id="stats"></div>
+  <div style="opacity:.6">Drag: orbit · Wheel: zoom · WASD/QE: fly · Space: reseed</div>
+</div>
+<script>
+'use strict';
+const cv = document.getElementById('c');
+const gl = cv.getContext('webgl2', {antialias:false, powerPreference:'high-performance'});
+if (!gl) document.body.innerHTML = '<p style="color:#fff;padding:20px">WebGL2 required.</p>';
+
+const MAX_ENT = 24;
+const VS = `#version 300 es
+in vec2 p; void main(){ gl_Position = vec4(p,0,1); }`;
+const FS = `#version 300 es
+precision highp float;
+out vec4 o;
+uniform vec2 uRes; uniform float uT;
+uniform vec3 uEye, uFwd, uRight, uUp;
+uniform vec4 uC;          // Julia constant (4D)
+uniform float uW;         // slice position along w
+uniform vec2 uRot;        // xw, yw rotation angles
+uniform vec4 uBand;       // bass, mid, high, flux
+uniform float uHue;
+uniform vec4 uEnt[${MAX_ENT}];   // xyz + slice radius
+uniform vec4 uEntK[${MAX_ENT}];  // kind, hue, vib freq, vib amp
+uniform int uNEnt;
+
+vec4 qsq(vec4 a){ return vec4(a.x*a.x-dot(a.yzw,a.yzw), 2.0*a.x*a.yzw); }
+
+vec4 to4(vec3 p){
+  vec4 z = vec4(p, uW);
+  float c=cos(uRot.x), s=sin(uRot.x); z.xw = mat2(c,-s,s,c)*z.xw;
+  c=cos(uRot.y); s=sin(uRot.y); z.yw = mat2(c,-s,s,c)*z.yw;
+  return z;
+}
+
+// returns distance, orbit trap in y
+vec2 julia(vec3 p){
+  vec4 z = to4(p);
+  float md2 = 1.0, trap = 1e9;
+  for(int i=0;i<10;i++){
+    md2 *= 4.0*dot(z,z);
+    z = qsq(z) + uC;
+    trap = min(trap, dot(z.xyz,z.xyz));
+    if(dot(z,z) > 16.0) break;
+  }
+  float r2 = dot(z,z);
+  float d = 0.25*log(r2)*sqrt(r2/md2);
+  // vibrational surface: standing waves driven by audio bands
+  d += 0.012*uBand.y*sin(18.0*p.x+uT*6.0)*sin(18.0*p.y-uT*5.0)*sin(18.0*p.z+uT*4.0);
+  return vec2(d, trap);
+}
+
+float sdTorus(vec3 p, float R, float r){ return length(vec2(length(p.xz)-R,p.y))-r; }
+float sdBox(vec3 p, float b){ vec3 q=abs(p)-b; return length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0); }
+
+// x: dist, y: material (0 fractal, 1+i entity), z: trap
+vec3 map(vec3 p){
+  vec2 j = julia(p);
+  vec3 r = vec3(j.x, 0.0, j.y);
+  for(int i=0;i<${MAX_ENT};i++){
+    if(i>=uNEnt) break;
+    vec4 e = uEnt[i]; if(e.w<=0.0) continue;
+    vec4 k = uEntK[i];
+    vec3 q = p - e.xyz;
+    float wob = k.w*sin(k.z*uT + 20.0*q.x)*sin(k.z*0.7*uT + 20.0*q.y);
+    float d;
+    if(k.x<0.5) d = length(q) - e.w;
+    else if(k.x<1.5){ float a=uT*k.z*0.3; q.xz=mat2(cos(a),-sin(a),sin(a),cos(a))*q.xz; d = sdBox(q, e.w*0.7)-0.01; }
+    else { float a=uT*k.z*0.2; q.xy=mat2(cos(a),-sin(a),sin(a),cos(a))*q.xy; d = sdTorus(q, e.w, e.w*0.3); }
+    d += wob*e.w;
+    if(d<r.x) r = vec3(d, float(i+1), 0.0);
+  }
+  return r;
+}
+
+vec3 hsv(float h,float s,float v){ return v*mix(vec3(1),clamp(abs(fract(h+vec3(0,2,1)/3.)*6.-3.)-1.,0.,1.),s); }
+
+vec3 normal(vec3 p){
+  vec2 e = vec2(0.0015,0);
+  return normalize(vec3(map(p+e.xyy).x-map(p-e.xyy).x, map(p+e.yxy).x-map(p-e.yxy).x, map(p+e.yyx).x-map(p-e.yyx).x));
+}
+
+void main(){
+  vec2 uv = (2.0*gl_FragCoord.xy - uRes)/uRes.y;
+  vec3 rd = normalize(uFwd*1.6 + uRight*uv.x + uUp*uv.y);
+  vec3 ro = uEye;
+  // background: probability field haze
+  vec3 bg = hsv(uHue+0.5, 0.6, 0.05+0.08*uBand.x) * (0.6+0.4*rd.y);
+  float t = 0.0; vec3 h; bool hit=false; float glow=0.0;
+  for(int i=0;i<110;i++){
+    h = map(ro+rd*t);
+    glow += 0.012/(0.02+abs(h.x));
+    if(h.x < 0.0008*t){ hit=true; break; }
+    t += h.x*0.9;
+    if(t>8.0) break;
+  }
+  vec3 col = bg;
+  if(hit){
+    vec3 p = ro+rd*t, n = normal(p);
+    vec3 L = normalize(vec3(0.6,0.8,-0.4));
+    float dif = max(dot(n,L),0.0), amb = 0.5+0.5*n.y;
+    float fres = pow(1.0-max(dot(n,-rd),0.0), 3.0);
+    vec3 base;
+    if(h.y<0.5) base = hsv(uHue + 0.25*sqrt(h.z) + 0.15*uBand.z, 0.75, 0.9);
+    else { int id=int(h.y)-1; base = hsv(uEntK[id].y, 0.9, 1.0) * (1.5 + 2.0*uBand.w); }
+    col = base*(0.25*amb + 0.85*dif) + fres*hsv(uHue+0.6,0.5,1.0)*(0.4+uBand.x);
+    col = mix(col, bg, 1.0-exp(-0.08*t*t));
+  }
+  col += hsv(uHue+0.1, 0.7, 1.0) * glow * 0.004 * (0.3 + uBand.w*2.0);
+  col = pow(col/(1.0+col), vec3(0.4545));
+  o = vec4(col,1);
+}`;
+
+function sh(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(s); return s; }
+const prog = gl.createProgram();
+gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog); gl.useProgram(prog);
+gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+const U = {}; for (const n of ['uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
+
+// ---------- audio → synesthesia bands ----------
+let analyser=null, freq=null, prevSpec=null, actx=null;
+function hookAudio(src){
+  analyser = actx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.7;
+  src.connect(analyser); freq = new Uint8Array(analyser.frequencyBinCount); prevSpec = new Float32Array(freq.length);
+}
+function ensureCtx(){ actx = actx || new AudioContext(); actx.resume(); }
+document.getElementById('mic').onclick = async () => {
+  ensureCtx(); const s = await navigator.mediaDevices.getUserMedia({audio:true}); hookAudio(actx.createMediaStreamSource(s));
+};
+document.getElementById('file').onchange = e => {
+  ensureCtx(); const a = new Audio(URL.createObjectURL(e.target.files[0])); a.loop = true; a.play();
+  const src = actx.createMediaElementSource(a); hookAudio(src); src.connect(actx.destination);
+};
+document.getElementById('hide').onclick = () => document.getElementById('ui').style.display='none';
+
+const band = {bass:0, mid:0, high:0, flux:0, centroid:0.3, peakBin:0};
+function readAudio(t){
+  if (!analyser){ // internal "dream" signal when no audio is connected
+    band.bass = 0.5+0.5*Math.sin(t*1.3)**8; band.mid = 0.4+0.3*Math.sin(t*0.7); band.high = 0.3+0.3*Math.sin(t*2.9);
+    band.flux = Math.max(0, Math.sin(t*2.0))**16; band.centroid = 0.3+0.2*Math.sin(t*0.11); band.peakBin = 20+15*Math.sin(t*0.3); return;
+  }
+  analyser.getByteFrequencyData(freq);
+  const n = freq.length; let b=0,m=0,h=0,fl=0,ws=0,s=0,pk=0,pv=0;
+  for (let i=1;i<n;i++){ const v=freq[i]/255;
+    if (i<n*0.04) b+=v; else if (i<n*0.25) m+=v; else h+=v;
+    fl += Math.max(0, v-prevSpec[i]); prevSpec[i]=v; ws+=v*i; s+=v; if(v>pv){pv=v;pk=i;} }
+  const k=0.35, lerp=(a,x)=>a+(x-a)*k;
+  band.bass=lerp(band.bass,b/(n*0.04)); band.mid=lerp(band.mid,m/(n*0.21)); band.high=lerp(band.high,h/(n*0.75)*1.6);
+  band.flux=lerp(band.flux,Math.min(1,fl/12)); band.centroid=lerp(band.centroid,s?ws/s/n:0.3); band.peakBin=pk;
+}
+
+// ---------- emergent 4D entities ----------
+// Each lives at a 4D point with a w-span; it only appears in the 3D slice while the slice cuts its span.
+// Motion: damped oscillators (vibrational physics) + drift up a probability field shaped by the fractal + audio.
+let rng = Math.random;
+const ents = [];
+function spawn(){
+  return { p:[(rng()-.5)*2.4,(rng()-.5)*2.4,(rng()-.5)*2.4,(rng()-.5)*1.6], v:[0,0,0,0],
+    span: 0.15+rng()*0.6, size: 0.04+rng()*0.08, kind: Math.floor(rng()*3), hue: rng(),
+    f: 1+rng()*8, bin: Math.floor(rng()*60)+2, life: 0, max: 8+rng()*20, phase: rng()*6.28 };
+}
+function reseed(){ ents.length=0; for(let i=0;i<MAX_ENT;i++) ents.push(spawn()); }
+reseed();
+const field = (x,y,z,w,t) => Math.sin(x*2.1+t*0.3)*Math.cos(y*1.7-w*2.0)+Math.sin(z*2.3+w*1.3-t*0.2); // probability potential
+function stepEnts(dt, t, W){
+  for (let i=0;i<ents.length;i++){
+    let e = ents[i]; e.life += dt;
+    if (e.life > e.max || Math.hypot(...e.p) > 2.2){ e = ents[i] = spawn(); }
+    const amp = analyser ? freq[e.bin]/255 : 0.5+0.5*Math.sin(t*e.f*0.3+e.phase);
+    const eps=0.05, f0=field(...e.p,t);
+    for (let a=0;a<4;a++){
+      const q=e.p.slice(); q[a]+=eps;
+      const grad=(field(...q,t)-f0)/eps;
+      // spring to origin + probability gradient + audio-driven vibration kick
+      e.v[a] += dt*(-0.4*e.p[a] + 0.6*grad + 3*amp*band.flux*Math.sin(e.phase+a*1.7+t*e.f));
+      e.v[a] *= 1 - 1.2*dt; e.p[a] += e.v[a]*dt;
+    }
+    // neighbours resonate: same-bin entities attract (emergent clusters / "locations")
+    for (let j=i+1;j<ents.length;j++){ const o=ents[j]; if (Math.abs(o.bin-e.bin)>4) continue;
+      for (let a=0;a<4;a++){ const d=(o.p[a]-e.p[a])*0.3*dt; e.v[a]+=d; o.v[a]-=d; } }
+    e.amp = amp;
+  }
+}
+
+// ---------- camera ----------
+const cam = {yaw:0.6, pitch:0.3, dist:3.2, target:[0,0,0]};
+let drag=null; const keys={};
+cv.onpointerdown = e => { drag=[e.clientX,e.clientY]; cv.setPointerCapture(e.pointerId); };
+cv.onpointermove = e => { if(!drag) return; cam.yaw -= (e.clientX-drag[0])*0.005; cam.pitch=Math.max(-1.5,Math.min(1.5,cam.pitch+(e.clientY-drag[1])*0.005)); drag=[e.clientX,e.clientY]; };
+cv.onpointerup = () => drag=null;
+cv.onwheel = e => { cam.dist = Math.max(0.4, Math.min(7, cam.dist*Math.exp(e.deltaY*0.001))); };
+onkeydown = e => { keys[e.key.toLowerCase()]=1; if(e.key===' ') reseed(); };
+onkeyup = e => keys[e.key.toLowerCase()]=0;
+
+// ---------- loop with adaptive resolution to hold >= 30 fps ----------
+let scale = 0.6, last = performance.now(), fpsAvg = 60, frames = 0;
+const ent = new Float32Array(MAX_ENT*4), entK = new Float32Array(MAX_ENT*4);
+function frame(now){
+  const dt = Math.min(0.05, (now-last)/1000); last = now; const t = now/1000;
+  fpsAvg += (1/Math.max(dt,1e-3) - fpsAvg)*0.05;
+  if (++frames % 20 === 0){ if (fpsAvg < 40) scale = Math.max(0.25, scale-0.05); else if (fpsAvg > 55) scale = Math.min(1, scale+0.03); }
+  const w = Math.floor(innerWidth*devicePixelRatio*scale), h = Math.floor(innerHeight*devicePixelRatio*scale);
+  if (cv.width!==w || cv.height!==h){ cv.width=w; cv.height=h; gl.viewport(0,0,w,h); }
+
+  readAudio(t);
+  // pattern algorithm: audio picks the Julia constant on a 4D Lissajous path
+  const cb = 0.15+0.25*band.centroid;
+  const C = [-0.2+0.25*Math.sin(t*0.13)+0.15*band.bass, 0.55*Math.cos(t*0.09+band.mid), cb*Math.sin(t*0.17), 0.2*Math.cos(t*0.07)+0.1*band.high];
+  const W = 0.6*Math.sin(t*0.1) + 0.25*band.bass;                 // slice drifts through w; bass pushes it
+  const rot = [t*0.05 + band.mid*0.3, Math.sin(t*0.04)*0.8];
+  const hue = (t*0.01 + band.centroid*0.6) % 1;
+
+  stepEnts(dt, t, W);
+  let n=0;
+  for (const e of ents){
+    const dw = e.p[3]-W; if (Math.abs(dw) >= e.span) continue; // outside this 3D slice
+    const r = e.size*Math.sqrt(1-(dw/e.span)**2) * (0.7+0.6*e.amp); // hypersphere cross-section
+    ent.set([e.p[0],e.p[1],e.p[2],r], n*4); entK.set([e.kind, (e.hue+hue)%1, e.f, 0.08*e.amp], n*4); n++;
+  }
+
+  // camera
+  const fwdKey = (keys.w?1:0)-(keys.s?1:0), side=(keys.d?1:0)-(keys.a?1:0), up=(keys.e?1:0)-(keys.q?1:0);
+  const cp=Math.cos(cam.pitch), eye0=[Math.sin(cam.yaw)*cp, Math.sin(cam.pitch), Math.cos(cam.yaw)*cp];
+  const fwd = eye0.map(x=>-x), right = norm(cross(fwd,[0,1,0])), upv = cross(right,fwd);
+  for (let a=0;a<3;a++) cam.target[a] += dt*1.2*(fwd[a]*fwdKey + right[a]*side + upv[a]*up);
+  const eye = cam.target.map((x,a)=>x+eye0[a]*cam.dist);
+
+  gl.uniform2f(U.uRes,w,h); gl.uniform1f(U.uT,t);
+  gl.uniform3fv(U.uEye,eye); gl.uniform3fv(U.uFwd,fwd); gl.uniform3fv(U.uRight,right); gl.uniform3fv(U.uUp,upv);
+  gl.uniform4fv(U.uC,C); gl.uniform1f(U.uW,W); gl.uniform2fv(U.uRot,rot);
+  gl.uniform4f(U.uBand,band.bass,band.mid,band.high,band.flux); gl.uniform1f(U.uHue,hue);
+  gl.uniform4fv(U.uEnt,ent); gl.uniform4fv(U.uEntK,entK); gl.uniform1i(U.uNEnt,n);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+
+  if (frames % 10 === 0) document.getElementById('stats').textContent =
+    `fps ${fpsAvg.toFixed(0)}  res ${(scale*100)|0}%  ${w}x${h}\nslice w ${W.toFixed(2)}  entities in slice ${n}/${ents.length}\n` +
+    `bass ${band.bass.toFixed(2)} mid ${band.mid.toFixed(2)} high ${band.high.toFixed(2)} flux ${band.flux.toFixed(2)}\n` +
+    `audio: ${analyser?'live':'internal dream signal'}`;
+  requestAnimationFrame(frame);
+}
+function cross(a,b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function norm(a){ const l=Math.hypot(...a); return a.map(x=>x/l); }
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
