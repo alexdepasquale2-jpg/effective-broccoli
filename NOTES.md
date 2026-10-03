@@ -13,3 +13,4 @@
 - Hyperslice (4D fractal, audio-reactive): public/fractal4d.html, standalone WebGL2, open /fractal4d.html. Adaptive res keeps >=30fps.
 - Hyperslice: every scale must contain a pairwise-consonant triad or chords (and region unlocks) become impossible. Whole-tone failed this.
 - Hyperslice: every terrain family must fit radius ~1.5 or the camera sits inside it and rays never converge (Kaleido hung swiftshader). Crossing between two different families renders both: the slowest spot.
+- Hive tuning: trail evaporation must be slow (~8%/s) or no trail survives. Foragers must not climb trail gradients (nest is the max), so they use a home vector. Ants sharing one grid cell move in lockstep unless they get individual traits and jittered sensing.

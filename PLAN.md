@@ -92,3 +92,7 @@ Open: Shuffle runs hold ~8 min (Ascend resets the Shuffle count, so the old "Shu
 - Lineage: consonant excited pairs that touch breed a hybrid (blended traits + mutation, gen+1). Bestiary saved per world.
 - Music: L-system phrase from species motif, chord progression per bar, bass/pad/counter voices unlock by depth.
 - Region heart: one large long-span landmark per region singing the root; tap it to take the root tone.
+
+## Hyperslice v4 (DONE): the hive along w
+Ant colony lives at hive.w (±1.15–1.5). Sun drifts the slice ±0.65 in w on a 150 s day. Ants: individual traits, 3 chemical fields on a 12^4 grid, path integration home.
+Order = 1 − spatial entropy. Chorus tunes with order. Passing the core (needs region ±1 open) = "hive mind" event. Next: real-device fps with ~400 ants.

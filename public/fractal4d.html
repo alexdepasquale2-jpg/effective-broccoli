@@ -23,12 +23,12 @@
   Places <select id="places"></select>
   <div id="stats"></div>
   <div id="msg" style="color:#ffd;min-height:1.4em"></div>
-  <div style="opacity:.6">Tap a creature to take its tone. Hum into the mic to sing. 3 attuned notes = a chord, which unlocks the next region of w.<br>Shift-drag / 4D mode / 2 fingers: move through w · pinch or wheel: zoom · WASD/QE fly · R/F: w</div>
+  <div style="opacity:.6">Tap a creature to take its tone. Hum into the mic to sing. 3 attuned notes = a chord, which unlocks the next region of w.<br>Shift-drag / 4D mode / 2 fingers: move through w · pinch or wheel: zoom · WASD/QE fly · R/F: w<br>The sun drags the slice through w. Something lives nearby along w.</div>
 </div>
 <script>
 'use strict';
 const cv = document.getElementById('c');
-const gl = cv.getContext('webgl2', {antialias:false, powerPreference:'high-performance'});
+const gl = cv.getContext('webgl2', {antialias:false, depth:true, powerPreference:'high-performance'});
 if (!gl) document.body.innerHTML = '<p style="color:#fff;padding:20px">WebGL2 required.</p>';
 
 const MAX_ENT = 24;
@@ -55,6 +55,8 @@ uniform vec4 uC2;         // region B constant
 uniform vec4 uFP, uFP2;   // family params A, B
 uniform vec3 uPal[4];     // cosine palette a,b,c,d (already blended)
 uniform vec2 uVib;        // surface vibration frequency, fog density
+uniform vec4 uSun;        // sun direction xyz + daylight
+uniform vec2 uHive;       // hive nearness, hive order
 
 vec4 qsq(vec4 a){ return vec4(a.x*a.x-dot(a.yzw,a.yzw), 2.0*a.x*a.yzw); }
 vec4 qcube(vec4 a){ float r2=dot(a.yzw,a.yzw); return vec4(a.x*(a.x*a.x-3.0*r2), a.yzw*(3.0*a.x*a.x-r2)); }
@@ -143,6 +145,10 @@ vec3 map(vec3 p){
     else if(k.x<2.5){ q.xy=rot2(a)*q.xy; d = sdTorus(q, e.w, e.w*0.3); }
     else if(k.x<3.5){ q.xz=rot2(a)*q.xz; q.xy=rot2(a*0.7)*q.xy; d = sdOcta(q, e.w*1.3); }
     else if(k.x<4.5){ vec3 n=normalize(q+1e-5); d = length(q) - e.w*(0.75+0.35*sin(6.0*atan(n.z,n.x)+a*4.0)*sin(5.0*acos(clamp(n.y,-1.0,1.0)))); d*=0.6; }
+    else if(k.x>5.5 && k.x<6.5){ // hive core: a hollow shell eaten through by a gyroid comb
+      q.xz=rot2(a*0.3)*q.xz; float sc = 9.0/max(e.w,0.05); vec3 g3 = q*sc;
+      float gy = (abs(dot(sin(g3), cos(g3.yzx))) - 0.35)/sc;
+      d = max(abs(length(q)-e.w*0.8)-e.w*0.2, gy)*0.7; }
     else { q.yz=rot2(a*0.5)*q.yz; d = min(length(q)-e.w*0.55, sdTorus(q, e.w, e.w*0.06)); q.xy=rot2(1.57)*q.xy; d = min(d, sdTorus(q, e.w*1.25, e.w*0.04)); }
     d += wob*e.w;
     if(d<r.x) r = vec3(d, float(i+1), 0.0);
@@ -162,7 +168,7 @@ void main(){
   vec3 rd = normalize(uFwd*1.6 + uRight*uv.x + uUp*uv.y);
   vec3 ro = uEye;
   // background: probability field haze
-  vec3 bg = pal(uHue+0.5) * (0.06+0.08*uBand.x) * (0.6+0.4*rd.y);
+  vec3 bg = pal(uHue+0.5) * (0.04+0.06*uSun.w+0.08*uBand.x) * (0.6+0.4*rd.y);
   float t = 0.0; vec3 h; bool hit=false; float glow=0.0;
   for(int i=0;i<110;i++){
     h = map(ro+rd*t);
@@ -174,18 +180,20 @@ void main(){
   vec3 col = bg;
   if(hit){
     vec3 p = ro+rd*t, n = normal(p);
-    vec3 L = normalize(vec3(0.6,0.8,-0.4));
+    vec3 L = uSun.xyz;
     float dif = max(dot(n,L),0.0), amb = 0.5+0.5*n.y;
     float fres = pow(1.0-max(dot(n,-rd),0.0), 3.0);
     vec3 base;
     if(h.y<0.5) base = pal(uHue + 0.3*sqrt(h.z) + 0.15*uBand.z);
-    else { int id=int(h.y)-1; float kk=uEntK[id].x; base = hsv(uEntK[id].y, kk>8.5?0.3:0.9, 1.0) * (kk>8.5 ? 5.0 : kk>4.5 ? 2.5+3.0*uBand.x : 1.5 + 2.0*uBand.w + 20.0*uEntK[id].w); }
-    col = base*(0.25*amb + 0.85*dif) + fres*pal(uHue+0.6)*(0.4+uBand.x);
+    else { int id=int(h.y)-1; float kk=uEntK[id].x; base = kk>5.5 && kk<6.5 ? vec3(1.0,0.62,0.18)*(1.0+4.0*uHive.y) : hsv(uEntK[id].y, kk>8.5?0.3:0.9, 1.0) * (kk>8.5 ? 5.0 : kk>4.5 ? 2.5+3.0*uBand.x : 1.5 + 2.0*uBand.w + 20.0*uEntK[id].w); }
+    col = base*(0.25*amb + (0.35+0.6*uSun.w)*dif) + fres*pal(uHue+0.6)*(0.4+uBand.x);
     col = mix(col, bg, 1.0-exp(-uVib.y*t*t));
   }
   col += pal(uHue+0.1) * glow * 0.004 * (0.3 + uBand.w*2.0);
   col = pow(col/(1.0+col), vec3(0.4545));
+  col = mix(col, col*vec3(1.25,0.95,0.55) + vec3(0.05,0.03,0.0), uHive.x*0.6); // amber cast near the hive
   o = vec4(col,1);
+  gl_FragDepth = hit ? clamp(t*dot(rd,uFwd)/8.0, 0.0, 1.0) : 1.0;
 }`;
 
 function sh(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
@@ -193,10 +201,12 @@ function sh(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); g
 const prog = gl.createProgram();
 gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
 gl.linkProgram(prog); gl.useProgram(prog);
+const mvao = gl.createVertexArray(); gl.bindVertexArray(mvao); gl.enable(gl.DEPTH_TEST);
 gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
 gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
-const U = {}; for (const n of ['uFam','uBlend','uC2','uFP','uFP2','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
+gl.bindVertexArray(null);
+const U = {}; for (const n of ['uSun','uHive','uFam','uBlend','uC2','uFP','uFP2','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
 
 // ================= 6. World generator: one seed per world, one genome per region of w =================
 function mulberry(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
@@ -272,7 +282,7 @@ function ensureCtx(){
     master = actx.createGain(); master.gain.value = 0.25;
     const echo = actx.createDelay(), fb = actx.createGain(); echo.delayTime.value = 0.31; fb.gain.value = 0.35;
     master.connect(echo); echo.connect(fb); fb.connect(echo); echo.connect(actx.destination); master.connect(actx.destination);
-    hookAudio(master);
+    hookAudio(master); hiveAudio();
     // region drone: two detuned oscillators that glide to the new root when you cross into another region
     const g = actx.createGain(); g.gain.value = 0.05; g.connect(master);
     drone = [0,1].map(i => { const o = actx.createOscillator(); o.type='sine'; o.frequency.value = region(curRegion).root/2*(1+i*0.004); o.connect(g); o.start(); return o; });
@@ -373,7 +383,7 @@ function waveAt(p){
 // ================= 5. Entity life: species, temperament, resonance, breeding, death =================
 const ents = []; let entCap = MAX_ENT-1; const rng = Math.random;
 let tone = 0, curRegion = 0, lastTapped = null;
-const player = () => [cam.target[0], cam.target[1], cam.target[2], nav4.w];
+const player = () => [cam.target[0], cam.target[1], cam.target[2], W];
 const jitter = (x, k) => x*(1+(rng()-.5)*2*k);
 function individual(sp, g, w0, p){
   const deg = sp.motif[Math.floor(rng()*sp.motif.length)];
@@ -381,7 +391,7 @@ function individual(sp, g, w0, p){
     span: jitter(sp.span,.1), size: jitter(sp.size,.1), kind: sp.shape, osc: jitter(sp.osc,.1), max: jitter(sp.life,.2),
     life: 0, phase: rng()*6.28, excite: 0, attuned: 0, amp: 0, bred: -99, gen: sp.gen };
 }
-function spawn(){ const g = region(curRegion); return individual(g.species[Math.floor(rng()*g.species.length)], g, nav4.w+(rng()-.5)*1.8); }
+function spawn(){ const g = region(curRegion); return individual(g.species[Math.floor(rng()*g.species.length)], g, W+(rng()-.5)*1.8); }
 function makeHeart(){ // the region's landmark: large, long-lived, spans most of the region's w, sings the root
   const g = region(curRegion);
   const h = individual({ name: 'Heart ' + curRegion, temper: 'anchor', social:0, curious:0, shy:0, drift:0, shape:5, size:0.16, span:0.9,
@@ -413,7 +423,7 @@ function stepEnts(dt, t){
   const P = player();
   for (let i=0;i<ents.length;i++){
     let e = ents[i]; e.life += dt;
-    if (!e.heart && ((e.life > e.max && e.attuned <= 0) || Math.hypot(e.p[0],e.p[1],e.p[2]) > 2.4 || Math.abs(e.p[3]-nav4.w) > 1.8)) e = ents[i] = spawn();
+    if (!e.heart && ((e.life > e.max && e.attuned <= 0) || Math.hypot(e.p[0],e.p[1],e.p[2]) > 2.4 || Math.abs(e.p[3]-W) > 1.8)) e = ents[i] = spawn();
     const sp = e.sp, listen = analyser ? freq[binOf(e.f)]/255 : 0.5+0.5*Math.sin(t*e.osc*0.3+e.phase);
     // wave fronts that pass an entity excite it if they agree with its pitch; player waves attune it, shy ones flee dissonance
     for (const w of waves) if (!w.hit.has(e) && Math.abs(dist4(e.p,w.p)-(clock-w.t0)*1.2) < 0.15){
@@ -527,7 +537,7 @@ function setWorld(seed, name){
   saveData.worlds[world.seed] = saveData.worlds[world.seed] || { name, unlocked: 0, chords: [] };
   cur().seen = cur().seen || []; saveData.last = world.seed; save();
   Object.assign(nav4, {w:0, rot:0, vw:0, vr:0, tw:0, tr:0}); curRegion = 0; tone = 0; waves.length = 0;
-  reseed(); refreshPlaces(); say('Entered ' + cur().name);
+  reseed(); hiveReset(); refreshPlaces(); say('Entered ' + cur().name);
 }
 const placesEl = document.getElementById('places');
 function refreshPlaces(){
@@ -537,6 +547,148 @@ function refreshPlaces(){
 }
 placesEl.onchange = () => setWorld(+placesEl.value, saveData.worlds[placesEl.value].name);
 document.getElementById('seed').onclick = () => { const s = (Math.random()*4e9)>>>0; setWorld(s, 'World ' + s.toString(36)); };
+
+// ================= 11. The hive: a swarm mind living elsewhere along w =================
+// Ants are 4D agents. Nothing steers them but chemistry: three fields on a coarse 4D grid that spread and fade.
+//   home  - laid by the core and by outbound foragers, followed back by carriers
+//   trail - laid by carriers, followed out by foragers
+//   scent - given off by resonating creatures in our slice (the food)
+// Trails, swarms and the hive's order all emerge from these local rules.
+const HG = 12, HG4 = HG**4, HSTRIDE = [HG**3, HG**2, HG, 1];
+const hive = { w: 1.3, core: [0,0,0], ants: [], home: new Float32Array(HG4), trail: new Float32Array(HG4), scent: new Float32Array(HG4),
+  tmp: new Float32Array(HG4), food: 0, order: 0, near: 0, inside: false, met: false, seenHere: 0, chorus: null, filt: null, chGain: null };
+const core4 = () => [...hive.core, hive.w];
+function cellCoord(x, a){ const lo = a<3 ? -2 : hive.w-1.6, span = a<3 ? 4 : 3.2; return Math.max(0, Math.min(HG-1, Math.floor((x-lo)/span*HG))); }
+function cell(p){ return cellCoord(p[0],0)*HSTRIDE[0] + cellCoord(p[1],1)*HSTRIDE[1] + cellCoord(p[2],2)*HSTRIDE[2] + cellCoord(p[3],3); }
+// gradient sensed through jittered antennae, so neighbouring ants disagree a little
+function gradOf(f, p, out){ for (let a=0;a<4;a++){ const h = a<3 ? 0.33 : 0.27, q = p.map(x => x+(rng()-.5)*0.25); q[a] += h; const up = f[cell(q)]; q[a] -= 2*h; out[a] = up - f[cell(q)]; } return out; }
+function newAnt(at){ const v = [0,0,0,0].map(() => rng()-.5); return { p: (at || core4()).map(x => x+(rng()-.5)*0.1), v, carry: 0, age: 0, max: 90+rng()*110,
+    spd: 0.8+rng()*0.45, nz: 0.9+rng()*0.8, sens: 0.6+rng()*0.8 }; } // every ant a little different
+function hiveReset(){
+  const R = mulberry(hash2(world.seed, 777));
+  hive.w = (R()<.5 ? -1 : 1)*(1.15+R()*0.35); hive.core = [0,0,0].map(() => (R()-.5)*0.8);
+  for (const f of [hive.home, hive.trail, hive.scent]) f.fill(0);
+  hive.ants.length = 0; hive.food = 0; hive.met = false; hive.inside = false; hive.announced = false;
+  for (let i=0;i<260;i++) hive.ants.push(newAnt());
+}
+function diffuse(f, rate, evap){ // each cell relaxes toward the mean of its 8 4D neighbours, then fades
+  const t = hive.tmp;
+  for (let c=0;c<HG4;c++){
+    let sum = 0;
+    for (let a=0;a<4;a++){ const s = HSTRIDE[a], i = Math.floor(c/s)%HG; sum += f[i>0 ? c-s : c] + f[i<HG-1 ? c+s : c]; }
+    t[c] = (f[c]*(1-rate) + sum/8*rate)*(1-evap);
+  }
+  f.set(t);
+}
+const G = [0,0,0,0], G2 = [0,0,0,0], occ = new Map();
+function stepHive(dt, t){
+  const C = core4(), P = player();
+  hive.home[cell(C)] += 6*dt;
+  for (const e of ents){ // resonance is food: each creature holds a store that refills as it sings
+    e.store = Math.min(e.heart ? 3 : 1, (e.store ?? 1) + dt*0.04*(0.3+e.amp)*(e.heart ? 3 : 1));
+    hive.scent[cell(e.p)] += e.store*(0.3+e.amp)*dt; }
+  if (frames % 3 === 0){ diffuse(hive.home, 0.3, 0.002); diffuse(hive.trail, 0.1, 0.004); diffuse(hive.scent, 0.3, 0.01); } // trails last ~10 s, nest smell much longer
+  hive.inside = dist4(P, C) < 0.5;
+  occ.clear();
+  const ants = hive.ants;
+  for (let i=ants.length-1;i>=0;i--){
+    const a = ants[i]; a.age += dt;
+    if (a.age > a.max){ ants.splice(i,1); continue; }
+    // sense: carriers smell home, foragers smell trail and food; gradients are normalised so only direction matters
+    if (a.carry){ // carriers smell home and also keep a sense of where home is (path integration, as real ants do)
+      gradOf(hive.home, a.p, G); const hd = dist4(C, a.p) || 1, gm = Math.hypot(...G) || 1;
+      for (let k=0;k<4;k++) G[k] = 0.5*G[k]/gm + (C[k]-a.p[k])/hd; }
+    else { // foragers follow trails outward: they know where home is, so they never climb a trail back to the nest
+      gradOf(hive.trail, a.p, G); gradOf(hive.scent, a.p, G2);
+      const hd = dist4(C, a.p) || 1; let back = 0;
+      for (let k=0;k<4;k++) back += G[k]*(a.p[k]-C[k])/hd;
+      const here = Math.min(1, hive.trail[cell(a.p)]);
+      for (let k=0;k<4;k++){ const out = (a.p[k]-C[k])/hd; if (back < 0) G[k] -= back*out; G[k] += 0.7*G2[k] + 0.3*here*out; } }
+    const gl0 = Math.hypot(...G), pull = a.carry ? 1/(gl0||1) : a.sens*Math.min(1, gl0*1.5)/(gl0+1e-6); // faint smells only nudge
+    let vl = 0;
+    for (let k=0;k<4;k++){
+      let d = a.v[k] + 1.4*G[k]*pull + (rng()-.5)*a.nz;            // persistence + chemistry + noise
+      if (hive.inside && !a.carry) d += 0.8*(P[k]-a.p[k]);           // the mind turns toward you
+      a.v[k] += (d - a.v[k])*Math.min(1, 4*dt); vl += a.v[k]**2;
+    }
+    vl = Math.sqrt(vl) || 1;
+    for (let k=0;k<4;k++){
+      a.v[k] /= vl; a.p[k] += a.v[k]*0.32*a.spd*dt;
+      const lo = k<3 ? -2 : hive.w-1.6, hi = k<3 ? 2 : hive.w+1.6;
+      if (a.p[k] < lo || a.p[k] > hi){ a.p[k] = Math.max(lo, Math.min(hi, a.p[k])); a.v[k] *= -1; }
+    }
+    if (a.carry){
+      hive.trail[cell(a.p)] += 1.2*dt;
+      if (dist4(a.p, C) < 0.2){ a.carry = 0; hive.food++; for (let k=0;k<4;k++) a.v[k] *= -1;
+        if (ants.length < 700){ hive.food--; ants.push(newAnt()); } }
+    } else {
+      hive.home[cell(a.p)] += 0.35*dt;
+      for (const e of ents) if (e.store > 0.08 && dist4(a.p, e.p) < 0.12 + e.size){ e.store -= 0.08; a.carry = 1; e.excite = Math.min(1, e.excite+0.25); for (let k=0;k<4;k++) a.v[k] *= -1; break; }
+    }
+    // occupancy on a coarse 6^4 grid, for spatial entropy
+    let key = 0; for (let k=0;k<4;k++) key = key*6 + Math.floor(cellCoord(a.p[k],k)/2);
+    occ.set(key, (occ.get(key)||0) + 1);
+  }
+  if (ants.length < 120 && rng() < dt*2) ants.push(newAnt()); // the hive never quite dies out
+  // order = 1 - spatial entropy: high when the colony gathers into nest and trails, low when it is scattered noise
+  let H = 0; for (const c of occ.values()){ const q = c/ants.length; H -= q*Math.log(q); }
+  hive.order += ((1 - H/Math.log(Math.min(ants.length, 1296))) - hive.order)*Math.min(1, dt);
+  hive.near = Math.exp(-(((W-hive.w)/0.55)**2));
+  if (hive.inside && !hive.met){ hive.met = true; say('You are passing through the hive mind.'); buzz([30,60,30,60,30]); }
+  if (!hive.inside && hive.met && dist4(P, C) > 0.9){ hive.met = false; say('The hive mind falls behind you, along w.'); }
+  // chorus: many detuned voices; order pulls them into tune and opens the filter
+  if (hive.chorus){
+    const g = region(curRegion), now = actx.currentTime, spread = (1-hive.order)*0.06;
+    hive.chorus.forEach((o,k) => o.frequency.setTargetAtTime(pitch(g, [0,2,4,7][k])*(1+spread*(k%2 ? 1 : -1)*(1+k*0.3)), now, 0.4));
+    hive.filt.frequency.setTargetAtTime(250 + hive.order*2500, now, 0.3);
+    hive.chGain.gain.setTargetAtTime(Math.min(0.12, hive.seenHere*0.0015 + hive.near*0.06 + (hive.inside ? 0.05 : 0)), now, 0.5);
+  }
+}
+function hiveAudio(){
+  hive.filt = actx.createBiquadFilter(); hive.filt.type = 'lowpass'; hive.filt.Q.value = 3;
+  hive.chGain = actx.createGain(); hive.chGain.gain.value = 0; hive.filt.connect(hive.chGain); hive.chGain.connect(master);
+  hive.chorus = [0,1,2,3].map(() => { const o = actx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 220; o.connect(hive.filt); o.start(); return o; });
+}
+
+// ants are drawn as depth-tested glowing points over the raymarched scene
+const PVS = `#version 300 es
+in vec4 a; in vec3 c;
+uniform vec3 uEye, uFwd, uRight, uUp; uniform vec2 uRes;
+out vec3 vc;
+void main(){
+  vec3 v = a.xyz - uEye; float z = dot(v, uFwd);
+  gl_Position = vec4(1.6*dot(v,uRight)*uRes.y/uRes.x, 1.6*dot(v,uUp), (clamp(z/8.0,0.0,1.0)*2.0-1.0)*z, z);
+  gl_PointSize = max(1.5, 0.8*a.w*uRes.y/max(z,0.1)); vc = c;
+}`;
+const PFS = `#version 300 es
+precision highp float; in vec3 vc; out vec4 o;
+void main(){ vec2 d = gl_PointCoord-0.5; float r = dot(d,d)*4.0; if (r > 1.0) discard; o = vec4(vc*(1.0-r), 1.0); }`;
+const pprog = gl.createProgram();
+gl.attachShader(pprog, sh(gl.VERTEX_SHADER, PVS)); gl.attachShader(pprog, sh(gl.FRAGMENT_SHADER, PFS)); gl.linkProgram(pprog);
+const PU = {}; for (const n of ['uEye','uFwd','uRight','uUp','uRes']) PU[n] = gl.getUniformLocation(pprog, n);
+const pvao = gl.createVertexArray(), pbuf = gl.createBuffer(), pdata = new Float32Array(700*7);
+gl.bindVertexArray(pvao); gl.bindBuffer(gl.ARRAY_BUFFER, pbuf); gl.bufferData(gl.ARRAY_BUFFER, pdata.byteLength, gl.DYNAMIC_DRAW);
+const la = gl.getAttribLocation(pprog,'a'), lc = gl.getAttribLocation(pprog,'c');
+gl.enableVertexAttribArray(la); gl.vertexAttribPointer(la,4,gl.FLOAT,false,28,0);
+gl.enableVertexAttribArray(lc); gl.vertexAttribPointer(lc,3,gl.FLOAT,false,28,16);
+gl.bindVertexArray(null);
+const ANT_SPAN = 0.07; // ants are thin in w: you only see them where their path crosses our slice
+function drawAnts(eye, fwd, right, upv, w, h){
+  let n = 0;
+  for (const a of hive.ants){
+    const dw = a.p[3]-W; if (Math.abs(dw) >= ANT_SPAN) continue;
+    const k = Math.sqrt(1-(dw/ANT_SPAN)**2), glow = (0.5+hive.order)*k;
+    pdata.set([a.p[0],a.p[1],a.p[2], 0.04*k, ...(a.carry ? [1.6*glow,1.15*glow,0.4*glow] : [0.9*glow,0.5*glow,0.2*glow])], n*7); n++;
+  }
+  hive.seenHere = n;
+  if (!n) return;
+  gl.useProgram(pprog); gl.bindVertexArray(pvao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, pbuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, pdata, 0, n*7);
+  gl.uniform3fv(PU.uEye,eye); gl.uniform3fv(PU.uFwd,fwd); gl.uniform3fv(PU.uRight,right); gl.uniform3fv(PU.uUp,upv); gl.uniform2f(PU.uRes,w,h);
+  gl.depthFunc(gl.LESS); gl.depthMask(false); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  gl.drawArrays(gl.POINTS, 0, n);
+  gl.disable(gl.BLEND); gl.depthMask(true); gl.bindVertexArray(null);
+}
 
 // ================= 10. Smoothness + 2. Rendering loop =================
 let scale = 0.6, last = performance.now(), fpsAvg = 60, frames = 0, W = 0, humT = 0, humDeg = null, humCount = 0;
@@ -564,7 +716,10 @@ function frame(now){
   const lim = cur().unlocked + 0.45;
   if (Math.abs(nav4.w) > lim){ nav4.w = Math.sign(nav4.w)*lim; nav4.tw = nav4.w; if (Math.abs(nav4.vw) > 0.05) buzz(30); nav4.vw = 0;
     if (msgT <= 0) say('The w-membrane hums shut. Find a chord to open it.'); }
-  W = nav4.w;
+  // the sun drags the slice along w: a day and a slower season. The membrane still holds.
+  const DAY = 150, dayPh = t/DAY*6.2832, sunDrift = 0.45*Math.sin(dayPh) + 0.2*Math.sin(dayPh/5.3);
+  W = Math.max(-lim, Math.min(lim, nav4.w + sunDrift));
+  const sunDir = norm([Math.cos(dayPh), 0.25+0.75*Math.abs(Math.sin(dayPh)), -0.4]), daylight = 0.5+0.5*Math.sin(dayPh);
   const reg = Math.round(W);
   if (reg !== curRegion){
     curRegion = reg; const g = region(reg); buzz(12);
@@ -592,6 +747,7 @@ function frame(now){
     else humCount = 0;
   }
   stepEnts(dt, t);
+  stepHive(dt, t);
   if (actx) checkChord(W);
   chordCool -= dt; msgT -= dt; if (msgT <= 0 && msgEl.textContent && msgT > -0.1) msgEl.textContent = '';
   while (waves.length && t - waves[0].t0 > 6) waves.shift();
@@ -608,6 +764,7 @@ function frame(now){
   const toneHue = tone ? (Math.log2(tone)%1) : hue;
   ent.set([...cam.target, 0.045*(1+0.3*Math.sin(t*6))], 0); entK.set([9, toneHue, 2, 0], 0);
   let n = 1;
+  { const dw = hive.w-W, span = 0.6; if (Math.abs(dw) < span){ ent.set([...hive.core, 0.32*Math.sqrt(1-(dw/span)**2)*(1+0.08*Math.sin(t*3*(0.5+hive.order)))], 4); entK.set([6, 0.1, 1, 0], 4); n = 2; } }
   for (const e of ents){
     if (n > entCap) break;
     const dw = e.p[3]-W; if (Math.abs(dw) >= e.span){ e.seen = false; continue; }   // outside this 3D slice
@@ -627,7 +784,11 @@ function frame(now){
   gl.uniform2f(U.uVib, ga.vib+(gb.vib-ga.vib)*s, ga.fog+(gb.fog-ga.fog)*s); gl.uniform1f(U.uW,sliceW); gl.uniform2fv(U.uRot,rot);
   gl.uniform4f(U.uBand,band.bass,band.mid,band.high,band.flux); gl.uniform1f(U.uHue,hue);
   gl.uniform4fv(U.uEnt,ent); gl.uniform4fv(U.uEntK,entK); gl.uniform1i(U.uNEnt,n); gl.uniform4fv(U.uRip,rip);
+  gl.uniform4f(U.uSun, ...sunDir, daylight); gl.uniform2f(U.uHive, hive.near, hive.order);
+  gl.useProgram(prog); gl.bindVertexArray(mvao); gl.depthFunc(gl.ALWAYS);
   gl.drawArrays(gl.TRIANGLES,0,3);
+  drawAnts(eye, fwd, right, upv, w, h);
+  if (hive.seenHere > 8 && !hive.announced){ hive.announced = true; say(`Something is reaching in from w ≈ ${hive.w.toFixed(1)}…`); }
 
   if (frames % 10 === 0){
     const att = ents.filter(e => e.attuned > 0).length;
@@ -637,6 +798,8 @@ function frame(now){
       `depth ${Math.abs(curRegion)} · ${FAMILY[region(curRegion).family]} · ${region(curRegion).species.length} species · ${region(curRegion).voices} voices\n` +
       `bestiary ${cur().seen.length}  hybrids ${hybrids.size}${lastTapped ? '  last: '+lastTapped.sp.name+' ('+lastTapped.sp.temper+(lastTapped.gen?', gen '+lastTapped.gen:'')+')' : ''}\n` +
       `tone ${tone ? tone.toFixed(0)+' Hz' : '-'}  attuned ${att}  chords ${cur().chords.length}\n` +
+      `sun ${daylight > 0.5 ? 'day' : 'night'} drift ${sunDrift>=0?'+':''}${sunDrift.toFixed(2)}  hive w ${hive.w.toFixed(2)}\n` +
+      `ants ${hive.ants.length} (${hive.seenHere} in slice)  order ${hive.order.toFixed(2)}${hive.inside ? '  INSIDE THE HIVE MIND' : ''}\n` +
       `audio: ${!actx ? 'tap to start' : micAn ? 'mic + synth' : 'synth'}  ${rapid ? 'rapid' : 'sensitive'}`;
   }
   requestAnimationFrame(frame);
