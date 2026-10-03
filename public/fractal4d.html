@@ -827,6 +827,7 @@ function frame(){
   for (let i=0;i<4;i++){ const wv = waves[waves.length-1-i];
     if (wv && Math.abs(wv.p[3]-W) < 0.8) rip.set([wv.p[0],wv.p[1],wv.p[2],t-wv.t0], i*4); else rip[i*4+3] = -1; }
 
+  gl.useProgram(prog); gl.bindVertexArray(mvao); // must be active before its uniforms are set (the ant pass switches programs)
   gl.uniform2f(U.uRes,w,h); gl.uniform1f(U.uT,t);
   gl.uniform3fv(U.uEye,eye); gl.uniform3fv(U.uFwd,fwd); gl.uniform3fv(U.uRight,right); gl.uniform3fv(U.uUp,upv);
   gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uBias,bias); gl.uniform1f(U.uSeed,(world.seed%9973)/97.0); gl.uniform3fv(U.uPal,palette);
@@ -834,7 +835,7 @@ function frame(){
   gl.uniform4f(U.uBand,band.bass,band.mid,band.high,band.flux); gl.uniform1f(U.uHue,hue);
   gl.uniform4fv(U.uEnt,ent); gl.uniform4fv(U.uEntK,entK); gl.uniform1i(U.uNEnt,n); gl.uniform4fv(U.uRip,rip);
   gl.uniform4f(U.uSun, ...sunDir, daylight); gl.uniform2f(U.uHive, hive.near, hive.order);
-  gl.useProgram(prog); gl.bindVertexArray(mvao); gl.depthFunc(gl.ALWAYS);
+  gl.depthFunc(gl.ALWAYS);
   gl.drawArrays(gl.TRIANGLES,0,3);
   drawAnts(eye, fwd, right, upv, w, h);
   if (hive.seenHere > 8 && !hive.announced){ hive.announced = true; say(`Something is reaching in from w ≈ ${hive.w.toFixed(1)}…`); }

@@ -96,3 +96,8 @@ Open: Shuffle runs hold ~8 min (Ascend resets the Shuffle count, so the old "Shu
 ## Hyperslice v4 (DONE): the hive along w
 Ant colony lives at hive.w (±1.15–1.5). Sun drifts the slice ±0.65 in w on a 150 s day. Ants: individual traits, 3 chemical fields on a 12^4 grid, path integration home.
 Order = 1 − spatial entropy. Chorus tunes with order. Passing the core (needs region ±1 open) = "hive mind" event. Next: real-device fps with ~400 ants.
+
+## Hyperslice v5 (DONE): a world built from 4D slices
+First-person flight through an endless lattice of golden cells (2φ²). Each cell: one of 6 4D families (any family anywhere, regions lean the odds), golden-angle rotation, own slice.
+w at a point = 0.55·sin(2.2·W + dist/φ²), so travel cycles you through slices. Shapes, scales, rhythms are continuous/generated. Fixed: fps counter (wall-clock), uniforms set on wrong program.
+Next: check on a real GPU; tune Kaleido/Menger/Icosa so they don't read as dust at low res.

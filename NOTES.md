@@ -17,3 +17,4 @@
 - FPS must be measured over wall-clock seconds: the GPU accepts ~20 frames fast then stalls, so per-frame dt reported 40+ fps while real was ~1–5. All fps numbers before this fix were wrong.
 - Swiftshader compiles the shader on first draw (~5–10 s); time steady-state frames, never the first draw.
 - Raymarch cost: test rays against creature bounding spheres once per pixel (gIds), and give each terrain cell a bounding sphere. Checking all 24 creatures per step was 5× the cost.
+- WebGL: gl.uniform* applies to the CURRENT program. Call useProgram(prog) before setting uniforms; the ant pass leaves pprog bound (this froze the world after frame 1 from v4 on).
