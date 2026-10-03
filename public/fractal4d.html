@@ -17,9 +17,10 @@
 <canvas id="c"></canvas>
 <div id="ui">
   <b>Hyperslice</b>: 4D Julia, 3D slices<br>
-  <button id="mic">Mic</button><label>Audio file<input id="file" type="file" accept="audio/*"></label><button id="hide">Hide</button>
+  <button id="mic">Mic</button><label>Audio file<input id="file" type="file" accept="audio/*"></label><button id="synth">Synth</button><button id="hide">Hide</button><br>
+  <button id="dmode">Drag: orbit</button><button id="smode">Mode: sensitive</button><button id="seed">New seed</button>
   <div id="stats"></div>
-  <div style="opacity:.6">Drag: orbit · Wheel: zoom · WASD/QE: fly · Space: reseed</div>
+  <div style="opacity:.6">Shift-drag or 4D mode: horizontal rotates through w, vertical moves the slice · Wheel: zoom · WASD/QE: fly · Space: reseed</div>
 </div>
 <script>
 'use strict';
@@ -155,6 +156,54 @@ document.getElementById('file').onchange = e => {
   ensureCtx(); const a = new Audio(URL.createObjectURL(e.target.files[0])); a.loop = true; a.play();
   const src = actx.createMediaElementSource(a); hookAudio(src); src.connect(actx.destination);
 };
+// ---------- procedural genome: one seed drives waves, patterns and sound ----------
+function mulberry(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const SCALES = {pentatonic:[1,9/8,5/4,3/2,5/3], harmonic:[1,5/4,3/2,7/4,2,9/4], whole:[1,9/8,5/4,45/32,8/5,16/9], minor:[1,9/8,6/5,4/3,3/2,8/5,9/5]};
+let G;
+function makeGenome(seed){
+  const R = mulberry(seed), pick = a => a[Math.floor(R()*a.length)];
+  const names = Object.keys(SCALES), scale = pick(names);
+  const steps = 8+Math.floor(R()*9), hits = 3+Math.floor(R()*(steps-4));
+  // Euclidean rhythm: evenly spread hits over steps
+  const rhythm = Array.from({length:steps}, (_,i) => (i*hits)%steps < hits);
+  return { seed, scale, ratios: SCALES[scale], root: 55*2**(R()*2), bpm: 70+R()*80, rhythm,
+    wave: pick(['sine','triangle','sawtooth','square']),
+    // four coupled wave frequencies + phases shape the Julia path; same ratios as the music
+    wf: [0,1,2,3].map(i => 0.05+0.04*SCALES[scale][i%SCALES[scale].length]*(0.5+R())),
+    ph: [0,1,2,3].map(() => R()*6.28), walk: 0, step: 0 };
+}
+G = makeGenome((Math.random()*1e9)|0);
+document.getElementById('seed').onclick = () => { G = makeGenome((Math.random()*1e9)|0); reseed(); };
+
+let synthOut = null, nextBeat = 0;
+document.getElementById('synth').onclick = () => {
+  ensureCtx(); if (synthOut) return;
+  synthOut = actx.createGain(); synthOut.gain.value = 0.25;
+  const verb = actx.createDelay(); verb.delayTime.value = 0.31; const fb = actx.createGain(); fb.gain.value = 0.35;
+  synthOut.connect(verb); verb.connect(fb); fb.connect(verb); verb.connect(actx.destination); synthOut.connect(actx.destination);
+  hookAudio(synthOut); synthOut.connect(verb); nextBeat = actx.currentTime;
+};
+function note(freq, when, dur, vol, pan){
+  const o = actx.createOscillator(), g = actx.createGain(), p = actx.createStereoPanner();
+  o.type = G.wave; o.frequency.value = freq; p.pan.value = pan;
+  g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(vol, when+0.01); g.gain.exponentialRampToValueAtTime(1e-4, when+dur);
+  o.connect(g); g.connect(p); p.connect(synthOut); o.start(when); o.stop(when+dur+0.05);
+}
+const pitch = deg => G.root * G.ratios[((deg%G.ratios.length)+G.ratios.length)%G.ratios.length] * 2**Math.floor(deg/G.ratios.length);
+function scheduleSynth(){
+  if (!synthOut) return;
+  const spb = 60/G.bpm/2;
+  while (nextBeat < actx.currentTime + 0.1){
+    if (G.rhythm[G.step % G.rhythm.length]){
+      G.walk += Math.round((Math.random()-0.5)*3); G.walk = Math.max(-2, Math.min(12, G.walk)); // random walk melody
+      note(pitch(G.walk+5), nextBeat, spb*1.8, 0.18, Math.sin(G.step));
+    }
+    if (G.step % G.rhythm.length === 0) note(pitch(0)/2, nextBeat, spb*6, 0.25, 0);       // bass drone on bar start
+    G.step++; nextBeat += spb;
+  }
+}
+const seen = new Set(); // entities entering the slice ring their own pitch
+
 document.getElementById('hide').onclick = () => document.getElementById('ui').style.display='none';
 
 const band = {bass:0, mid:0, high:0, flux:0, centroid:0.3, peakBin:0};
@@ -209,8 +258,24 @@ function stepEnts(dt, t, W){
 // ---------- camera ----------
 const cam = {yaw:0.6, pitch:0.3, dist:3.2, target:[0,0,0]};
 let drag=null; const keys={};
-cv.onpointerdown = e => { drag=[e.clientX,e.clientY]; cv.setPointerCapture(e.pointerId); };
-cv.onpointermove = e => { if(!drag) return; cam.yaw -= (e.clientX-drag[0])*0.005; cam.pitch=Math.max(-1.5,Math.min(1.5,cam.pitch+(e.clientY-drag[1])*0.005)); drag=[e.clientX,e.clientY]; };
+let dragMode = 'orbit', rapid = false;
+const nav4 = {w:0, rot:0, vw:0, vr:0, tw:0, tr:0}; // user offset in w + xw rotation, velocities, smoothing targets
+document.getElementById('dmode').onclick = e => { dragMode = dragMode==='orbit'?'4d':'orbit'; e.target.textContent = 'Drag: '+(dragMode==='4d'?'4D':'orbit'); };
+document.getElementById('smode').onclick = e => { rapid = !rapid; e.target.textContent = 'Mode: '+(rapid?'rapid':'sensitive'); };
+let lastMove = 0;
+cv.onpointerdown = e => { drag=[e.clientX,e.clientY]; lastMove=performance.now(); cv.setPointerCapture(e.pointerId); };
+cv.onpointermove = e => { if(!drag) return;
+  if (dragMode==='4d' || e.shiftKey){
+    const dx=e.clientX-drag[0], dy=e.clientY-drag[1], now=performance.now(), dtm=Math.max(1,now-lastMove); lastMove=now;
+    if (rapid){ // speed-adaptive: fast flicks accelerate and glide on
+      const acc = 0.004*(1 + Math.hypot(dx,dy)/dtm*1.5);
+      nav4.vr += dx*acc*8; nav4.vw -= dy*acc*8;
+    } else {    // sensitive: fine steps, eased toward target, no glide
+      nav4.tr += dx*0.0012; nav4.tw -= dy*0.0008;
+    }
+    drag=[e.clientX,e.clientY]; return;
+  }
+  cam.yaw -= (e.clientX-drag[0])*0.005; cam.pitch=Math.max(-1.5,Math.min(1.5,cam.pitch+(e.clientY-drag[1])*0.005)); drag=[e.clientX,e.clientY]; };
 cv.onpointerup = () => drag=null;
 cv.onwheel = e => { cam.dist = Math.max(0.4, Math.min(7, cam.dist*Math.exp(e.deltaY*0.001))); };
 onkeydown = e => { keys[e.key.toLowerCase()]=1; if(e.key===' ') reseed(); };
@@ -229,15 +294,20 @@ function frame(now){
   readAudio(t);
   // pattern algorithm: audio picks the Julia constant on a 4D Lissajous path
   const cb = 0.15+0.25*band.centroid;
-  const C = [-0.2+0.25*Math.sin(t*0.13)+0.15*band.bass, 0.55*Math.cos(t*0.09+band.mid), cb*Math.sin(t*0.17), 0.2*Math.cos(t*0.07)+0.1*band.high];
-  const W = 0.6*Math.sin(t*0.1) + 0.25*band.bass;                 // slice drifts through w; bass pushes it
-  const rot = [t*0.05 + band.mid*0.3, Math.sin(t*0.04)*0.8];
+  const C = [-0.2+0.25*Math.sin(t*G.wf[1]*2+G.ph[1])+0.15*band.bass, 0.55*Math.cos(t*G.wf[2]*1.5+G.ph[2]+band.mid), cb*Math.sin(t*G.wf[3]*2+G.ph[3]), 0.2*Math.cos(t*G.wf[0])+0.1*band.high];
+  if (rapid){ nav4.rot += nav4.vr*dt; nav4.w += nav4.vw*dt; const k=Math.exp(-1.5*dt); nav4.vr*=k; nav4.vw*=k; nav4.tr=nav4.rot; nav4.tw=nav4.w; }
+  else { const k=1-Math.exp(-8*dt); nav4.rot += (nav4.tr-nav4.rot)*k; nav4.w += (nav4.tw-nav4.w)*k; nav4.vr=nav4.vw=0; }
+  nav4.w = Math.max(-1.4, Math.min(1.4, nav4.w)); nav4.tw = Math.max(-1.4, Math.min(1.4, nav4.tw));
+  scheduleSynth();
+  const W = 0.6*Math.sin(t*G.wf[0]+G.ph[0]) + 0.25*band.bass + nav4.w;                // slice drifts through w; bass pushes it
+  const rot = [t*G.wf[3]*0.5 + band.mid*0.3 + nav4.rot, Math.sin(t*0.04)*0.8];
   const hue = (t*0.01 + band.centroid*0.6) % 1;
 
   stepEnts(dt, t, W);
   let n=0;
   for (const e of ents){
-    const dw = e.p[3]-W; if (Math.abs(dw) >= e.span) continue; // outside this 3D slice
+    const dw = e.p[3]-W; if (Math.abs(dw) >= e.span){ seen.delete(e); continue; } // outside this 3D slice
+    if (synthOut && !seen.has(e)){ seen.add(e); note(pitch(e.bin%12)*2, actx.currentTime, 0.6, 0.08, Math.max(-1,Math.min(1,e.p[0]))); }
     const r = e.size*Math.sqrt(1-(dw/e.span)**2) * (0.7+0.6*e.amp); // hypersphere cross-section
     ent.set([e.p[0],e.p[1],e.p[2],r], n*4); entK.set([e.kind, (e.hue+hue)%1, e.f, 0.08*e.amp], n*4); n++;
   }
@@ -259,7 +329,7 @@ function frame(now){
   if (frames % 10 === 0) document.getElementById('stats').textContent =
     `fps ${fpsAvg.toFixed(0)}  res ${(scale*100)|0}%  ${w}x${h}\nslice w ${W.toFixed(2)}  entities in slice ${n}/${ents.length}\n` +
     `bass ${band.bass.toFixed(2)} mid ${band.mid.toFixed(2)} high ${band.high.toFixed(2)} flux ${band.flux.toFixed(2)}\n` +
-    `audio: ${analyser?'live':'internal dream signal'}`;
+    `audio: ${synthOut?'synth':analyser?'live':'internal dream signal'}  seed ${G.seed} ${G.scale} ${G.bpm|0}bpm\n4D: w ${nav4.w.toFixed(2)} xw ${nav4.rot.toFixed(2)} (${rapid?'rapid':'sensitive'})`;
   requestAnimationFrame(frame);
 }
 function cross(a,b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
