@@ -79,5 +79,7 @@ Open: Shuffle runs hold ~8 min (Ascend resets the Shuffle count, so the old "Shu
 
 ## Species Chess (`?game=chess`, `src/species-chess/`)
 - Done: vendored chess.js 1.4.0 (BSD-2) with per-color perks; 4 species (base perk + 3 techs), stars economy (1/turn, 2/capture), DOM UI, hot-seat.
-- Next: CPU opponent, promotion picker, more species / tech tiers, balance pass.
+- Done: CPU (alpha-beta + capture quiescence, easy/normal/hard = depth 1/2/3), Human/CPU per side, `npm run chess-balance [games] [depth]`.
+- Balance (64 games, d2): Riders 72%, Tide 50%, Stone 42%, Mystics 36% — small sample; next: more games, then nerf Riders / buff Mystics.
+- Next: promotion picker, smarter tech-buy policy (bots buy in tree order), more species.
 - Blockers: none.

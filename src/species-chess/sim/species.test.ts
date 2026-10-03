@@ -24,6 +24,14 @@ describe('species chess', () => {
         assert.deepEqual(tos(m, 'd6'), ['d5', 'd7']);
     });
 
+    it('backward pawn moves do not promote on the home rank', () => {
+        const m = new Match(sp('tide'), sp('riders'));
+        m.chess.load('4k3/8/8/8/8/8/3P4/4K3 w - - 0 1');
+        const back = m.targets('d2').filter(x => x.to === 'd1');
+        assert.equal(back.length, 1);
+        assert.equal(back[0].promotion, undefined);
+    });
+
     it('perk attacks count for check and mate', () => {
         const m = new Match(sp('mystics'), sp('stone'));
         // white bishop on e7 attacks e8 via orthogonal step
@@ -54,5 +62,29 @@ describe('species chess', () => {
         assert.ok(m.move('e4', 'd5')?.captured);
         assert.equal(m.stars.w, 1 + 1 + 2);
         assert.equal(m.stars.b, 2);
+    });
+});
+
+describe('bot', () => {
+    it('takes a free queen', async () => {
+        const { chooseMove, mulberry32 } = await import('./ai.ts');
+        const m = new Match(sp('riders'), sp('stone'));
+        m.chess.load('4k3/8/8/3q4/8/8/8/3RK3 w - - 0 1');
+        assert.deepEqual(chooseMove(m, { depth: 2, rng: mulberry32(1) }), { from: 'd1', to: 'd5' });
+    });
+
+    it('finds mate in one', async () => {
+        const { chooseMove, mulberry32 } = await import('./ai.ts');
+        const m = new Match(sp('riders'), sp('stone'));
+        m.chess.load('6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1');
+        assert.deepEqual(chooseMove(m, { depth: 2, rng: mulberry32(1) }), { from: 'a1', to: 'a8' });
+    });
+
+    it('plays a full game without errors and buys techs', async () => {
+        const { botTurn, mulberry32 } = await import('./ai.ts');
+        const m = new Match(sp('tide'), sp('mystics'));
+        const bot = { depth: 1, rng: mulberry32(7) };
+        for (let i = 0; i < 60 && !m.chess.isGameOver(); i++) assert.ok(botTurn(m, bot));
+        assert.ok(m.owned.w.length + m.owned.b.length > 0);
     });
 });

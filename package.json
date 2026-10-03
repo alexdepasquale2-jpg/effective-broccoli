@@ -8,6 +8,7 @@
     "build": "vite build --config vite/config.prod.mjs",
     "preview": "vite preview --host --port 8080 --strictPort --config vite/config.prod.mjs",
     "balance": "node --experimental-strip-types scripts/mergeborn-balance.ts",
+    "chess-balance": "node --experimental-strip-types scripts/species-chess-balance.ts",
     "test": "node --experimental-strip-types --test src/canon-lane/sim/*.test.ts src/mergeborn/sim/*.test.ts src/species-chess/sim/*.test.ts"
   },
   "devDependencies": {

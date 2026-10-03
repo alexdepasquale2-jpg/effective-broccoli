@@ -11,3 +11,4 @@
 - Automation must never reset past a better reset: auto-Shuffle skips when an Era or Revolution is available (bot caught a 13 h stall).
 - Every layer multiplier needs a rising gate, or that layer collapses to minutes (Era gates now rise +15/Era and +20/Revolution).
 - Species Chess: buying a tech that would give check is blocked (the opponent's king could otherwise be captured). Perks live outside FEN/undo.
+- Species Chess AI: use pseudoRaw + illegalRaw in search; legalRaw per node was ~7x slower. Hard (depth 3) is ~650 ms/move.

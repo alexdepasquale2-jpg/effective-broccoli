@@ -1,9 +1,13 @@
 import type { Color, Square } from './engine/chess.ts';
+import { botTurn, mulberry32 } from './sim/ai.ts';
 import { Match, SPECIES, STARS_PER_CAPTURE, STARS_PER_TURN, type Species } from './sim/species.ts';
 
 const GLYPH: Record<string, string> = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
 const FILES = 'abcdefgh';
 const NAME: Record<Color, string> = { w: 'White', b: 'Black' };
+// 0 = human, otherwise CPU search depth
+const PLAYERS: [number, string][] = [[0, 'Human'], [1, 'CPU easy'], [2, 'CPU normal'], [3, 'CPU hard']];
+const CPU_DELAY_MS = 400;
 
 const CSS = `
 #sc { font-family: system-ui, sans-serif; color: #eee; background: #14161d; min-height: 100vh; padding: 16px; box-sizing: border-box; }
@@ -12,7 +16,7 @@ const CSS = `
 #sc button:disabled { opacity: .45; cursor: default; }
 #sc .pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 #sc .sp { display: block; width: 100%; text-align: left; margin: 6px 0; }
-#sc .sp.on { border-color: #f5c84c; background: #3a3420; }
+#sc .ctl { margin-right: 6px; } #sc .ctl.on, #sc .sp.on { border-color: #f5c84c; background: #3a3420; }
 #sc .muted { color: #9aa3b5; font-size: 13px; }
 #sc .wrap { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
 #sc .board { display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); width: min(92vw, 520px); aspect-ratio: 1; border: 2px solid #3a4050; }
@@ -43,10 +47,13 @@ export default function StartSpeciesChess(parent: string) {
 
     const choice: Record<Color, Species> = { w: SPECIES[0], b: SPECIES[1] };
     let match: Match | null = null;
+    const ctrl: Record<Color, number> = { w: 0, b: 2 };
+    const rng = mulberry32(Date.now());
     let selected: Square | null = null;
 
     const setup = () => {
-        const col = (c: Color) => `<div><h3>${NAME[c]}</h3>${SPECIES.map(s => `
+        const col = (c: Color) => `<div><h3>${NAME[c]}</h3>
+            <div>${PLAYERS.map(([d, label]) => `<button class="ctl ${ctrl[c] === d ? 'on' : ''}" data-c="${c}" data-d="${d}">${label}</button>`).join('')}</div>${SPECIES.map(s => `
             <button class="sp ${choice[c] === s ? 'on' : ''}" data-c="${c}" data-s="${s.id}">
               <b>${s.emoji} ${s.name}</b><br><span class="muted">${s.blurb}<br>Start: ${s.base.text}</span>
             </button>`).join('')}</div>`;
@@ -55,6 +62,10 @@ export default function StartSpeciesChess(parent: string) {
             <div class="pick">${col('w')}${col('b')}</div><p><button id="go">Start game</button></p>`;
         el.querySelectorAll<HTMLButtonElement>('.sp').forEach(b => b.onclick = () => {
             choice[b.dataset.c as Color] = SPECIES.find(s => s.id === b.dataset.s)!;
+            setup();
+        });
+        el.querySelectorAll<HTMLButtonElement>('.ctl').forEach(b => b.onclick = () => {
+            ctrl[b.dataset.c as Color] = Number(b.dataset.d);
             setup();
         });
         el.querySelector<HTMLButtonElement>('#go')!.onclick = () => {
@@ -68,7 +79,7 @@ export default function StartSpeciesChess(parent: string) {
         const c = m.chess, t = NAME[c.turn()];
         if (c.isCheckmate()) return `Checkmate — ${NAME[c.turn() === 'w' ? 'b' : 'w']} wins!`;
         if (c.isDraw()) return 'Draw.';
-        return `${t} to move${c.isCheck() ? ' — check!' : ''}`;
+        return `${t} ${ctrl[c.turn()] ? 'is thinking…' : 'to move'}${c.isCheck() ? ' — check!' : ''}`;
     };
 
     const panel = (m: Match, c: Color) => {
@@ -77,10 +88,10 @@ export default function StartSpeciesChess(parent: string) {
             const owned = m.owned[c].includes(t.id);
             const why = owned ? null : m.blocker(c, t.id);
             return `<div class="tech"><span><b>${t.name}</b> <span class="muted">${t.cost}★</span><br><span class="muted">${t.text}</span></span>
-                ${owned ? '<span class="owned">✓</span>' : `<button data-buy="${t.id}" data-c="${c}" ${why ? `disabled title="${why}"` : ''}>${why ?? 'Buy'}</button>`}</div>`;
+                ${owned ? '<span class="owned">✓</span>' : ctrl[c] ? '' : `<button data-buy="${t.id}" data-c="${c}" ${why ? `disabled title="${why}"` : ''}>${why ?? 'Buy'}</button>`}</div>`;
         }).join('');
         return `<div class="panel ${m.chess.turn() === c ? 'turn' : ''}">
-            <b>${NAME[c]}: ${s.emoji} ${s.name}</b> — <b>${m.stars[c]}★</b>
+            <b>${NAME[c]}${ctrl[c] ? ' (CPU)' : ''}: ${s.emoji} ${s.name}</b> — <b>${m.stars[c]}★</b>
             <div class="muted">✓ ${s.base.name}: ${s.base.text}</div>${techs}</div>`;
     };
 
@@ -112,12 +123,19 @@ export default function StartSpeciesChess(parent: string) {
             selected = null;
             render();
         });
-        el.querySelector<HTMLButtonElement>('#new')!.onclick = setup;
+        el.querySelector<HTMLButtonElement>('#new')!.onclick = () => { match = null; setup(); };
+        if (!m.chess.isGameOver() && ctrl[m.chess.turn()]) {
+            setTimeout(() => {
+                if (match !== m) return; // a new game was started meanwhile
+                botTurn(m, { depth: ctrl[m.chess.turn()], rng });
+                render();
+            }, CPU_DELAY_MS);
+        }
     };
 
     const click = (sq: Square) => {
         const m = match!;
-        if (m.chess.isGameOver()) return;
+        if (m.chess.isGameOver() || ctrl[m.chess.turn()]) return;
         if (selected && m.move(selected, sq)) selected = null;
         else selected = m.chess.get(sq)?.color === m.chess.turn() && sq !== selected ? sq : null;
         render();

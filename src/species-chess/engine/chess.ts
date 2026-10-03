@@ -27,6 +27,8 @@
 
 // Vendored from chess.js 1.4.0 (BSD-2-Clause). Species Chess changes:
 // - per-color `perks` add extra leaper/slider moves (see _perkMoves/_perkAttacks)
+// - pawns promote only on the far rank (perks can step them backward)
+// - legalRaw/makeRaw/undoRaw expose fast make/unmake for the AI
 // - PGN parsing (loadPgn) removed to drop the peggy parser dependency
 
 const MASK64 = 0xffffffffffffffffn
@@ -100,6 +102,8 @@ export type Piece = {
   color: Color
   type: PieceSymbol
 }
+
+export type RawMove = InternalMove
 
 type InternalMove = {
   color: Color
@@ -659,7 +663,8 @@ function addMove(
 ) {
   const r = rank(to)
 
-  if (piece === PAWN && (r === RANK_1 || r === RANK_8)) {
+  // species perks can move pawns backward, so only the far rank promotes
+  if (piece === PAWN && r === (color === WHITE ? RANK_8 : RANK_1)) {
     for (let i = 0; i < PROMOTIONS.length; i++) {
       const promotion = PROMOTIONS[i]
       moves.push({
@@ -1312,6 +1317,28 @@ export class Chess {
       addMove(moves, piece.color, from, to, piece.type, captured,
         captured ? BITS.CAPTURE : BITS.NORMAL)
     }
+  }
+
+  // Fast hooks for the species AI search: no SAN or Move objects.
+  legalRaw(): RawMove[] {
+    return this._moves({ legal: true })
+  }
+
+  pseudoRaw(): RawMove[] {
+    return this._moves({ legal: false })
+  }
+
+  // after makeRaw: did that move leave the mover's king attacked?
+  illegalRaw(move: RawMove): boolean {
+    return this._isKingAttacked(move.color)
+  }
+
+  makeRaw(move: RawMove) {
+    this._makeMove(move)
+  }
+
+  undoRaw() {
+    this._undoMove()
   }
 
   attackers(square: Square, attackedBy?: Color): Square[] {
