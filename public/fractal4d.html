@@ -16,6 +16,9 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<button id="menuBtn" style="position:fixed;left:12px;top:12px;display:none;background:#0008;color:#cfe;border:1px solid #3a6;border-radius:6px;font:18px monospace;padding:4px 10px;cursor:pointer">☰</button>
+<div id="joy" style="position:fixed;left:28px;bottom:28px;width:120px;height:120px;border-radius:50%;background:#0006;border:1px solid #3a68;display:none;touch-action:none">
+  <div id="knob" style="position:absolute;left:40px;top:40px;width:40px;height:40px;border-radius:50%;background:#9fd8;pointer-events:none"></div></div>
 <div id="ui">
   <b>Hyperslice</b>: tune the 4th dimension<br>
   <button id="mic">Mic</button><label>Audio file<input id="file" type="file" accept="audio/*"></label><button id="synth">Synth</button><button id="hide">Hide</button><br>
@@ -56,6 +59,7 @@ uniform uint uSeedU;
 uniform vec2 uMind;       // how ordered (x) and how chaotic (y) this world's minds are, smoothed
 uniform float uFall;
 uniform float uLanded;    // 1 while standing on a planet: no clearing bubble around the eye
+uniform vec4 uBody; uniform vec3 uBodyUp, uBodyFwd; uniform vec2 uBodyMove; // your body on a planet: feet position + height, orientation, gait phase + stride
 uniform vec3 uSky;        // planet 'up' at your feet (for the sky gradient)
 uniform sampler2D uLife; uniform vec3 uLifeCid; uniform float uLifeOn; // the living flora field of the planet you're on
 uniform vec3 uPal[4];     // cosine palette a,b,c,d
@@ -264,10 +268,29 @@ float shape(int i, vec3 q, float r, float a){
 
 // x: dist, y: material (0 terrain, 1+i entity), z: trap, w: cell hue
 // kinds: [0,5) continuous creature shape (morphs between neighbours), 5 heart, 6 hive core, 9 player
+float segD(vec3 p, vec3 a, vec3 b, float r){ vec3 pa = p-a, ba = b-a; float h = clamp(dot(pa,ba)/dot(ba,ba), 0.0, 1.0); return length(pa - ba*h) - r; }
+float biped(vec3 p){ // a walking two-legged body in its own frame (y up, z forward, feet at 0)
+  vec3 q = p - uBody.xyz, Rt = normalize(cross(uBodyFwd, uBodyUp));
+  vec3 l = vec3(dot(q,Rt), dot(q,uBodyUp), dot(q,uBodyFwd));
+  float H = uBody.w, ph = uBodyMove.x, st = uBodyMove.y;
+  float d = segD(l, vec3(0.0, 0.47*H, 0.0), vec3(0.0, 0.78*H, 0.0), 0.085*H);          // torso
+  d = min(d, length(l - vec3(0.0, 0.93*H, 0.015*H)) - 0.075*H);                         // head
+  for(int s=0;s<2;s++){
+    float sg = s==0 ? 1.0 : -1.0, phs = ph + (s==0 ? 0.0 : 3.14159), sw = sin(phs)*0.55*st;
+    vec3 hip = vec3(sg*0.07*H, 0.47*H, 0.0);
+    vec3 knee = hip + vec3(0.0, -0.235*H*cos(sw), 0.235*H*sin(sw));
+    vec3 foot = knee + vec3(0.0, -0.235*H, 0.05*H*sin(sw)); foot.y = max(foot.y, 0.0) + max(0.0, -cos(phs))*0.1*H*st; // the swinging foot lifts
+    d = min(d, min(segD(l, hip, knee, 0.034*H), segD(l, knee, foot, 0.03*H)));
+    vec3 sh = vec3(sg*0.125*H, 0.76*H, 0.0), hand = sh + vec3(sg*0.03*H, -0.3*H*cos(sw*0.8), -0.3*H*sin(sw*0.8)); // arms swing against the legs
+    d = min(d, segD(l, sh, hand, 0.024*H));
+  }
+  return d;
+}
 int gIds[4]; int gN = 0; // entities this pixel's ray actually passes near (found once per pixel in main)
 vec4 map(vec3 p){
   vec3 j = terrain(p);
   vec4 r = vec4(j.x, 0.0, j.y, j.z);
+  if(uBody.w > 0.0){ float bb = length(p - uBody.xyz) - uBody.w*1.3; float bd = bb > 0.02 ? bb : biped(p); if(bd < r.x) r = vec4(bd, 0.0, 3000.0, 0.0); }
   for(int n=0;n<4;n++){
     if(n>=gN) break;
     int i = gIds[n];
@@ -357,7 +380,9 @@ void main(){
     float lum = kk<0.0 ? 1.0 : kk<5.0 ? 1.4 + 2.0*uBand.w + 20.0*uEntK[id].w : kk<5.5 ? 2.5+3.0*uBand.x : kk<6.5 ? 1.0+4.0*uHive.y : 5.0;
     vec3 tint = kk>5.5 && kk<6.5 ? vec3(1.0,0.62,0.18) : vec3(1.0);
     base = pal(uHue + hb + 0.3*sqrt(max(h.z,0.0)) + 0.15*uBand.z)*tint*lum;
-    bool planet = h.y < 0.5 && h.z > 900.0;
+    bool you = h.y < 0.5 && h.z > 2900.0;
+    bool planet = h.y < 0.5 && h.z > 900.0 && !you;
+    if(you) base = pal(uHue + 0.6)*0.9 + 0.08 + pal(uHue + 0.1)*0.6*pow(max(0.0, dot(n, uBodyUp)), 4.0); // you: lit from above
     if(planet && h.z > 1900.0){ float fr = h.z - 2000.0; // plants: dark stems to glowing tips
       base = mix(pal(uHue + hb + 0.15)*0.5, pal(uHue + hb + 0.45)*(1.6 + 2.0*uBand.y), fr*fr); }
     else if(planet){ float alt = h.z - 1000.0; // seas, land bands by altitude, snow on the peaks
@@ -406,7 +431,7 @@ gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
 gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
 gl.bindVertexArray(null);
-const U = {}; for (const n of ['uEntW','uDose','uSun','uHive','uBias','uSeedU','uFall','uMind','uLanded','uSky','uLife','uLifeCid','uLifeOn','uBiome','uBiomeO','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
+const U = {}; for (const n of ['uEntW','uDose','uSun','uHive','uBias','uSeedU','uFall','uMind','uLanded','uSky','uBody','uBodyUp','uBodyFwd','uBodyMove','uLife','uLifeCid','uLifeOn','uBiome','uBiomeO','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
 
 // ================= 6. World generator: one seed per world, one genome per region of w =================
 function mulberry(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
@@ -514,7 +539,8 @@ document.getElementById('file').onchange = e => {
   setWorld(hashStr(file.name + file.size), '♪ ' + file.name); // a song is a place: same song, same world
 };
 document.getElementById('synth').onclick = e => { ensureCtx(); muted = !muted; master.gain.value = muted ? 0 : 0.25; e.target.textContent = muted ? 'Synth: off' : 'Synth: on'; };
-document.getElementById('hide').onclick = () => document.getElementById('ui').style.display='none';
+document.getElementById('hide').onclick = () => { document.getElementById('ui').style.display = 'none'; document.getElementById('menuBtn').style.display = 'block'; };
+document.getElementById('menuBtn').onclick = () => { document.getElementById('ui').style.display = ''; document.getElementById('menuBtn').style.display = 'none'; };
 
 function note(f, when, dur, vol, pan, g = region(curRegion)){
   if (!actx) return;
@@ -594,7 +620,7 @@ function waveAt(p){
 // ================= 5. Entity life: species, temperament, resonance, breeding, death =================
 const ents = []; let entCap = MAX_ENT-1; const rng = Math.random;
 let tone = 0, curRegion = 0, lastTapped = null;
-const player = () => [cam.target[0], cam.target[1], cam.target[2], W];
+const player = () => { const m = surf.on ? body.p : cam.target; return [m[0], m[1], m[2], W]; };
 const jitter = (x, k) => x*(1+(rng()-.5)*2*k);
 let spiral = 0;
 function aroundPlayer(){ // Fibonacci sphere: golden-angle steps give even, never-repeating placement
@@ -1166,27 +1192,58 @@ function drawMap(dt){
 }
 
 
-// creatures that live on the surface: they walk the ground, and their traits decide how they behave
+// creatures that live on the surface: movement, senses, communication and incentives all come from their archetype
 function walk(e, dt, t){
-  const pl = surf.pl, sp = e.sp; let up = norm(e.p.slice(0,3).map((v,k) => v - pl.ctr[k]));
+  const pl = surf.pl, sp = e.sp, A = sp.locoP || { speed: 0.1, gait: 4, lift: 0.5 }, S = sp.senses || { sight: .5, hearing: .5, smell: .5, vibration: .5 };
+  const D = sp.drive || { hunger: .5, curiosity: .5, safety: .5, kinship: .5, order: 0 };
+  let up = norm(e.p.slice(0,3).map((v,k) => v - pl.ctr[k]));
   if (!e.tv) e.tv = [0,0,0];
-  const me = cam.target, toMe = me.map((v,k) => v - e.p[k]), dMe = Math.hypot(...toMe) || 1;
-  const want = [0,1,2].map(k => Math.sin(t*0.7*e.osc + e.phase + k*2.1)*0.6);           // wander
-  let n = 0; const herd = [0,0,0];
-  for (const o of ents) if (o !== e && o.walker && o.sp === sp){ const dd = dist3(o.p, e.p); if (dd < 0.6){ for (let k=0;k<3;k++) herd[k] += o.p[k]-e.p[k]; n++; } }
+  const m = me(), toMe = m.map((v,k) => v - e.p[k]), dMe = Math.hypot(...toMe) || 1, sight = 0.25 + 0.9*S.sight;
+  const want = [0,1,2].map(k => Math.sin(t*0.7*e.osc + e.phase + k*2.1)*(0.3 + 0.5*D.curiosity));   // restless exploring
+  let n = 0; const ctr = [0,0,0], vel = [0,0,0], kin = [];
+  for (const o of ents) if (o !== e && o.walker && o.sp === sp){ const dd = dist3(o.p, e.p); if (dd < sight){ kin.push(o); n++;
+    for (let k=0;k<3;k++){ ctr[k] += o.p[k]-e.p[k]; vel[k] += o.tv ? o.tv[k] : 0; } } }
+  const ord = Math.max(-1, Math.min(1, D.order + balanceShift));                                   // entropy appetite, nudged toward balance
   for (let k=0;k<3;k++){
-    if (n) want[k] += sp.social*1.5*herd[k]/n;                                            // herd with their own kind
-    if (tone && consonance(tone, e.f) > 0) want[k] += sp.curious*2*toMe[k]/dMe;           // come to a tone they like
-    if (dMe < 0.35) want[k] -= sp.shy*3*toMe[k]/dMe;                                      // shy ones scatter when you're close
+    if (n){ want[k] += D.kinship*1.2*ctr[k]/n; want[k] += ord > 0 ? ord*8*vel[k]/n : ord*1.5*ctr[k]/n; } // organisers align, dispersers spread
+    if (tone && S.hearing > 0.3 && consonance(tone, e.f) > 0 && dMe < 0.4 + S.hearing) want[k] += D.curiosity*2*toMe[k]/dMe;
+    if (dMe < sight*0.4 && S.vibration + S.sight > 0.6) want[k] -= D.safety*3*toMe[k]/dMe;
   }
-  for (let k=0;k<3;k++) e.tv[k] += (want[k]*0.12 - e.tv[k])*Math.min(1, dt*2);
-  const dn = dot(e.tv, up); for (let k=0;k<3;k++) e.tv[k] -= up[k]*dn;                    // stay on the ground
-  const sp3 = Math.hypot(...e.tv); if (sp3 > 0.14) for (let k=0;k<3;k++) e.tv[k] *= 0.14/sp3;
+  if (life.on && S.smell > 0.2){ // hunger: smell the living field and move up its gradient
+    const t1 = norm(cross(up, Math.abs(up[1]) < 0.99 ? [0,1,0] : [1,0,0])), t2 = cross(up, t1);
+    const smp = v => life.B[lifeCell(norm(e.p.slice(0,3).map((x,k) => x + v[k]*0.12 - pl.ctr[k])))];
+    const gx = smp(t1) - smp(t1.map(x => -x)), gy = smp(t2) - smp(t2.map(x => -x));
+    for (let k=0;k<3;k++) want[k] += D.hunger*S.smell*8*(t1[k]*gx + t2[k]*gy);
+  }
+  // communication
+  if (sp.comm === 'song' && n && clock - (e.sang||0) > 6/sp.commP.rate){ e.sang = clock; sing(e); }
+  if (sp.comm === 'light'){ // fireflies: phases pull together (Kuramoto), flashes synchronise
+    if (e.lph == null) e.lph = Math.random()*6.2832; let c = 0; for (const o of kin) if (o.lph != null) c += Math.sin(o.lph - e.lph);
+    e.lph += dt*(A.gait*0.6 + 1.5*c/Math.max(1, n)); e.excite = Math.max(e.excite, Math.pow(Math.max(0, Math.cos(e.lph)), 6)); }
+  if (sp.comm === 'dance' && n){ const sw = cross(up, ctr); for (let k=0;k<3;k++) want[k] += 0.8*sw[k]/n; }
+  if (sp.comm === 'scent'){ e.trail = e.trail || []; if (rng() < dt*2){ e.trail.push(e.p.slice(0,3)); if (e.trail.length > 6) e.trail.shift(); }
+    for (const o of kin) if (o.trail && o.trail.length){ const q = o.trail[0], dd = dist3(q, e.p) || 1; for (let k=0;k<3;k++) want[k] += 0.5*(q[k]-e.p[k])/dd; } }
+  // locomotion
+  let speed = A.speed;
+  if (sp.loco === 'skitter') speed *= Math.sin(t*A.gait*3 + e.phase) > 0 ? 1.8 : 0.15;
+  if (sp.loco === 'roll') speed *= 1.5; if (sp.loco === 'float') speed *= 0.6;
+  for (let k=0;k<3;k++) e.tv[k] += (want[k]*speed - e.tv[k])*Math.min(1, dt*2);
+  const dn = dot(e.tv, up); for (let k=0;k<3;k++) e.tv[k] -= up[k]*dn;
+  const sp3 = Math.hypot(...e.tv); if (sp3 > speed*1.3) for (let k=0;k<3;k++) e.tv[k] *= speed*1.3/sp3;
   for (let k=0;k<3;k++) e.p[k] += e.tv[k]*dt;
   up = norm(e.p.slice(0,3).map((v,k) => v - pl.ctr[k]));
-  const rr = groundR(pl, up) + e.size*0.9 + 0.006*Math.abs(Math.sin(t*e.osc*2 + e.phase)); // a little gait bob
+  const alt = sp.loco === 'hop' ? 0.05*(0.3 + A.lift)*Math.abs(Math.sin(t*A.gait*0.5 + e.phase))
+            : sp.loco === 'glide' ? 0.04 + 0.02*Math.sin(t + e.phase) : sp.loco === 'float' ? 0.07 + 0.01*Math.sin(t*0.8 + e.phase)
+            : sp.loco === 'roll' ? 0 : 0.004*Math.abs(Math.sin(t*A.gait + e.phase));
+  const rr = groundR(pl, up) + e.size*0.9 + alt;
   for (let k=0;k<3;k++){ e.p[k] = pl.ctr[k] + up[k]*rr; e.anc[k] = e.p[k]; }
   e.p[3] = W; e.home = W; e.life = 0;
+}
+function faunaBalance(){ // world entropy balance: structure of the flora and synchrony of the light-speakers
+  let sx = 0, sy = 0, n = 0; for (const e of ents) if (e.walker && e.lph != null){ sx += Math.cos(e.lph); sy += Math.sin(e.lph); n++; }
+  faunaSync = n ? Math.hypot(sx, sy)/n : 0;
+  const ordNow = n ? (life.order + faunaSync)/2 : life.order;
+  balanceShift = Math.max(-0.5, Math.min(0.5, (0.6 - ordNow)*0.8)); // too ordered: dispersers gain; too chaotic: organisers gain
 }
 function bringWalkersDown(){ // as you land, nearby creatures come down to live on the ground with you
   const pl = surf.pl, up0 = norm(cam.target.map((v,k) => v - pl.ctr[k]));
@@ -1196,9 +1253,9 @@ function bringWalkersDown(){ // as you land, nearby creatures come down to live 
     const a = k*GOLDEN_ANGLE, rr = 0.15 + 0.07*k;                                           // golden spiral around you
     const p3 = cam.target.map((v,i) => v + (t1[i]*Math.cos(a) + t2[i]*Math.sin(a))*rr);
     const sp = fauna[k % fauna.length], g = region(curRegion);
-    e.sp = sp; e.g = g; e.deg = sp.motif[k % sp.motif.length]; e.f = pitch(g, e.deg + g.ratios.length); e.kind = sp.shape; e.osc = sp.osc;
+    e.sp = sp; e.g = g; e.deg = sp.motif[k % sp.motif.length]; e.f = pitch(g, e.deg + g.ratios.length); e.kind = sp.loco === 'roll' ? 0 : sp.shape; e.osc = sp.osc; e.lph = null; e.trail = null;
     for (let i=0;i<3;i++) e.p[i] = p3[i]; e.walker = true; e.tv = [0,0,0]; e.size = Math.min(sp.size, 0.035); k++; }
-  surf.fauna = fauna.map(s => s.name);
+  surf.fauna = fauna.map(s => `${s.name} (${s.loco}, ${s.comm}, ${s.drive.order >= 0 ? 'organiser' : 'disperser'}, ${dominant(s.drive)})`);
 }
 
 // ================= 18. Planet life: a self-organizing ecosystem =================
@@ -1245,7 +1302,7 @@ function lifeTick(dt){
     const pl = surf.pl, i = lifeCell(norm(e.p.slice(0,3).map((v,k) => v - pl.ctr[k])));
     life.B[i] *= 1 - 0.6*dt;
     if (Math.random() < dt*0.8){ const j = (i + [1,-1,LW,-LW][Math.floor(Math.random()*4)] + LW*LH) % (LW*LH); if (life.land[j]) life.B[j] = Math.min(1, life.B[j] + 0.5); } }
-  life.upT -= dt; if (life.upT > 0) return; life.upT = 0.2;
+  life.upT -= dt; if (life.upT > 0) return; life.upT = 0.2; faunaBalance();
   // structure = LMC complexity of 2x2 blocks of the alive/empty field: 0 for noise AND for uniform, high for real pattern
   const hist = new Float32Array(16); let n = 0, alive = 0, land = 0, mean = 0;
   for (let i=0;i<LW*LH;i++){ life.data[i] = Math.round(Math.min(1, life.B[i]*2.2)*255); if (life.land[i]){ land++; mean += life.B[i]; if (life.B[i] > 0.11) alive++; } }
@@ -1261,11 +1318,37 @@ function lifeTick(dt){
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.activeTexture(gl.TEXTURE0);
 }
-// fauna born of the planet itself: species generated from the planet's own seed
-function planetSpecies(pl){
-  const g = region(curRegion), seed = hshJ(pl.cid[0]*73856093 ^ pl.cid[1]*19349663 ^ pl.cid[2]*83492791 ^ world.seed);
-  return [0,1,2].map(i => { const sp = makeSpecies(mulberry(hash2(seed, i)), g, i); sp.size *= 0.5; return sp; });
+
+// ================= 19. Archetype library: 512 base forms, pre-baked from one master seed =================
+// Each base form carries a body (shape, essence, size), a way of moving, senses, a way of communicating and a set of
+// incentives. One incentive, order, is signed: organisers (>0) align and gather and lower entropy; dispersers (<0) spread
+// out and raise it. Planets adapt base forms to themselves; the world nudges every order drive toward balance.
+const LOCO = ['walk','hop','glide','roll','skitter','float'], COMM = ['song','light','scent','dance'];
+const ARCH = (() => { const R = mulberry(0x51A7E), out = [], g = { ratios: new Array(7) };
+  for (let i=0;i<512;i++){
+    const sp = makeSpecies(R, g, i);
+    sp.arch = i; sp.loco = LOCO[Math.floor(R()*LOCO.length)]; sp.locoP = { speed: 0.05 + 0.1*R(), gait: 2 + 6*R(), lift: R() };
+    sp.senses = { sight: R(), hearing: R(), smell: R(), vibration: R() };
+    sp.comm = COMM[Math.floor(R()*COMM.length)]; sp.commP = { rate: 0.3 + R() };
+    sp.drive = { hunger: R(), curiosity: R(), safety: R(), kinship: R(), order: R()*2 - 1 };
+    const dup = out.filter(o => o.name === sp.name || o.name.startsWith(sp.name + '-')).length; if (dup) sp.name += '-' + 'αβγδεζηθ'[dup % 8] + (dup >= 8 ? dup : ''); // every form its own name
+    out.push(sp);
+  }
+  return out; })();
+function adaptArchetype(base, pl, i){ // the planet shapes the form: seas make floaters, rough ground makes hoppers
+  const a = structuredClone(base), wet = Math.max(0, Math.min(1, pl.sea/pl.amp + 0.5)), rough = pl.TG[0]*0.6 + pl.TG[1]*0.4;
+  if (wet > 0.55 && (a.loco === 'walk' || a.loco === 'skitter')) a.loco = 'float';
+  if (rough > 0.6 && a.loco === 'roll') a.loco = 'hop';
+  a.locoP.speed *= 1.15 - 0.4*rough; a.size *= 0.85 + 0.3*pl.amp/0.22;
+  a.base = base.name; a.name = base.name + '-' + pl.name.slice(0, 2).toLowerCase();
+  return a;
 }
+function planetSpecies(pl){
+  const seed = hshJ(pl.cid[0]*73856093 ^ pl.cid[1]*19349663 ^ pl.cid[2]*83492791 ^ world.seed);
+  return [0,1,2,3].map(i => adaptArchetype(ARCH[hshJ(seed + i*977) % ARCH.length], pl, i));
+}
+let faunaSync = 0, balanceShift = 0;
+const dominant = d => Object.entries(d).filter(([k]) => k !== 'order').sort((a,b) => b[1]-a[1])[0][0];
 // ================= 17. Planets: land and walk =================
 function pnoiseJ(d, ph, P){ // exact mirror of pnoise()
   d = [d[0] + P[2]*0.15*Math.sin(d[1]*5 + ph[0]), d[1] + P[2]*0.15*Math.sin(d[2]*5 + ph[1]), d[2] + P[2]*0.15*Math.sin(d[0]*5 + ph[2])];
@@ -1296,37 +1379,54 @@ function checkLanding(dt){
   const pl = planetAt(cam.target); if (!pl) return;
   const dist = dist3(cam.target, pl.ctr);
   if (dist < pl.R + pl.amp + 0.35){ // entered the atmosphere: gravity takes you down
-    surf.on = true; surf.pl = pl; surf.descend = 1; surf.prevYaw = cam.yaw; bringWalkersDown(); lifeStart(pl);
+    surf.on = true; surf.pl = pl; surf.descend = 1; surf.prevYaw = cam.yaw; body.p = cam.target.slice(); body.stride = 0; bringWalkersDown(); lifeStart(pl); joyEl.style.display = 'block';
     const up = norm(cam.target.map((v,k) => v - pl.ctr[k])), f0 = view ? view.fwd : [0,0,-1];
-    let f = f0.map((v,k) => v - up[k]*dot(f0, up)); if (Math.hypot(...f) < 1e-3) f = norm(cross(up, [0.3,1,0.1])); surf.fwd = norm(f);
+    let f = f0.map((v,k) => v - up[k]*dot(f0, up)); if (Math.hypot(...f) < 1e-3) f = norm(cross(up, [0.3,1,0.1])); surf.fwd = norm(f); body.fwd = surf.fwd.slice();
     cam.pitch = 0; say(`Entering the atmosphere of ${pl.name}…`); buzz([15,30,15]);
   }
 }
 function launch(){
   if (!surf.on) return say('Fly into a planet to land on it.');
-  const pl = surf.pl, up = norm(cam.target.map((v,k) => v - pl.ctr[k]));
+  const pl = surf.pl, up = norm(body.p.map((v,k) => v - pl.ctr[k])); joyEl.style.display = 'none';
   cam.target = pl.ctr.map((v,k) => v + up[k]*(pl.R + pl.amp + 0.6));
   cam.yaw = Math.atan2(-up[0], -up[2]); cam.pitch = -Math.asin(Math.max(-1, Math.min(1, up[1]))); // face away from the planet
   for (const e of ents) e.walker = false; life.on = false;
   surf.on = false; surf.pl = null; surf.cool = 4; cam.speed = 0.25; say(`Launched from ${pl.name}.`); buzz(20);
 }
-// on the ground: returns the view basis; you walk on the tangent plane, gravity keeps you at eye height
+// on the ground: you are a two-legged body; the camera follows from just behind and above
+const body = { p: [0,0,0], fwd: [0,0,-1], ph: 0, stride: 0, H: 0.075 };
+const joy = { x: 0, y: 0, id: null }, joyEl = document.getElementById('joy'), knob = document.getElementById('knob');
+function joyMove(e){ const r = joyEl.getBoundingClientRect(), cx = r.left + r.width/2, cy = r.top + r.height/2;
+  let dx = (e.clientX - cx)/50, dy = (e.clientY - cy)/50; const m = Math.hypot(dx, dy); if (m > 1){ dx /= m; dy /= m; }
+  joy.x = dx; joy.y = -dy; knob.style.left = (40 + dx*40) + 'px'; knob.style.top = (40 + dy*40) + 'px'; }
+joyEl.onpointerdown = e => { e.stopPropagation(); joy.id = e.pointerId; joyEl.setPointerCapture(e.pointerId); joyMove(e); };
+joyEl.onpointermove = e => { if (e.pointerId === joy.id) joyMove(e); };
+joyEl.onpointerup = joyEl.onpointercancel = e => { if (e.pointerId !== joy.id) return; joy.id = null; joy.x = joy.y = 0; knob.style.left = knob.style.top = '40px'; };
+const me = () => surf.on ? body.p : cam.target;
 function surfaceCamera(dt, fwdKey, side){
-  const pl = surf.pl;
-  let up = norm(cam.target.map((v,k) => v - pl.ctr[k]));
-  surf.fwd = rotAround(surf.fwd, up, -(cam.yaw - surf.prevYaw)); surf.prevYaw = cam.yaw;          // drag turns you
-  surf.fwd = norm(surf.fwd.map((v,k) => v - up[k]*dot(surf.fwd, up)));
-  const right0 = norm(cross(surf.fwd, up));
-  const step = 0.18*dt; cam.target = cam.target.map((v,k) => v + (surf.fwd[k]*fwdKey + right0[k]*side)*step);
-  up = norm(cam.target.map((v,k) => v - pl.ctr[k]));
-  const target = groundR(pl, up) + surf.eyeH, cur = dist3(cam.target, pl.ctr);
-  const rr = surf.descend > 0 ? cur + (target - cur)*Math.min(1, dt*2) : target;
-  if (surf.descend > 0 && Math.abs(rr - target) < 0.01){ surf.descend = 0; say(`Landed on ${pl.name}. WASD to walk, drag to look, L to launch.`); buzz(25); }
-  cam.target = pl.ctr.map((v,k) => v + up[k]*rr);
-  surf.fwd = norm(surf.fwd.map((v,k) => v - up[k]*dot(surf.fwd, up)));
-  const pc = Math.max(-1.2, Math.min(1.2, cam.pitch)), look = norm(surf.fwd.map((v,k) => v*Math.cos(pc) - up[k]*Math.sin(pc)));
-  const right = norm(cross(look, up)), upv = cross(right, look);
-  return { fwd: look, right, upv };
+  const pl = surf.pl, tang = (v, up) => norm(v.map((x,k) => x - up[k]*dot(v, up)));
+  let up = norm(body.p.map((v,k) => v - pl.ctr[k]));
+  surf.fwd = tang(rotAround(surf.fwd, up, cam.yaw - surf.prevYaw), up); surf.prevYaw = cam.yaw;  // dragging turns your view the same way as in space
+  const camRight = norm(cross(surf.fwd, up));
+  const ix = side + joy.x, iy = fwdKey + joy.y, mag = Math.min(1, Math.hypot(ix, iy));
+  if (mag > 0.05 && surf.descend <= 0){ // stick up = away from the camera; the body turns to face where it walks
+    const move = norm(surf.fwd.map((v,k) => v*iy + camRight[k]*ix));
+    body.p = body.p.map((v,k) => v + move[k]*0.16*mag*dt);
+    body.fwd = norm(body.fwd.map((v,k) => v + (move[k] - v)*Math.min(1, dt*8)));
+    body.ph += dt*10*mag;
+  }
+  body.stride += ((mag > 0.05 ? mag : 0) - body.stride)*Math.min(1, dt*6);
+  up = norm(body.p.map((v,k) => v - pl.ctr[k]));
+  const ground = groundR(pl, up), cur = dist3(body.p, pl.ctr);
+  const rr = surf.descend > 0 ? cur + (ground - cur)*Math.min(1, dt*2) : ground;
+  if (surf.descend > 0 && Math.abs(rr - ground) < 0.01){ surf.descend = 0; say(`Landed on ${pl.name}. Stick or WASD to walk, drag to look, L to launch.`); buzz(25); }
+  body.p = pl.ctr.map((v,k) => v + up[k]*rr); body.fwd = tang(body.fwd, up);
+  const pc = Math.max(-0.5, Math.min(1.0, cam.pitch)), look = norm(surf.fwd.map((v,k) => v*Math.cos(pc) - up[k]*Math.sin(pc)));
+  let eye = body.p.map((v,k) => v + up[k]*0.11 - look[k]*0.26);
+  const eu = norm(eye.map((v,k) => v - pl.ctr[k])), eg = groundR(pl, eu) + 0.025;               // never put the camera underground
+  if (dist3(eye, pl.ctr) < eg) eye = pl.ctr.map((v,k) => v + eu[k]*eg);
+  cam.target = eye;
+  const right = norm(cross(look, up)); return { fwd: look, right, upv: cross(right, look) };
 }
 document.getElementById('launch').onclick = launch;
 
@@ -1453,7 +1553,9 @@ function frame(){
   gl.useProgram(prog); gl.bindVertexArray(mvao); // must be active before its uniforms are set (the ant pass switches programs)
   gl.uniform2f(U.uRes,w,h); gl.uniform1f(U.uT,t);
   gl.uniform3fv(U.uEye,eye); gl.uniform3fv(U.uFwd,fwd); gl.uniform3fv(U.uRight,right); gl.uniform3fv(U.uUp,upv);
-  gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uBias,bias); gl.uniform1ui(U.uSeedU, world.seed>>>0); bakeBiome(); gl.uniform1i(U.uBiome, 1); gl.uniform3fv(U.uBiomeO, biomeO); gl.uniform1f(U.uFall, fallAmt); gl.uniform1f(U.uLanded, surf.on ? 1 : 0); gl.uniform1i(U.uLife, 2); gl.uniform1f(U.uLifeOn, life.on ? 1 : 0); gl.uniform3fv(U.uLifeCid, life.cid || [1e9,1e9,1e9]); gl.uniform3fv(U.uSky, surf.on ? norm(cam.target.map((v,k) => v - surf.pl.ctr[k])) : [0,1,0]);
+  gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uBias,bias); gl.uniform1ui(U.uSeedU, world.seed>>>0); bakeBiome(); gl.uniform1i(U.uBiome, 1); gl.uniform3fv(U.uBiomeO, biomeO); gl.uniform1f(U.uFall, fallAmt); gl.uniform1f(U.uLanded, surf.on ? 1 : 0);
+  if (surf.on){ gl.uniform4f(U.uBody, ...body.p, body.H); gl.uniform3fv(U.uBodyUp, norm(body.p.map((v,k) => v - surf.pl.ctr[k]))); gl.uniform3fv(U.uBodyFwd, body.fwd); gl.uniform2f(U.uBodyMove, body.ph, body.stride); }
+  else gl.uniform4f(U.uBody, 0, 0, 0, 0); gl.uniform1i(U.uLife, 2); gl.uniform1f(U.uLifeOn, life.on ? 1 : 0); gl.uniform3fv(U.uLifeCid, life.cid || [1e9,1e9,1e9]); gl.uniform3fv(U.uSky, surf.on ? norm(cam.target.map((v,k) => v - surf.pl.ctr[k])) : [0,1,0]);
   { const tgtO = worldMind.state === 'ordering' ? Math.min(1, worldMind.order*1.4) : 0,
           tgtC = worldMind.state === 'chaos' ? Math.min(1, 0.35 + (laws.chaosAt - worldMind.order)/laws.chaosAt) : 0, k = 1 - Math.exp(-dt*0.8);
     mindVis[0] += (tgtO - mindVis[0])*k; mindVis[1] += (tgtC - mindVis[1])*k; gl.uniform2f(U.uMind, mindVis[0], mindVis[1]); } gl.uniform3fv(U.uPal,palette);
@@ -1479,7 +1581,7 @@ function frame(){
       `ants ${hive.ants.length} (${hive.seenHere} in slice)  order ${hive.order.toFixed(2)}  predicts you ${hive.mind.total ? Math.round(100*hive.mind.hits/hive.mind.total)+'%' : '-'}${hive.inside ? '  INSIDE THE HIVE MIND' : ''}\n` +
       `mind ${worldMind.order.toFixed(2)} · ${worldMind.state}\n${describeLaws(laws)}\n` +
       `biome: ${biomeHere}${surf.on ? '  · on ' + surf.pl.name : ''}\n` +
-      (surf.on ? `life order ${life.order.toFixed(2)} · fauna ${(surf.fauna||[]).join(', ')}\n` : '') +
+      (surf.on ? `life order ${life.order.toFixed(2)} · light sync ${faunaSync.toFixed(2)} · balance ${balanceShift >= 0 ? '+' : ''}${balanceShift.toFixed(2)}\n${(surf.fauna||[]).join('\n')}\n` : '') +
       `universe depth ${stack.length}${stack.length ? ' (' + cur().name + ')' : ''}\n` +
       `audio: ${!actx ? 'tap to start' : micAn ? 'mic + synth' : 'synth'}  ${rapid ? 'rapid' : 'sensitive'}`;
   }

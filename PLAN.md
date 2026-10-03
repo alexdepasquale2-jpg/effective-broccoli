@@ -133,3 +133,7 @@ Soft sun shadows + 4-tap AO within 3.5 units; wind sway; sea ripples; 140 drifti
 Terrain genome (ridge, terrace, warp, roughness ~1/φ), one plant grammar (branches, angle, ratio ~1/φ, golden twist, depth, thickness, crystal-ness, caps), fauna species from the planet seed.
 Flora = Gray-Scott field (planet picks f,k in measured robust band), walkers graze + spread seeds, homeostasis bounded to the band. Structure = LMC complexity of 2x2 blocks: 7/8 test planets pattern (0.58–1.0); 1 saturates.
 Gap: from the ground only a few plants are in view (tiny planets, horizon ~0.5); from orbit the pattern covers 74% of land. Next: bigger planets or lower horizon, then re-check flora on the surface.
+
+## Hyperslice v14 (DONE): body, stick, archetypes
+Biped (torso, head, 2-segment legs with lift, swinging arms) in third person; joystick + WASD camera-relative (tested: up 0.99 fwd, right 1.00 right, body faces move). ☰ shows when menu hidden.
+512 archetypes from master seed 0x51A7E: loco (6), senses (4), comm (song/light/scent/dance), drives incl. signed order. Planets adapt 4 each. Balance: shift = 0.8·(0.6 − mean(life order, light sync)). Fireflies sync 0.42→1.00 in 5 s.
