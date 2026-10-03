@@ -49,7 +49,16 @@ uniform vec4 uEntK[${MAX_ENT}];  // kind, hue, vib freq, vib amp
 uniform int uNEnt;
 uniform vec4 uRip[4];     // wave ripples: xyz + age (age<0 = off)
 
+uniform ivec2 uFam;       // terrain family of the two blended regions
+uniform float uBlend;     // 0 = region A, 1 = region B
+uniform vec4 uC2;         // region B constant
+uniform vec4 uFP, uFP2;   // family params A, B
+uniform vec3 uPal[4];     // cosine palette a,b,c,d (already blended)
+uniform vec2 uVib;        // surface vibration frequency, fog density
+
 vec4 qsq(vec4 a){ return vec4(a.x*a.x-dot(a.yzw,a.yzw), 2.0*a.x*a.yzw); }
+vec4 qcube(vec4 a){ float r2=dot(a.yzw,a.yzw); return vec4(a.x*(a.x*a.x-3.0*r2), a.yzw*(3.0*a.x*a.x-r2)); }
+vec3 pal(float t){ return uPal[0] + uPal[1]*cos(6.2832*(uPal[2]*t + uPal[3])); }
 
 vec4 to4(vec3 p){
   vec4 z = vec4(p, uW);
@@ -58,43 +67,83 @@ vec4 to4(vec3 p){
   return z;
 }
 
-// returns distance, orbit trap in y
-vec2 julia(vec3 p){
-  vec4 z = to4(p);
-  float md2 = 1.0, trap = 1e9;
-  for(int i=0;i<10;i++){
-    md2 *= 4.0*dot(z,z);
-    z = qsq(z) + uC;
-    trap = min(trap, dot(z.xyz,z.xyz));
-    if(dot(z,z) > 16.0) break;
+// four 4D fractal families; returns distance, orbit trap
+vec2 fam(int f, vec4 z, vec4 c, vec4 fp){
+  float trap = 1e9;
+  if(f==0 || f==1){                       // quaternion Julia, power 2 or 3
+    float md2 = 1.0, pw = f==0 ? 4.0 : 9.0;
+    for(int i=0;i<10;i++){
+      float r2 = dot(z,z);
+      md2 *= pw*(f==0 ? r2 : r2*r2);
+      z = (f==0 ? qsq(z) : qcube(z)) + c;
+      trap = min(trap, dot(z.xyz,z.xyz));
+      if(dot(z,z) > 16.0) break;
+    }
+    float r2 = dot(z,z);
+    return vec2(0.25*log(r2)*sqrt(r2/md2), trap);
   }
-  float r2 = dot(z,z);
-  float d = 0.25*log(r2)*sqrt(r2/md2);
-  // vibrational surface: standing waves driven by audio bands
-  d += 0.012*uBand.y*sin(18.0*p.x+uT*6.0)*sin(18.0*p.y-uT*5.0)*sin(18.0*p.z+uT*4.0);
+  if(f==2){                               // 4D Mandelbox, Julia-style offset
+    float k = fp.y; z *= k; vec4 z0 = z; float dr = 1.0;
+    for(int i=0;i<9;i++){
+      z = clamp(z,-1.0,1.0)*2.0 - z;
+      float r2 = dot(z,z);
+      if(r2<0.25){ z*=4.0; dr*=4.0; } else if(r2<1.0){ z/=r2; dr/=r2; }
+      z = z*fp.x + z0 + c*0.4; dr = dr*abs(fp.x) + 1.0;
+      trap = min(trap, r2);
+    }
+    return vec2(length(z)/abs(dr)/k, trap);
+  }
+  // 4D kaleidoscopic IFS: fold, rotate, scale
+  float s = fp.x; float ca=cos(c.x*2.0), sa=sin(c.x*2.0); z *= 2.2; // fit to the same size as the Julia sets
+  for(int i=0;i<6;i++){
+    z = abs(z);
+    if(z.x<z.y) z.xy=z.yx; if(z.x<z.z) z.xz=z.zx; if(z.y<z.z) z.yz=z.zy; if(z.x<z.w) z.xw=z.wx;
+    z.xy = mat2(ca,-sa,sa,ca)*z.xy;
+    z = z*s - vec4(1.0+c.y*0.3)*(s-1.0);
+    trap = min(trap, dot(z,z)*0.05);
+  }
+  return vec2((length(z)-2.0)*pow(s,-6.0)/2.2, trap);
+}
+
+vec2 terrain(vec3 p){
+  vec4 z = to4(p);
+  vec2 r;
+  if(uBlend<0.001) r = fam(uFam.x, z, uC, uFP);
+  else if(uBlend>0.999) r = fam(uFam.y, z, uC2, uFP2);
+  else { vec2 a = fam(uFam.x, z, uC, uFP), b = fam(uFam.y, z, uC2, uFP2); r = mix(a, b, uBlend); }
+  float d = r.x;
+  // vibrational surface: standing waves driven by audio bands, frequency set by the region
+  d += 0.012*uBand.y*sin(uVib.x*p.x+uT*6.0)*sin(uVib.x*p.y-uT*5.0)*sin(uVib.x*p.z+uT*4.0);
   for(int i=0;i<4;i++){ float a=uRip[i].w; if(a<0.0) continue;
-    float r=length(p-uRip[i].xyz);
-    d += 0.02*exp(-a*0.6)*sin(30.0*r-a*14.0)*exp(-abs(r-a*1.2)*5.0); }
-  return vec2(d, trap);
+    float rr=length(p-uRip[i].xyz);
+    d += 0.02*exp(-a*0.6)*sin(30.0*rr-a*14.0)*exp(-abs(rr-a*1.2)*5.0); }
+  return vec2(d, r.y);
 }
 
 float sdTorus(vec3 p, float R, float r){ return length(vec2(length(p.xz)-R,p.y))-r; }
 float sdBox(vec3 p, float b){ vec3 q=abs(p)-b; return length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0); }
+float sdOcta(vec3 p, float s){ p=abs(p); return (p.x+p.y+p.z-s)*0.57735; }
+mat2 rot2(float a){ return mat2(cos(a),-sin(a),sin(a),cos(a)); }
 
-// x: dist, y: material (0 fractal, 1+i entity), z: trap
+// x: dist, y: material (0 terrain, 1+i entity), z: trap
+// kinds: 0 sphere, 1 box, 2 torus, 3 octahedron, 4 star, 5 region heart, 9 player
 vec3 map(vec3 p){
-  vec2 j = julia(p);
+  vec2 j = terrain(p);
   vec3 r = vec3(j.x, 0.0, j.y);
   for(int i=0;i<${MAX_ENT};i++){
     if(i>=uNEnt) break;
     vec4 e = uEnt[i]; if(e.w<=0.0) continue;
     vec4 k = uEntK[i];
     vec3 q = p - e.xyz;
+    if(dot(q,q) > (e.w*2.5+0.05)*(e.w*2.5+0.05)){ r.x = min(r.x, length(q)-e.w*2.0); continue; } // cheap bound
     float wob = k.w*sin(k.z*uT + 20.0*q.x)*sin(k.z*0.7*uT + 20.0*q.y);
-    float d;
-    if(k.x<0.5||k.x>2.5) d = length(q) - e.w;
-    else if(k.x<1.5){ float a=uT*k.z*0.3; q.xz=mat2(cos(a),-sin(a),sin(a),cos(a))*q.xz; d = sdBox(q, e.w*0.7)-0.01; }
-    else { float a=uT*k.z*0.2; q.xy=mat2(cos(a),-sin(a),sin(a),cos(a))*q.xy; d = sdTorus(q, e.w, e.w*0.3); }
+    float d, a = uT*k.z*0.25;
+    if(k.x<0.5 || k.x>8.5) d = length(q) - e.w;
+    else if(k.x<1.5){ q.xz=rot2(a)*q.xz; d = sdBox(q, e.w*0.7)-0.01; }
+    else if(k.x<2.5){ q.xy=rot2(a)*q.xy; d = sdTorus(q, e.w, e.w*0.3); }
+    else if(k.x<3.5){ q.xz=rot2(a)*q.xz; q.xy=rot2(a*0.7)*q.xy; d = sdOcta(q, e.w*1.3); }
+    else if(k.x<4.5){ vec3 n=normalize(q+1e-5); d = length(q) - e.w*(0.75+0.35*sin(6.0*atan(n.z,n.x)+a*4.0)*sin(5.0*acos(clamp(n.y,-1.0,1.0)))); d*=0.6; }
+    else { q.yz=rot2(a*0.5)*q.yz; d = min(length(q)-e.w*0.55, sdTorus(q, e.w, e.w*0.06)); q.xy=rot2(1.57)*q.xy; d = min(d, sdTorus(q, e.w*1.25, e.w*0.04)); }
     d += wob*e.w;
     if(d<r.x) r = vec3(d, float(i+1), 0.0);
   }
@@ -113,7 +162,7 @@ void main(){
   vec3 rd = normalize(uFwd*1.6 + uRight*uv.x + uUp*uv.y);
   vec3 ro = uEye;
   // background: probability field haze
-  vec3 bg = hsv(uHue+0.5, 0.6, 0.05+0.08*uBand.x) * (0.6+0.4*rd.y);
+  vec3 bg = pal(uHue+0.5) * (0.06+0.08*uBand.x) * (0.6+0.4*rd.y);
   float t = 0.0; vec3 h; bool hit=false; float glow=0.0;
   for(int i=0;i<110;i++){
     h = map(ro+rd*t);
@@ -129,12 +178,12 @@ void main(){
     float dif = max(dot(n,L),0.0), amb = 0.5+0.5*n.y;
     float fres = pow(1.0-max(dot(n,-rd),0.0), 3.0);
     vec3 base;
-    if(h.y<0.5) base = hsv(uHue + 0.25*sqrt(h.z) + 0.15*uBand.z, 0.75, 0.9);
-    else { int id=int(h.y)-1; base = hsv(uEntK[id].y, uEntK[id].x>2.5?0.3:0.9, 1.0) * (uEntK[id].x>2.5 ? 5.0 : 1.5 + 2.0*uBand.w + 20.0*uEntK[id].w); }
-    col = base*(0.25*amb + 0.85*dif) + fres*hsv(uHue+0.6,0.5,1.0)*(0.4+uBand.x);
-    col = mix(col, bg, 1.0-exp(-0.08*t*t));
+    if(h.y<0.5) base = pal(uHue + 0.3*sqrt(h.z) + 0.15*uBand.z);
+    else { int id=int(h.y)-1; float kk=uEntK[id].x; base = hsv(uEntK[id].y, kk>8.5?0.3:0.9, 1.0) * (kk>8.5 ? 5.0 : kk>4.5 ? 2.5+3.0*uBand.x : 1.5 + 2.0*uBand.w + 20.0*uEntK[id].w); }
+    col = base*(0.25*amb + 0.85*dif) + fres*pal(uHue+0.6)*(0.4+uBand.x);
+    col = mix(col, bg, 1.0-exp(-uVib.y*t*t));
   }
-  col += hsv(uHue+0.1, 0.7, 1.0) * glow * 0.004 * (0.3 + uBand.w*2.0);
+  col += pal(uHue+0.1) * glow * 0.004 * (0.3 + uBand.w*2.0);
   col = pow(col/(1.0+col), vec3(0.4545));
   o = vec4(col,1);
 }`;
@@ -147,25 +196,57 @@ gl.linkProgram(prog); gl.useProgram(prog);
 gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
 gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
-const U = {}; for (const n of ['uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
+const U = {}; for (const n of ['uFam','uBlend','uC2','uFP','uFP2','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
 
 // ================= 6. World generator: one seed per world, one genome per region of w =================
 function mulberry(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 function hash2(a,b){ let h=Math.imul(a^0x9e3779b9,0x85ebca6b)^Math.imul((b|0)+0x632be5ab,0xc2b2ae35); h^=h>>>15; h=Math.imul(h,0x2c1b3c6d); return (h^h>>>13)>>>0; }
 function hashStr(s){ let h=2166136261; for (const c of s) h=Math.imul(h^c.charCodeAt(0),16777619); return h>>>0; }
 const SCALES = {pentatonic:[1,9/8,5/4,3/2,5/3], harmonic:[1,5/4,3/2,7/4,2,9/4], major:[1,9/8,5/4,4/3,3/2,5/3,15/8], minor:[1,9/8,6/5,4/3,3/2,8/5,9/5]};
-function makeGenome(seed){
+const DEEP_SCALES = {phrygian:[1,16/15,6/5,4/3,3/2,8/5,9/5], lydian:[1,9/8,5/4,45/32,3/2,5/3,15/8]}; // only from depth 2
+const FAMILY = ['Julia²','Julia³','Mandelbox','Kaleido'];
+const TEMPER = ['social','curious','shy','drift'];
+const SYL = ['va','lo','ri','sen','tha','mor','ae','qu','zel','ny','dra','oph','ul','kai','ve','sho'];
+function nameFrom(R){ let n=''; for (let i=0, k=2+Math.floor(R()*2); i<k; i++) n += SYL[Math.floor(R()*SYL.length)]; return n[0].toUpperCase()+n.slice(1); }
+// depth tier = |region|: deeper regions unlock more terrain families, species, voices, scales and mutation
+function makeGenome(seed, depth = 0){
   const R = mulberry(seed), pick = a => a[Math.floor(R()*a.length)];
-  const scale = pick(Object.keys(SCALES));
+  const scales = depth >= 2 ? {...SCALES, ...DEEP_SCALES} : SCALES;
+  const scale = pick(Object.keys(scales)), ratios = scales[scale];
   const steps = 8+Math.floor(R()*9), hits = 3+Math.floor(R()*(steps-4));
   const rhythm = Array.from({length:steps}, (_,i) => (i*hits)%steps < hits); // Euclidean rhythm
-  return { seed, scale, ratios: SCALES[scale], root: 55*2**(R()*2), bpm: 70+R()*80, rhythm,
+  const family = depth === 0 ? 0 : Math.min(3, Math.floor(R()*(Math.min(depth,3)+1)));
+  const g = { seed, depth, scale, ratios, root: 55*2**(R()*2), bpm: 70+R()*80, rhythm, step: 0, mstep: 0,
     wave: pick(['sine','triangle','sawtooth','square']),
-    wf: [0,1,2,3].map(i => 0.05+0.04*SCALES[scale][i%SCALES[scale].length]*(0.5+R())), // visual wave speeds share the musical ratios
-    ph: [0,1,2,3].map(() => R()*6.28), hue: R(), walk: 0, step: 0 };
+    wf: [0,1,2,3].map(i => 0.05+0.04*ratios[i%ratios.length]*(0.5+R())), // visual wave speeds share the musical ratios
+    ph: [0,1,2,3].map(() => R()*6.28), hue: R(), family,
+    fp: family === 2 ? [-1.6-R()*0.8, 3.5+R(), 0, 0] : family === 3 ? [1.8+R()*0.4, 0, 0, 0] : [0,0,0,0],
+    palette: [[0,0,0].map(() => 0.4+R()*0.2), [0,0,0].map(() => 0.3+R()*0.3), [0,0,0].map(() => 0.5+R()*1.2), [0,0,0].map(() => R())],
+    vib: 10+R()*20, fog: 0.03+R()*0.1, mutation: 0.05+0.05*depth,
+    heartPos: [(R()-.5)*1.4, (R()-.5)*1.4, (R()-.5)*1.4], voices: 1+Math.min(2, depth) };
+  g.species = Array.from({length: Math.min(5, 2+depth)}, (_,i) => makeSpecies(mulberry(hash2(seed, 100+i)), g));
+  g.prog = [0, ...Array.from({length:3}, () => Math.floor(R()*Math.min(6, ratios.length)))]; // chord roots, one per bar
+  g.phrase = lsystem(R, g.species[0].motif, depth);
+  return g;
 }
-const world = { seed: 1, name: '' }, genomes = new Map();
-function region(i){ if (!genomes.has(i)) genomes.set(i, makeGenome(hash2(world.seed, i))); return genomes.get(i); }
+function makeSpecies(R, g){
+  const t = { social: R(), curious: R(), shy: R(), drift: R() }, temper = TEMPER[Math.floor(R()*4)];
+  t[temper] = 0.75+0.25*R(); // one dominant temperament
+  return { name: nameFrom(R), temper, ...t, shape: Math.floor(R()*5), size: 0.03+R()*0.07, span: 0.12+R()*0.7,
+    osc: 1+R()*8, life: 15+R()*30, hue: R(), gen: 0,
+    motif: Array.from({length: 3+Math.floor(R()*3)}, () => Math.floor(R()*g.ratios.length*1.5)) };
+}
+// L-system melody: A = motif, B = motif transposed, C = motif inverted and reversed
+function lsystem(R, motif, depth){
+  const pick = a => a[Math.floor(R()*a.length)];
+  const rules = { A: pick(['AB','ABA','AC']), B: pick(['CA','BA','AB']), C: pick(['A','BC','CB']) };
+  let s = 'A'; for (let i=0; i<2+Math.min(depth,2); i++) s = [...s].map(c => rules[c]).join('').slice(0,16);
+  const k = 1+Math.floor(R()*3), top = Math.max(...motif);
+  const T = { A: motif, B: motif.map(d => d+k), C: motif.map(d => top-d).reverse() };
+  return [...s].flatMap(c => T[c]).slice(0,64);
+}
+const world = { seed: 1, name: '' }, genomes = new Map(), hybrids = new Map();
+function region(i){ if (!genomes.has(i)) genomes.set(i, makeGenome(hash2(world.seed, i), Math.abs(i))); return genomes.get(i); }
 const pitch = (g, deg) => { const n=g.ratios.length; return g.root * g.ratios[((deg%n)+n)%n] * 2**Math.floor(deg/n); };
 function snapToScale(f, g){ let best=0, be=1e9; for (let d=-10; d<30; d++){ const e=Math.abs(Math.log2(f/pitch(g,d))); if (e<be){be=e;best=d;} } return best; }
 
@@ -223,11 +304,17 @@ function note(f, when, dur, vol, pan, g = region(curRegion)){
 }
 function scheduleSynth(){
   if (!actx) return;
-  const g = region(curRegion), spb = 60/g.bpm/2;
+  const g = region(curRegion), spb = 60/g.bpm/2, L = g.rhythm.length, n = g.ratios.length;
   while (nextBeat < actx.currentTime + 0.1){
-    if (g.rhythm[g.step % g.rhythm.length]){
-      g.walk = Math.max(-2, Math.min(12, g.walk + Math.round((Math.random()-0.5)*3))); // random-walk melody
-      note(pitch(g, g.walk+5), nextBeat, spb*1.8, 0.12, Math.sin(g.step));
+    const chord = g.prog[Math.floor(g.step/L) % g.prog.length];
+    if (g.rhythm[g.step % L]){ // melody: the region's L-system phrase over the current chord
+      note(pitch(g, g.phrase[g.mstep % g.phrase.length] + chord + n), nextBeat, spb*1.8, 0.11, Math.sin(g.step));
+      if (g.voices >= 3 && g.mstep % 2) note(pitch(g, g.phrase[g.phrase.length-1-(g.mstep % g.phrase.length)] + chord + 2*n), nextBeat, spb, 0.04, -Math.sin(g.step)); // counter-voice
+      g.mstep++;
+    }
+    if (g.step % L === 0){
+      note(pitch(g, chord)/2, nextBeat, spb*L*0.9, 0.16, 0);                                                    // bass
+      if (g.voices >= 2) for (const d of [0,2,4]) note(pitch(g, chord+d), nextBeat, spb*L, 0.03, (d-2)/3);    // pad chord
     }
     g.step++; nextBeat += spb;
   }
@@ -283,46 +370,77 @@ function waveAt(p){
   return s;
 }
 
-// ================= 5. Entity life: birth, resonance, following, death =================
+// ================= 5. Entity life: species, temperament, resonance, breeding, death =================
 const ents = []; let entCap = MAX_ENT-1; const rng = Math.random;
-let tone = 0, curRegion = 0;
+let tone = 0, curRegion = 0, lastTapped = null;
 const player = () => [cam.target[0], cam.target[1], cam.target[2], nav4.w];
-function spawn(){
-  const g = region(curRegion), deg = Math.floor(rng()*g.ratios.length*2), w0 = nav4.w + (rng()-.5)*1.8;
-  return { p:[(rng()-.5)*2.4,(rng()-.5)*2.4,(rng()-.5)*2.4,w0], v:[0,0,0,0], home:w0,
-    span: 0.15+rng()*0.6, size: 0.04+rng()*0.07, kind: Math.floor(rng()*3), deg, f: pitch(g, deg+g.ratios.length),
-    osc: 1+rng()*8, life: 0, max: 15+rng()*25, phase: rng()*6.28, excite: 0, attuned: 0, amp: 0, g };
+const jitter = (x, k) => x*(1+(rng()-.5)*2*k);
+function individual(sp, g, w0, p){
+  const deg = sp.motif[Math.floor(rng()*sp.motif.length)];
+  return { sp, g, deg, f: pitch(g, deg+g.ratios.length), p: p || [(rng()-.5)*2.4,(rng()-.5)*2.4,(rng()-.5)*2.4,w0], v:[0,0,0,0], home: w0,
+    span: jitter(sp.span,.1), size: jitter(sp.size,.1), kind: sp.shape, osc: jitter(sp.osc,.1), max: jitter(sp.life,.2),
+    life: 0, phase: rng()*6.28, excite: 0, attuned: 0, amp: 0, bred: -99, gen: sp.gen };
 }
-function reseed(){ ents.length=0; for (let i=0;i<MAX_ENT-1;i++) ents.push(spawn()); }
+function spawn(){ const g = region(curRegion); return individual(g.species[Math.floor(rng()*g.species.length)], g, nav4.w+(rng()-.5)*1.8); }
+function makeHeart(){ // the region's landmark: large, long-lived, spans most of the region's w, sings the root
+  const g = region(curRegion);
+  const h = individual({ name: 'Heart ' + curRegion, temper: 'anchor', social:0, curious:0, shy:0, drift:0, shape:5, size:0.16, span:0.9,
+    osc:0.5, life:1e9, hue:g.hue, gen:0, motif:[0] }, g, curRegion, [...g.heartPos, curRegion]);
+  h.heart = true; h.f = g.root; return h;
+}
+function reseed(){ ents.length = 0; ents.push(makeHeart()); for (let i=1;i<MAX_ENT-1;i++) ents.push(spawn()); }
+function breed(a, b){
+  const g = region(curRegion), m = g.mutation, mix = (x,y) => Math.max(0.01, (x+y)/2*(1+(rng()-.5)*2*m));
+  const key = [a.sp.name, b.sp.name].sort().join('+');
+  let sp = hybrids.get(key);
+  if (!sp){
+    const A = a.sp.name, B = b.sp.name.toLowerCase(), name = A.slice(0, Math.ceil(A.length/2)) + B.slice(Math.floor(B.length/2));
+    const motif = a.sp.motif.flatMap((d,i) => [d, b.sp.motif[i % b.sp.motif.length]]).slice(0,6).map(d => rng() < m*3 ? d+(rng()<.5?1:-1) : d);
+    sp = { name, temper: rng()<.5 ? a.sp.temper : b.sp.temper, shape: rng()<.5 ? a.sp.shape : b.sp.shape, motif, hue: (a.sp.hue+b.sp.hue)/2,
+      gen: Math.max(a.gen, b.gen)+1, ...Object.fromEntries(['social','curious','shy','drift','size','span','osc','life'].map(k => [k, mix(a.sp[k], b.sp[k])])) };
+    hybrids.set(key, sp); say(`Hybrid born: ${sp.name} (gen ${sp.gen}, ${sp.temper})`); buzz([10,30,10]);
+  }
+  // replace the oldest unattuned creature
+  let oi = -1; for (let i=1;i<ents.length;i++) if (!ents[i].attuned && (oi < 0 || ents[i].life > ents[oi].life)) oi = i;
+  if (oi < 0) return;
+  const c = individual(sp, g, (a.p[3]+b.p[3])/2, a.p.map((x,k) => (x+b.p[k])/2));
+  c.excite = 1; c.gen = sp.gen; ents[oi] = c; a.bred = b.bred = clock;
+  sp.motif.forEach((d,k) => note(pitch(g, d+g.ratios.length), actx ? actx.currentTime + k*0.09 : 0, 0.4, 0.07, c.p[0]));
+  emitWave(c.p, c.f, 0.8, false);
+}
 const field = (x,y,z,w,t) => Math.sin(x*2.1+t*0.3)*Math.cos(y*1.7-w*2.0)+Math.sin(z*2.3+w*1.3-t*0.2); // probability potential
 function stepEnts(dt, t){
   const P = player();
   for (let i=0;i<ents.length;i++){
     let e = ents[i]; e.life += dt;
-    if ((e.life > e.max && e.attuned <= 0) || Math.hypot(e.p[0],e.p[1],e.p[2]) > 2.4 || Math.abs(e.p[3]-nav4.w) > 1.8) e = ents[i] = spawn();
-    const listen = analyser ? freq[binOf(e.f)]/255 : 0.5+0.5*Math.sin(t*e.osc*0.3+e.phase);
-    // wave fronts that pass an entity excite it if they agree with its pitch; player waves attune it
+    if (!e.heart && ((e.life > e.max && e.attuned <= 0) || Math.hypot(e.p[0],e.p[1],e.p[2]) > 2.4 || Math.abs(e.p[3]-nav4.w) > 1.8)) e = ents[i] = spawn();
+    const sp = e.sp, listen = analyser ? freq[binOf(e.f)]/255 : 0.5+0.5*Math.sin(t*e.osc*0.3+e.phase);
+    // wave fronts that pass an entity excite it if they agree with its pitch; player waves attune it, shy ones flee dissonance
     for (const w of waves) if (!w.hit.has(e) && Math.abs(dist4(e.p,w.p)-(clock-w.t0)*1.2) < 0.15){
       w.hit.add(e); const c = consonance(w.f, e.f);
-      if (c > 0.3){ e.excite = 1; if (w.player){ e.attuned = 10; } }
-      else if (w.player && c < 0) e.flee = 2;
+      if (c > 0.3){ e.excite = 1; if (w.player) e.attuned = 10; }
+      else if (w.player && c < 0) e.flee = 3*sp.shy;
     }
     e.excite = Math.max(0, e.excite - dt*0.8); e.attuned = Math.max(0, e.attuned - dt); e.flee = Math.max(0, (e.flee||0) - dt);
     e.amp = Math.max(listen*0.6, e.excite);
+    if (e.heart){ for (let a=0;a<4;a++){ const h = a<3 ? e.g.heartPos[a] : e.home; e.v[a] = (e.v[a] + dt*2*(h-e.p[a]))*(1-2*dt); e.p[a] += e.v[a]*dt; } continue; }
     const eps = 0.05, f0 = field(...e.p,t), w0 = waveAt(e.p);
+    const lure = tone && consonance(tone, e.f) > 0 ? 0.4*sp.curious : 0; // curious ones drift toward a tone they like
     for (let a=0;a<4;a++){
       const q = e.p.slice(); q[a] += eps;
       const grad = (field(...q,t)-f0)/eps, wgrad = (waveAt(q)-w0)/eps;
       const spring = a<3 ? -0.4*e.p[a] : -0.4*(e.p[a]-e.home);
-      let f = spring + 0.5*grad - 0.8*wgrad + 2*listen*band.flux*Math.sin(e.phase+a*1.7+t*e.osc);
-      if (e.attuned > 0) f += 1.2*(P[a] + 0.35*Math.sin(e.phase+a*2.1+t*0.8) - e.p[a]);   // orbit the player
+      let f = spring + (0.2+0.6*sp.drift)*grad - 0.8*wgrad + 2*listen*band.flux*Math.sin(e.phase+a*1.7+t*e.osc) + lure*(P[a]-e.p[a]);
+      if (e.attuned > 0) f += (0.6+sp.curious)*(P[a] + 0.35*Math.sin(e.phase+a*2.1+t*0.8) - e.p[a]); // orbit the player
       if (e.flee > 0) f -= 1.5*(P[a]-e.p[a]);
       e.v[a] += dt*f; e.v[a] *= 1 - 1.2*dt; e.p[a] += e.v[a]*dt;
     }
-    // harmony: consonant pairs gather into places, dissonant pairs push apart
-    for (let j=i+1;j<ents.length;j++){ const o = ents[j], d = dist4(e.p,o.p); if (d > 1.2 || d < 1e-4) continue;
-      const c = d < 0.12 ? -1 : consonance(e.f, o.f);
-      for (let a=0;a<4;a++){ const k = c*0.6*dt*(o.p[a]-e.p[a])/d; e.v[a]+=k; o.v[a]-=k; } }
+    // harmony: consonant pairs gather into places, dissonant pairs push apart; excited consonant pairs that touch breed
+    for (let j=i+1;j<ents.length;j++){ const o = ents[j]; if (o.heart) continue; const d = dist4(e.p,o.p); if (d > 1.2 || d < 1e-4) continue;
+      const c = consonance(e.f, o.f);
+      if (d < 0.2 && c > 0.3 && e.excite > 0.4 && o.excite > 0.4 && t-e.bred > 8 && t-o.bred > 8) breed(e, o);
+      const k0 = (d < 0.12 ? -1 : c)*0.6*(0.3+(sp.social+o.sp.social)/2)*dt/d;
+      for (let a=0;a<4;a++){ const k = k0*(o.p[a]-e.p[a]); e.v[a]+=k; o.v[a]-=k; } }
   }
 }
 
@@ -397,16 +515,17 @@ function tap(x, y){
   for (const e of ents){ if (Math.abs(e.p[3]-W) >= e.span) continue; const s = project(e.p); if (!s) continue;
     const d = Math.hypot(s[0]-x, s[1]-y); if (d < bd){ bd = d; best = e; } }
   if (best){ // take the creature's tone and sing it outward
-    tone = best.f; best.attuned = 10; best.excite = 1;
+    tone = best.f; best.attuned = 10; best.excite = 1; lastTapped = best;
+    if (best.heart) say(`Heart of region ${curRegion}: its root tone is yours`);
     note(tone, actx.currentTime, 1.2, 0.2, best.p[0]); emitWave(best.p, tone, 1, true); buzz(15);
   } else if (tone){ note(tone, actx.currentTime, 1, 0.15, 0); emitWave(player(), tone, 1, true); buzz(8); }
 }
 
 // ================= 1. Hyperspace: regions along w =================
 function setWorld(seed, name){
-  world.seed = seed >>> 0; genomes.clear();
+  world.seed = seed >>> 0; genomes.clear(); hybrids.clear(); lastTapped = null;
   saveData.worlds[world.seed] = saveData.worlds[world.seed] || { name, unlocked: 0, chords: [] };
-  saveData.last = world.seed; save();
+  cur().seen = cur().seen || []; saveData.last = world.seed; save();
   Object.assign(nav4, {w:0, rot:0, vw:0, vr:0, tw:0, tr:0}); curRegion = 0; tone = 0; waves.length = 0;
   reseed(); refreshPlaces(); say('Entered ' + cur().name);
 }
@@ -414,7 +533,7 @@ const placesEl = document.getElementById('places');
 function refreshPlaces(){
   placesEl.innerHTML = '';
   for (const [s, w] of Object.entries(saveData.worlds)){ const o = document.createElement('option'); o.value = s;
-    o.textContent = `${w.name} · ${w.chords.length} chords`; o.selected = +s === world.seed; placesEl.append(o); }
+    o.textContent = `${w.name} · ${w.chords.length} chords · ${(w.seen||[]).length} species`; o.selected = +s === world.seed; placesEl.append(o); }
 }
 placesEl.onchange = () => setWorld(+placesEl.value, saveData.worlds[placesEl.value].name);
 document.getElementById('seed').onclick = () => { const s = (Math.random()*4e9)>>>0; setWorld(s, 'World ' + s.toString(36)); };
@@ -450,12 +569,16 @@ function frame(now){
   if (reg !== curRegion){
     curRegion = reg; const g = region(reg); buzz(12);
     if (drone) drone.forEach((o,i) => o.frequency.exponentialRampToValueAtTime(g.root/2*(1+i*0.004), actx.currentTime+1.2)); // glide
-    say(`Region ${reg}: ${g.scale}, ${g.bpm|0} bpm`);
+    ents[0] = makeHeart();
+    say(`Region ${reg} · depth ${g.depth} · ${FAMILY[g.family]} · ${g.scale} · ${g.species.map(x => x.name).join(', ')}`);
   }
   // crossfade the two nearest regions' shapes
   const i0 = Math.floor(W), s = smooth(Math.min(1, Math.max(0, (W-i0-0.3)/0.4)));
   const ga = region(i0), gb = region(i0+1), Ca = juliaC(ga,t), Cb = juliaC(gb,t);
-  const C = Ca.map((x,k) => x+(Cb[k]-x)*s);
+  const lerp = (a,b) => a.map((x,k) => x+(b[k]-x)*s);
+  // same family: morph parameters smoothly; different families: blend the two distance fields
+  const same = ga.family === gb.family, C = same ? lerp(Ca,Cb) : Ca, FP = same ? lerp(ga.fp,gb.fp) : ga.fp;
+  const palette = ga.palette.flatMap((v,k) => lerp(v, gb.palette[k]));
   const sliceW = 0.45*Math.sin(W*2.2) + 0.3*Math.sin(t*ga.wf[0]+ga.ph[0]) + 0.2*band.bass;
   const rot = [t*ga.wf[3]*0.5 + band.mid*0.3 + nav4.rot, Math.sin(t*0.04)*0.8];
   const baseHue = ga.hue + (((gb.hue-ga.hue+1.5)%1)-0.5)*s;
@@ -483,14 +606,15 @@ function frame(now){
 
   // slot 0: the player's glowing self, coloured by its tone
   const toneHue = tone ? (Math.log2(tone)%1) : hue;
-  ent.set([...cam.target, 0.045*(1+0.3*Math.sin(t*6))], 0); entK.set([3, toneHue, 2, 0], 0);
+  ent.set([...cam.target, 0.045*(1+0.3*Math.sin(t*6))], 0); entK.set([9, toneHue, 2, 0], 0);
   let n = 1;
   for (const e of ents){
     if (n > entCap) break;
     const dw = e.p[3]-W; if (Math.abs(dw) >= e.span){ e.seen = false; continue; }   // outside this 3D slice
-    if (!e.seen){ e.seen = true; note(e.f, actx ? actx.currentTime : 0, 0.6, 0.06, e.p[0]); } // entering the slice rings its pitch
+    if (!e.seen){ e.seen = true; note(e.f, actx ? actx.currentTime : 0, 0.6, 0.06, e.p[0]); // entering the slice rings its pitch
+      const B = cur().seen; if (!e.heart && !B.includes(e.sp.name)){ B.push(e.sp.name); save(); if (msgT <= 0) say(`New species: ${e.sp.name} (${e.sp.temper}${e.gen ? ', gen '+e.gen : ''})`); } }
     const r = e.size*Math.sqrt(1-(dw/e.span)**2) * (0.7+0.6*e.amp) * (e.attuned>0 ? 1.3 : 1); // hypersphere cross-section
-    const eh = (Math.log2(e.f) % 1);
+    const eh = (e.sp.hue*0.6 + (Math.log2(e.f) % 1)*0.4) % 1;
     ent.set([e.p[0],e.p[1],e.p[2],r], n*4); entK.set([e.kind, eh, e.osc, 0.04*e.amp + (e.attuned>0?0.04:0)], n*4); n++;
   }
   for (let i=0;i<4;i++){ const wv = waves[waves.length-1-i];
@@ -498,7 +622,9 @@ function frame(now){
 
   gl.uniform2f(U.uRes,w,h); gl.uniform1f(U.uT,t);
   gl.uniform3fv(U.uEye,eye); gl.uniform3fv(U.uFwd,fwd); gl.uniform3fv(U.uRight,right); gl.uniform3fv(U.uUp,upv);
-  gl.uniform4fv(U.uC,C); gl.uniform1f(U.uW,sliceW); gl.uniform2fv(U.uRot,rot);
+  gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uC2,Cb); gl.uniform4fv(U.uFP,FP); gl.uniform4fv(U.uFP2,gb.fp);
+  gl.uniform2i(U.uFam,ga.family,gb.family); gl.uniform1f(U.uBlend, same ? 0 : s); gl.uniform3fv(U.uPal,palette);
+  gl.uniform2f(U.uVib, ga.vib+(gb.vib-ga.vib)*s, ga.fog+(gb.fog-ga.fog)*s); gl.uniform1f(U.uW,sliceW); gl.uniform2fv(U.uRot,rot);
   gl.uniform4f(U.uBand,band.bass,band.mid,band.high,band.flux); gl.uniform1f(U.uHue,hue);
   gl.uniform4fv(U.uEnt,ent); gl.uniform4fv(U.uEntK,entK); gl.uniform1i(U.uNEnt,n); gl.uniform4fv(U.uRip,rip);
   gl.drawArrays(gl.TRIANGLES,0,3);
@@ -508,6 +634,8 @@ function frame(now){
     document.getElementById('stats').textContent =
       `fps ${fpsAvg.toFixed(0)}  res ${(scale*100)|0}%  creatures ${n-1}/${entCap}\n` +
       `w ${W.toFixed(2)}  region ${curRegion} (${region(curRegion).scale})  open ±${cur().unlocked}\n` +
+      `depth ${Math.abs(curRegion)} · ${FAMILY[region(curRegion).family]} · ${region(curRegion).species.length} species · ${region(curRegion).voices} voices\n` +
+      `bestiary ${cur().seen.length}  hybrids ${hybrids.size}${lastTapped ? '  last: '+lastTapped.sp.name+' ('+lastTapped.sp.temper+(lastTapped.gen?', gen '+lastTapped.gen:'')+')' : ''}\n` +
       `tone ${tone ? tone.toFixed(0)+' Hz' : '-'}  attuned ${att}  chords ${cur().chords.length}\n` +
       `audio: ${!actx ? 'tap to start' : micAn ? 'mic + synth' : 'synth'}  ${rapid ? 'rapid' : 'sensitive'}`;
   }

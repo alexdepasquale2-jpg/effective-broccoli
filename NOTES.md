@@ -12,3 +12,4 @@
 - Every layer multiplier needs a rising gate, or that layer collapses to minutes (Era gates now rise +15/Era and +20/Revolution).
 - Hyperslice (4D fractal, audio-reactive): public/fractal4d.html, standalone WebGL2, open /fractal4d.html. Adaptive res keeps >=30fps.
 - Hyperslice: every scale must contain a pairwise-consonant triad or chords (and region unlocks) become impossible. Whole-tone failed this.
+- Hyperslice: every terrain family must fit radius ~1.5 or the camera sits inside it and rays never converge (Kaleido hung swiftshader). Crossing between two different families renders both: the slowest spot.

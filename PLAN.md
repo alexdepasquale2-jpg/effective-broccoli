@@ -84,3 +84,11 @@ Open: Shuffle runs hold ~8 min (Ascend resets the Shuffle count, so the old "Shu
 4. Player orb + tap entity to take its tone; humming (mic pitch detect) sets tone; 2-finger pinch/4D; haptics.
 5. Chords (done): 3 attuned distinct pitch classes = chord → unlock next region. Progress + places (songs as seeds) in localStorage.
 6. Sound: region drone glides on crossing, sequencer per region, entities sing. Entity cap adapts to fps.
+
+## Hyperslice v3 (DONE): generative depth (seed tree: world → region → species → individual → offspring)
+- Depth tier = |region|. Deeper = more fractal families, species, music voices, exotic scales, mutation.
+- Terrain: 4 families (quat Julia z², cubic z³, 4D Mandelbox, 4D KIFS), per-region params, cosine palette, fog, vibration freq. Crossfade = mix of 2 DEs.
+- Species: per-region genomes (shape ×5, size, 4D span, temperament: social/curious/shy/drift, motif, name). Individuals vary ±10%.
+- Lineage: consonant excited pairs that touch breed a hybrid (blended traits + mutation, gen+1). Bestiary saved per world.
+- Music: L-system phrase from species motif, chord progression per bar, bass/pad/counter voices unlock by depth.
+- Region heart: one large long-span landmark per region singing the root; tap it to take the root tone.
