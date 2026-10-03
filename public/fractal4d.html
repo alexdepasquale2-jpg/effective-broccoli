@@ -19,7 +19,7 @@
 <div id="ui">
   <b>Hyperslice</b>: tune the 4th dimension<br>
   <button id="mic">Mic</button><label>Audio file<input id="file" type="file" accept="audio/*"></label><button id="synth">Synth</button><button id="hide">Hide</button><br>
-  <button id="dmode">Drag: orbit</button><button id="smode">Mode: sensitive</button><button id="seed">New world</button><br>
+  <button id="dmode">Drag: orbit</button><button id="smode">Mode: sensitive</button><button id="seed">New world</button><button id="rise">Rise ↑</button><br>
   Places <select id="places"></select><br>
   Dose <input id="dose" type="range" min="0" max="1" step="0.01" value="0.7" style="width:140px;vertical-align:middle">
   <div id="stats"></div>
@@ -51,7 +51,8 @@ uniform vec4 uEntW[${MAX_ENT}];  // where the probe cuts it (dw/span, -1..1) + i
 uniform int uNEnt;
 uniform vec4 uRip[4];     // wave ripples: xyz + age (age<0 = off)
 uniform vec4 uBias;       // region bias: family centre, family spread, density, scale
-uniform float uSeed;
+uniform uint uSeedU;
+uniform float uFall;      // 0..1..0 while falling through a block into its universe
 uniform vec3 uPal[4];     // cosine palette a,b,c,d
 uniform vec2 uVib;        // surface vibration frequency, fog density
 uniform vec4 uSun;        // sun direction xyz + daylight
@@ -67,7 +68,10 @@ vec4 qsq(vec4 a){ return vec4(a.x*a.x-dot(a.yzw,a.yzw), 2.0*a.x*a.yzw); }
 vec4 qcube(vec4 a){ float r2=dot(a.yzw,a.yzw); return vec4(a.x*(a.x*a.x-3.0*r2), a.yzw*(3.0*a.x*a.x-r2)); }
 vec3 pal(float t){ return uPal[0] + uPal[1]*cos(6.2832*(uPal[2]*t + uPal[3])); }
 mat2 rot2(float a){ return mat2(cos(a),-sin(a),sin(a),cos(a)); }
-vec4 h4(vec3 c){ return fract(sin(vec4(dot(c,vec3(127.1,311.7,74.7)),dot(c,vec3(269.5,183.3,246.1)),dot(c,vec3(113.5,271.9,124.6)),dot(c,vec3(19.3,47.1,91.7)))+uSeed)*43758.5453); }
+uint hsh(uint x){ x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; x ^= x >> 16u; return x; }
+// integer hash, bit-identical in JavaScript (h4J), so the game knows exactly which cells hold forms
+vec4 h4(vec3 c){ uvec3 u = uvec3(ivec3(c)); uint h = hsh(u.x ^ hsh(u.y ^ hsh(u.z ^ uSeedU)));
+  return vec4(uvec4(hsh(h), hsh(h^0x9e3779b9u), hsh(h^0x7f4a7c15u), hsh(h^0x94d049bbu)) >> 8u) / 16777216.0; }
 
 // six 4D fractal families, each fitted to radius ~1.4; returns distance, orbit trap
 vec2 fam(int f, vec4 z, vec4 c){
@@ -218,6 +222,7 @@ vec3 normal(vec3 p){
 
 void main(){
   vec2 uv = (2.0*gl_FragCoord.xy - uRes)/uRes.y;
+  if(uFall > 0.0){ float rr = length(uv); uv = rot2(uFall*4.0*(1.0-rr*0.4))*uv*(1.0 - 0.75*uFall*uFall); } // sucked in: spiral tunnel
   if(uDose > 0.01){ // kaleidoscope: fold the view into turning mirrored sectors, more folds as the dose rises
     float N = floor(3.0 + uDose*5.0), sec = 6.2832/N, a = atan(uv.y,uv.x) + uT*0.05, rr = length(uv);
     a = abs(mod(a, sec) - sec*0.5);
@@ -270,6 +275,7 @@ void main(){
     col = mix(col, bg, max(1.0-exp(-(0.008+uVib.y*0.08)*t*t), smoothstep(7.0, 10.0, t))); // clear near, fades out by the march limit
   }
   col += pal(uHue+0.1) * glow * 0.003 * (0.3 + uBand.w*2.0);
+  col = mix(col, pal(uHue + t*0.1)*2.0 + 0.3, uFall*uFall*uFall);              // the crossing flashes
   col = pow(col/(1.0+col), vec3(0.4545));
   col = mix(vec3(dot(col, vec3(0.299,0.587,0.114))), col, 1.0 + 0.7*uDose); // saturation
   col = mix(col, col*vec3(1.25,0.95,0.55) + vec3(0.05,0.03,0.0), uHive.x*0.6); // amber cast near the hive
@@ -287,7 +293,7 @@ gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
 gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
 gl.bindVertexArray(null);
-const U = {}; for (const n of ['uEntW','uDose','uSun','uHive','uBias','uSeed','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
+const U = {}; for (const n of ['uEntW','uDose','uSun','uHive','uBias','uSeedU','uFall','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
 
 // ================= 6. World generator: one seed per world, one genome per region of w =================
 function mulberry(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
@@ -343,7 +349,12 @@ function lsystem(R, motif, depth){
   return [...s].flatMap(c => T[c]).slice(0,64);
 }
 const world = { seed: 1, name: '' }, genomes = new Map(), hybrids = new Map();
-function region(i){ if (!genomes.has(i)) genomes.set(i, makeGenome(hash2(world.seed, i), Math.abs(i))); return genomes.get(i); }
+function region(i){
+  if (!genomes.has(i)){ const g = makeGenome(hash2(world.seed, i), Math.abs(i));
+    if (world.famHint != null){ g.bias[0] = (world.famHint + 0.5)/6; g.bias[1] = Math.min(g.bias[1], 0.5); } // a block's universe leans to its family
+    genomes.set(i, g); }
+  return genomes.get(i);
+}
 const pitch = (g, deg) => { const n=g.ratios.length; return g.root * g.ratios[((deg%n)+n)%n] * 2**Math.floor(deg/n); };
 function snapToScale(f, g){ let best=0, be=1e9; for (let d=-10; d<30; d++){ const e=Math.abs(Math.log2(f/pitch(g,d))); if (e<be){be=e;best=d;} } return best; }
 
@@ -611,7 +622,7 @@ cv.onpointerup = cv.onpointercancel = e => {
   if (p && pts.size === 0 && Math.hypot(e.clientX-p.x0, e.clientY-p.y0) < 8 && performance.now()-p.t0 < 300) tap(e.clientX, e.clientY);
 };
 cv.onwheel = e => { cam.speed = Math.max(0, Math.min(2, (cam.speed+0.02)*Math.exp(-e.deltaY*0.001)-0.02)); }; // wheel sets cruise speed
-onkeydown = e => { keys[e.key.toLowerCase()] = 1; if (e.key === ' ') reseed(); };
+onkeydown = e => { keys[e.key.toLowerCase()] = 1; if (e.key === ' ') reseed(); if (e.key.toLowerCase() === 'x') rise(); };
 onkeyup = e => keys[e.key.toLowerCase()] = 0;
 
 let view = null; // camera basis from the last frame, for picking
@@ -632,9 +643,10 @@ function tap(x, y){
 }
 
 // ================= 1. Hyperspace: regions along w =================
-function setWorld(seed, name){
+function setWorld(seed, name, hint, cOff){
   world.seed = seed >>> 0; genomes.clear(); hybrids.clear(); lastTapped = null;
-  saveData.worlds[world.seed] = saveData.worlds[world.seed] || { name, unlocked: 0, chords: [] };
+  saveData.worlds[world.seed] = saveData.worlds[world.seed] || { name, unlocked: 0, chords: [], hint, cOff };
+  world.famHint = saveData.worlds[world.seed].hint ?? null; world.cOff = saveData.worlds[world.seed].cOff || null;
   cur().seen = cur().seen || []; saveData.last = world.seed; save();
   Object.assign(nav4, {w:0, rot:0, vw:0, vr:0, tw:0, tr:0}); curRegion = 0; tone = 0; waves.length = 0;
   reseed(); hiveReset(); refreshPlaces(); say('Entered ' + cur().name);
@@ -840,6 +852,52 @@ function sing(e){ // answer with a phrase from the species' learned memory
     let x = rng()*sum; for (let i=0;i<n;i++){ x -= row[i]*row[i]; if (x <= 0){ pc = i; break; } } // squared: learned habits dominate
   }
 }
+
+// ================= 13. Nested universes: every block holds one =================
+const CELLJ = PHI**3;
+function hshJ(x){ x >>>= 0; x ^= x>>>16; x = Math.imul(x,0x7feb352d)>>>0; x ^= x>>>15; x = Math.imul(x,0x846ca68b)>>>0; x ^= x>>>16; return x>>>0; }
+function h4J(c){ const u = c.map(v => (v|0)>>>0), h = hshJ(u[0] ^ hshJ(u[1] ^ hshJ(u[2] ^ (world.seed>>>0))));
+  return [h, h^0x9e3779b9, h^0x7f4a7c15, h^0x94d049bb].map(v => (hshJ(v)>>>8)/16777216); }
+let curBias = [0.5,0.5,0.6,1], fallAmt = 0, fall = null, stack = [], enterCool = 3;
+function blockAt(p){ // mirrors the shader's terrain(): which block (if any) holds this point
+  const cid = p.map(v => Math.floor(v/CELLJ)), g = h4J(cid), g2 = h4J(cid.map(v => v+17));
+  if (g[3] > curBias[2]) return null;
+  const sc = curBias[3]*(0.7 + 0.3*g2[0]), ctr = cid.map(v => (v+0.5)*CELLJ), d = dist3(p, ctr);
+  const fa = (((Math.floor(curBias[0]*6 + (g[0]-0.5)*curBias[1]*6)) % 6) + 6) % 6;
+  return { cid, ctr, sc, d, fa, cOff: [g2[1],g2[2],g2[3],g2[0]].map(v => (v-0.5)*0.25) };
+}
+function checkEnter(dt){
+  enterCool -= dt; if (fall || enterCool > 0) return;
+  const b = blockAt(cam.target);
+  if (b && b.d < 0.75*b.sc) startFall(+1, b); // you've flown into its body
+}
+function startFall(dir, b){
+  fall = { t: 0, dir, b, swapped: false };
+  if (actx){ const o = actx.createOscillator(), g = actx.createGain(); o.type = 'sawtooth';  // falling glissando
+    o.frequency.setValueAtTime(dir > 0 ? 880 : 110, actx.currentTime); o.frequency.exponentialRampToValueAtTime(dir > 0 ? 55 : 880, actx.currentTime+1.6);
+    g.gain.setValueAtTime(0.0001, actx.currentTime); g.gain.exponentialRampToValueAtTime(0.08, actx.currentTime+0.8); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime+1.7);
+    o.connect(g); g.connect(master); o.start(); o.stop(actx.currentTime+1.8); }
+  buzz([20,40,60,80]);
+}
+function stepFall(dt){
+  if (!fall){ fallAmt = 0; return; }
+  fall.t += dt/1.6; fallAmt = Math.sin(Math.PI*Math.min(1, fall.t));
+  if (!fall.swapped && fall.t >= 0.5){ fall.swapped = true;
+    if (fall.dir > 0){
+      const b = fall.b, seed = hash2(world.seed, hshJ(b.cid[0]*73856093 ^ b.cid[1]*19349663 ^ b.cid[2]*83492791));
+      stack.push({ seed: world.seed, name: cur().name, exit: b.ctr.map((v,k) => v + (cam.target[k]-v)/(b.d||1)*(1.9*b.sc+0.6)) });
+      setWorld(seed, '↳'.repeat(stack.length) + ' ' + FAMILY[b.fa] + ' block', b.fa, b.cOff);
+      cam.target = [0,0,0]; // a lattice corner: the farthest point from every block
+      say(`You fell into a ${FAMILY[b.fa]} block. Universe depth ${stack.length}. Rise ↑ (X) to climb out.`);
+    } else {
+      const s = stack.pop(); setWorld(s.seed, s.name); cam.target = s.exit;
+      say(stack.length ? `Back up to depth ${stack.length}.` : 'Back in the first universe.');
+    }
+  }
+  if (fall.t >= 1){ fall = null; fallAmt = 0; enterCool = 3; }
+}
+function rise(){ if (stack.length && !fall){ ensureCtx(); startFall(-1, null); } else if (!stack.length) say('This is the outermost universe.'); }
+document.getElementById('rise').onclick = rise;
 // ================= 10. Smoothness + 2. Rendering loop =================
 const fpsWin = {t0: performance.now(), n: 0};
 let scale = 0.6, last = performance.now(), fpsAvg = 60, frames = 0, W = 0, humT = 0, humDeg = null, humCount = 0;
@@ -888,9 +946,9 @@ function frame(){
   const ga = region(i0), gb = region(i0+1), Ca = juliaC(ga,t), Cb = juliaC(gb,t);
   const lerp = (a,b) => a.map((x,k) => x+(b[k]-x)*s);
   // regions blend smoothly: constant, family odds, density, scale, palette
-  const C = lerp(Ca,Cb), bias = lerp(ga.bias, gb.bias);
+  const C = lerp(Ca,Cb).map((x,k) => x + (world.cOff ? world.cOff[k] : 0)), bias = lerp(ga.bias, gb.bias); curBias = bias;
   const palette = ga.palette.flatMap((v,k) => lerp(v, gb.palette[k]));
-  const sliceW = 0.45*Math.sin(W*2.2) + 0.3*Math.sin(t*ga.wf[0]+ga.ph[0]) + 0.2*band.bass;
+  const sliceW = 3.0*fallAmt + 0.45*Math.sin(W*2.2) + 0.3*Math.sin(t*ga.wf[0]+ga.ph[0]) + 0.2*band.bass;
   const rot = [t*ga.wf[3]*0.5 + band.mid*0.3 + nav4.rot, Math.sin(t*0.04)*0.8];
   const baseHue = ga.hue + (((gb.hue-ga.hue+1.5)%1)-0.5)*s;
   const hue = (baseHue + t*0.006 + band.centroid*0.12) % 1; // slow drift keeps the world one coherent place
@@ -904,6 +962,7 @@ function frame(){
   }
   stepEnts(dt, t);
   stepHive(dt, t);
+  checkEnter(dt); stepFall(dt);
   if (actx) checkChord(W);
   chordCool -= dt; msgT -= dt; if (msgT <= 0 && msgEl.textContent && msgT > -0.1) msgEl.textContent = '';
   while (waves.length && t - waves[0].t0 > 6) waves.shift();
@@ -938,7 +997,7 @@ function frame(){
   gl.useProgram(prog); gl.bindVertexArray(mvao); // must be active before its uniforms are set (the ant pass switches programs)
   gl.uniform2f(U.uRes,w,h); gl.uniform1f(U.uT,t);
   gl.uniform3fv(U.uEye,eye); gl.uniform3fv(U.uFwd,fwd); gl.uniform3fv(U.uRight,right); gl.uniform3fv(U.uUp,upv);
-  gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uBias,bias); gl.uniform1f(U.uSeed,(world.seed%9973)/97.0); gl.uniform3fv(U.uPal,palette);
+  gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uBias,bias); gl.uniform1ui(U.uSeedU, world.seed>>>0); gl.uniform1f(U.uFall, fallAmt); gl.uniform3fv(U.uPal,palette);
   gl.uniform2f(U.uVib, ga.vib+(gb.vib-ga.vib)*s, ga.fog+(gb.fog-ga.fog)*s); gl.uniform1f(U.uW,sliceW); gl.uniform2fv(U.uRot,rot);
   gl.uniform4f(U.uBand,band.bass,band.mid,band.high,band.flux); gl.uniform1f(U.uHue,hue);
   gl.uniform4fv(U.uEnt,ent); gl.uniform4fv(U.uEntK,entK); gl.uniform4fv(U.uEntW,entW); gl.uniform1i(U.uNEnt,n); gl.uniform4fv(U.uRip,rip);
@@ -959,6 +1018,7 @@ function frame(){
       `tone ${tone ? tone.toFixed(0)+' Hz' : '-'}  attuned ${att}  chords ${cur().chords.length}\n` +
       `sun ${daylight > 0.5 ? 'day' : 'night'} drift ${sunDrift>=0?'+':''}${sunDrift.toFixed(2)}  hive w ${hive.w.toFixed(2)}\n` +
       `ants ${hive.ants.length} (${hive.seenHere} in slice)  order ${hive.order.toFixed(2)}  predicts you ${hive.mind.total ? Math.round(100*hive.mind.hits/hive.mind.total)+'%' : '-'}${hive.inside ? '  INSIDE THE HIVE MIND' : ''}\n` +
+      `universe depth ${stack.length}${stack.length ? ' (' + cur().name + ')' : ''}\n` +
       `audio: ${!actx ? 'tap to start' : micAn ? 'mic + synth' : 'synth'}  ${rapid ? 'rapid' : 'sensitive'}`;
   }
   requestAnimationFrame(frame);

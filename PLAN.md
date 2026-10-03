@@ -105,3 +105,6 @@ Next: check on a real GPU; tune Kaleido/Menger/Icosa so they don't read as dust 
 ## Hyperslice v6 (DONE): minds
 Species learn note transitions from what they hear (answer you with learned phrases), learn to value notes that attuned them (approach them), hybrids inherit blended memory.
 Hive learns your sequence and predicts your next note (accuracy shown; hums its guess when near). Test: 4-note loop → hive 88% after 3 loops, 99% after 30; species sang the loop back.
+
+## Hyperslice v7 (DONE): nested universes
+Flying into a block's body (<0.75·sc from centre) = 1.6 s fall (spiral tunnel, w sweep, flash, glissando) into a universe seeded by that cell, leaning to its family and constant. Stack of universes; Rise ↑ / X climbs out beside the block. Each visited universe is kept in Places.

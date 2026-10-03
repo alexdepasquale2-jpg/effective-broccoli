@@ -19,3 +19,4 @@
 - Raymarch cost: test rays against creature bounding spheres once per pixel (gIds), and give each terrain cell a bounding sphere. Checking all 24 creatures per step was 5× the cost.
 - WebGL: gl.uniform* applies to the CURRENT program. Call useProgram(prog) before setting uniforms; the ant pass leaves pprog bound (this froze the world after frame 1 from v4 on).
 - Icosa-φ redesigned: icosa mirror folds + Mandelbox-style box/sphere folds, scale −φ² (13% cover). Pure fold+scale IFS only ever makes lace; sphere inversion is what gives volume.
+- Terrain hash is integer (hsh/h4 in GLSL, hshJ/h4J in JS) and bit-identical: verified 1024/1024. Never go back to sin()-based hashes, or blockAt() will disagree with what is drawn.
