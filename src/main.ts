@@ -1,6 +1,7 @@
 import StartCanon from './canon-lane/main';
 import StartWar from './game/main';
 import StartMergeborn from './mergeborn/main';
+import StartSpeciesChess from './species-chess/main';
 
 document.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
@@ -13,6 +14,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (params.get('game') === 'merge') {
         document.title = 'Mergeborn';
         StartMergeborn('game-container');
+        return;
+    }
+    if (params.get('game') === 'chess') {
+        document.title = 'Species Chess';
+        StartSpeciesChess('game-container');
         return;
     }
     document.title = 'Canon Lane';

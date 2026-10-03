@@ -76,3 +76,8 @@ Open: Shuffle runs hold ~8 min (Ascend resets the Shuffle count, so the old "Shu
   Light: Lantern Saint (all +10%), Prism Knight (neighbours +30% of its power), Dawn Herald (first foe/stage 1 HP), Mirror Oracle (pity 7), Sun Forger (Essence +20%), Radiant Judge (×2 vs Void).
   Void: Hollow King (merges into it 15% +2), Null Jester (kill gold ×3 or ×0), Rift Walker (merges any element), Ink Wraith (enemies −1% HP/s), Eclipse Widow (bosses no regen/split), Abyssal Seer (×2 vs Light).
 - Counter wheel: Fire>Earth>Air>Water>Fire; Light and Void counter each other.
+
+## Species Chess (`?game=chess`, `src/species-chess/`)
+- Done: vendored chess.js 1.4.0 (BSD-2) with per-color perks; 4 species (base perk + 3 techs), stars economy (1/turn, 2/capture), DOM UI, hot-seat.
+- Next: CPU opponent, promotion picker, more species / tech tiers, balance pass.
+- Blockers: none.
