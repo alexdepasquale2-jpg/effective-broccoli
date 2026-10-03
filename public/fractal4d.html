@@ -55,7 +55,8 @@ uniform vec4 uBias;       // region bias: family centre, family spread, density,
 uniform uint uSeedU;
 uniform vec2 uMind;       // how ordered (x) and how chaotic (y) this world's minds are, smoothed
 uniform float uFall;
-uniform float uLanded;    // 1 while standing on a planet: no clearing bubble around the eye      // 0..1..0 while falling through a block into its universe
+uniform float uLanded;    // 1 while standing on a planet: no clearing bubble around the eye
+uniform vec3 uSky;        // planet 'up' at your feet (for the sky gradient)
 uniform vec3 uPal[4];     // cosine palette a,b,c,d
 uniform vec2 uVib;        // surface vibration frequency, fog density
 uniform vec4 uSun;        // sun direction xyz + daylight
@@ -154,7 +155,7 @@ vec2 plant(vec3 l, float h, float kind, float v){ // returns distance, height fr
   if(kind < 0.5){ // golden tree: each fork mirrors, tilts and shrinks by 1/phi
     float d = 1e9, s = 1.0; vec3 z = l; float tilt = 0.45 + 0.3*v;
     for(int i=0;i<5;i++){
-      d = min(d, capY(z, h, h*(0.09 - 0.012*float(i)))*s);
+      d = min(d, capY(z, h, h*(0.055 - 0.008*float(i)))*s);
       z.y -= h; z.xz = abs(z.xz); z.xy = rot2(-tilt)*z.xy; z.zy = rot2(-tilt)*z.zy; z *= PHI; s /= PHI;
     }
     return vec2(d, clamp(l.y/(h*2.6), 0.0, 1.0));
@@ -212,7 +213,8 @@ vec3 terrain(vec3 p){
         if(ch > sea + 0.005 && ch < amp*0.72){ // on land, below the snow
           vec3 up = cd, t1 = normalize(cross(up, abs(up.y) < 0.99 ? vec3(0,1,0) : vec3(1,0,0))), t2 = cross(up, t1);
           vec3 lq = q - cd*(R + ch); vec3 l = vec3(dot(lq,t1), dot(lq,up), dot(lq,t2));
-          vec2 pd = plant(l, 0.03 + 0.05*hp.w, floor(fract(gp.y*13.0)*3.0), hp.w);
+          l.xz += vec2(sin(uT*1.3 + hp.w*6.28), cos(uT*1.1 + hp.y*6.28))*0.22*l.y*l.y/(0.035 + 0.045*hp.w)*(0.6 + uBand.y); // wind
+          vec2 pd = plant(l, 0.035 + 0.045*hp.w, floor(fract(gp.y*13.0)*3.0), hp.w);
           if(pd.x < res.x) res = vec3(pd.x, 2000.0 + pd.y, res.z);              // trap 2000+ marks plants
         }
       }
@@ -311,6 +313,15 @@ void main(){
   vec3 rd = normalize(uFwd*1.6 + uRight*uv.x + uUp*uv.y);
   vec3 ro = uEye;
   vec3 bg = pal(uHue+0.5) * (0.04+0.06*uSun.w+0.08*uBand.x) * (0.6+0.4*rd.y);
+  { vec3 sc3 = floor(rd*260.0); float st = fract(sin(dot(sc3, vec3(12.9898,78.233,37.719)))*43758.5453);           // stars
+    bg += step(0.9965, st)*(0.6 + 0.4*sin(uT*3.0 + st*90.0))*(1.0 - 0.7*uSun.w*uLanded)*vec3(0.9,0.95,1.0); }
+  if(uLanded > 0.5){ // a planet's sky: horizon glow to zenith, a sun with a halo, night shows the stars
+    float hz = dot(rd, uSky), sd = max(dot(rd, uSun.xyz), 0.0);
+    vec3 zen = pal(uHue + 0.55)*0.35, hor = pal(uHue + 0.08)*1.1 + 0.15;
+    vec3 sky = mix(hor, zen, smoothstep(-0.02, 0.55, hz))*(0.25 + 0.75*uSun.w);
+    sky += pow(sd, 600.0)*4.0 + pow(sd, 12.0)*0.35*hor*uSun.w;
+    bg = mix(bg, sky, 0.9);
+  }
   { float a = atan(uv.y,uv.x), rr = length(uv); // chrysanthemum behind everything
     float petals = pow(abs(sin(a*8.0 + log(rr+1e-3)*6.0 - uT*0.9)), 6.0) * pow(abs(sin(a*13.0 - log(rr+1e-3)*9.0 + uT*0.6)), 6.0);
     bg += uDose*0.12*petals*pal(uHue + rr*0.6 - uT*0.05); }
@@ -346,7 +357,8 @@ void main(){
       base = mix(pal(uHue + hb + 0.15)*0.5, pal(uHue + hb + 0.45)*(1.6 + 2.0*uBand.y), fr*fr); }
     else if(planet){ float alt = h.z - 1000.0; // seas, land bands by altitude, snow on the peaks
       base = alt <= 0.001 ? pal(uHue + hb + 0.55)*0.45 + 0.05 : mix(pal(uHue + hb + alt*0.6), vec3(0.95), smoothstep(0.75, 0.95, alt));
-      if(alt <= 0.001) fres = max(fres, 0.35); }
+      if(alt <= 0.001){ fres = max(fres, 0.35); // the sea moves: rippled normal, fresh glints
+        n = normalize(n + 0.12*vec3(sin(p.x*70.0 + uT*2.0), sin(p.y*63.0 - uT*1.7), sin(p.z*67.0 + uT*2.3))); dif = max(dot(n, L), 0.0); } }
     if(uDose > 0.01 && !planet){
       base = pal(uHue + hb + 0.3*sqrt(max(h.z,0.0)) + uDose*(0.8*fres + 0.5*dot(n,rd)))*tint*lum;   // iridescent film
       float lines = pow(abs(sin(log(1.0+h.z)*14.0 - uT*2.0 + h.w*6.28)), 10.0);         // crawling trap contours
@@ -355,9 +367,16 @@ void main(){
       base += uDose*(lines*1.6*pal(uHue+0.33+h.w) + lat*1.2*pal(uHue+0.66-h.w))*(0.6+uBand.y);
     }
     float ao = clamp(1.0 - steps/60.0, 0.15, 1.0);                       // crevices the ray had to creep into are dark
-    float spec = pow(max(dot(reflect(rd,n), L), 0.0), 24.0);
+    if(t < 3.5){                                                           // up close: sampled occlusion and soft sun shadows
+      float occ = 0.0; for(int k=1;k<=4;k++){ float hk = 0.02*float(k); occ += (hk - map(p + n*hk).x)/pow(2.0, float(k)); }
+      ao *= clamp(1.0 - 6.0*occ, 0.2, 1.0);
+      float sh = 1.0, st = 0.015;
+      for(int k=0;k<18;k++){ float hh = map(p + n*0.003 + L*st).x; sh = min(sh, 9.0*hh/st); st += clamp(hh, 0.012, 0.2); if(sh < 0.02 || st > 2.0) break; }
+      dif *= clamp(sh, 0.0, 1.0);
+    }
+    float spec = pow(max(dot(reflect(rd,n), L), 0.0), 24.0)*step(0.001, dif);
     col = base*(0.25*amb + (0.35+0.6*uSun.w)*dif)*ao + spec*0.6*pal(uHue+hb+0.2) + fres*pal(uHue+0.6)*(0.4+uBand.x)*ao;
-    col = mix(col, bg, max(1.0-exp(-(0.008+uVib.y*0.08+uMind.y*0.06)*t*t), smoothstep(7.0, 10.0, t))); // chaos thickens the fog // clear near, fades out by the march limit
+    col = mix(col, bg, max(1.0-exp(-(0.008+uVib.y*0.08+uMind.y*0.06+uLanded*0.05)*t*t), smoothstep(7.0, 10.0, t))); // chaos thickens the fog // clear near, fades out by the march limit
   }
   col += pal(uHue+0.1) * glow * 0.003 * (0.3 + uBand.w*2.0);
   col = mix(col, pal(uHue + t*0.1)*2.0 + 0.3, uFall*uFall*uFall);              // the crossing flashes
@@ -382,7 +401,7 @@ gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
 gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
 gl.bindVertexArray(null);
-const U = {}; for (const n of ['uEntW','uDose','uSun','uHive','uBias','uSeedU','uFall','uMind','uLanded','uBiome','uBiomeO','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
+const U = {}; for (const n of ['uEntW','uDose','uSun','uHive','uBias','uSeedU','uFall','uMind','uLanded','uSky','uBiome','uBiomeO','uPal','uVib','uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
 
 // ================= 6. World generator: one seed per world, one genome per region of w =================
 function mulberry(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
@@ -1171,7 +1190,7 @@ function bringWalkersDown(){ // as you land, nearby creatures come down to live 
   for (const e of ents){ if (e.heart || k >= 10) continue;
     const a = k*GOLDEN_ANGLE, rr = 0.15 + 0.07*k;                                           // golden spiral around you
     const p3 = cam.target.map((v,i) => v + (t1[i]*Math.cos(a) + t2[i]*Math.sin(a))*rr);
-    for (let i=0;i<3;i++) e.p[i] = p3[i]; e.walker = true; e.tv = [0,0,0]; e.size = Math.min(e.size, 0.045); k++; }
+    for (let i=0;i<3;i++) e.p[i] = p3[i]; e.walker = true; e.tv = [0,0,0]; e.size = Math.min(e.size, 0.035); k++; }
 }
 // ================= 17. Planets: land and walk =================
 function pnoiseJ(d, ph, ridge){
@@ -1192,7 +1211,7 @@ function planetAt(p){ // mirrors the shader's planet branch
   return { cid, ctr: cid.map(v => (v+0.5)*CELLJ), R, amp, sea: amp*(gp[3]*0.9 - 0.5), ridge, ph: [g2[1],g2[2],g2[3]].map(v => v*6.2832), name: R2 };
 }
 const groundR = (pl, dir) => pl.R + Math.max(pl.amp*pnoiseJ(dir, pl.ph, pl.ridge), pl.sea);
-const surf = { on: false, pl: null, fwd: [0,0,-1], descend: 0, cool: 0, prevYaw: 0, eyeH: 0.035 };
+const surf = { on: false, pl: null, fwd: [0,0,-1], descend: 0, cool: 0, prevYaw: 0, eyeH: 0.06 };
 function rotAround(v, axis, a){ const c = Math.cos(a), s = Math.sin(a), d = dot(axis, v), x = cross(axis, v);
   return v.map((_,k) => v[k]*c + x[k]*s + axis[k]*d*(1-c)); }
 function checkLanding(dt){
@@ -1233,6 +1252,28 @@ function surfaceCamera(dt, fwdKey, side){
   return { fwd: look, right, upv };
 }
 document.getElementById('launch').onclick = launch;
+
+// motes: pollen and spores drifting on a slow curl of currents around you, drawn with the ant renderer
+const MOTES = Array.from({length: 140}, () => ({ p: [0,0,0], seed: Math.random()*100, life: Math.random()*8 }));
+function drawMotes(eye, fwd, right, upv, w, h){
+  let n = 0; const t = clock;
+  for (const m of MOTES){
+    m.life -= 1/60;
+    if (m.life <= 0 || dist3(m.p, eye) > 1.4){ const a = Math.random()*6.2832, b = Math.acos(2*Math.random()-1), r = 0.2 + Math.random()*1.1;
+      m.p = [eye[0] + r*Math.sin(b)*Math.cos(a), eye[1] + r*Math.cos(b), eye[2] + r*Math.sin(b)*Math.sin(a)]; m.life = 4 + Math.random()*6; }
+    m.p[0] += 0.004*Math.sin(m.p[1]*3.1 + t*0.6 + m.seed); m.p[1] += 0.003*Math.sin(m.p[2]*2.7 + t*0.5); m.p[2] += 0.004*Math.sin(m.p[0]*2.9 - t*0.7);
+    const k = Math.min(1, m.life)*(0.6 + 0.4*Math.sin(t*3 + m.seed)), hue = (curHue + m.seed*0.0618) % 1;
+    const c = [0, 2, 4].map(o => 0.5 + 0.5*Math.cos(6.2832*(hue + o/6)));
+    pdata.set([m.p[0], m.p[1], m.p[2], 0.012, c[0]*k, c[1]*k, c[2]*k], n*7); n++;
+  }
+  gl.useProgram(pprog); gl.bindVertexArray(pvao); gl.bindBuffer(gl.ARRAY_BUFFER, pbuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, pdata, 0, n*7);
+  gl.uniform3fv(PU.uEye,eye); gl.uniform3fv(PU.uFwd,fwd); gl.uniform3fv(PU.uRight,right); gl.uniform3fv(PU.uUp,upv); gl.uniform2f(PU.uRes,w,h);
+  gl.uniform1f(PU.uDose, 0.4); gl.uniform1f(PU.uT, clock); gl.uniform1f(PU.uOrd, 0.5);
+  gl.depthFunc(gl.LESS); gl.depthMask(false); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  gl.drawArrays(gl.POINTS, 0, n);
+  gl.disable(gl.BLEND); gl.depthMask(true); gl.bindVertexArray(null);
+}
+let curHue = 0;
 // ================= 10. Smoothness + 2. Rendering loop =================
 const fpsWin = {t0: performance.now(), n: 0};
 let scale = 0.6, last = performance.now(), fpsAvg = 60, frames = 0, W = 0, humT = 0, humDeg = null, humCount = 0;
@@ -1334,7 +1375,7 @@ function frame(){
   gl.useProgram(prog); gl.bindVertexArray(mvao); // must be active before its uniforms are set (the ant pass switches programs)
   gl.uniform2f(U.uRes,w,h); gl.uniform1f(U.uT,t);
   gl.uniform3fv(U.uEye,eye); gl.uniform3fv(U.uFwd,fwd); gl.uniform3fv(U.uRight,right); gl.uniform3fv(U.uUp,upv);
-  gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uBias,bias); gl.uniform1ui(U.uSeedU, world.seed>>>0); bakeBiome(); gl.uniform1i(U.uBiome, 1); gl.uniform3fv(U.uBiomeO, biomeO); gl.uniform1f(U.uFall, fallAmt); gl.uniform1f(U.uLanded, surf.on ? 1 : 0);
+  gl.uniform4fv(U.uC,C); gl.uniform4fv(U.uBias,bias); gl.uniform1ui(U.uSeedU, world.seed>>>0); bakeBiome(); gl.uniform1i(U.uBiome, 1); gl.uniform3fv(U.uBiomeO, biomeO); gl.uniform1f(U.uFall, fallAmt); gl.uniform1f(U.uLanded, surf.on ? 1 : 0); gl.uniform3fv(U.uSky, surf.on ? norm(cam.target.map((v,k) => v - surf.pl.ctr[k])) : [0,1,0]);
   { const tgtO = worldMind.state === 'ordering' ? Math.min(1, worldMind.order*1.4) : 0,
           tgtC = worldMind.state === 'chaos' ? Math.min(1, 0.35 + (laws.chaosAt - worldMind.order)/laws.chaosAt) : 0, k = 1 - Math.exp(-dt*0.8);
     mindVis[0] += (tgtO - mindVis[0])*k; mindVis[1] += (tgtC - mindVis[1])*k; gl.uniform2f(U.uMind, mindVis[0], mindVis[1]); } gl.uniform3fv(U.uPal,palette);
@@ -1345,7 +1386,7 @@ function frame(){
   gl.uniform4f(U.uSun, ...sunDir, daylight); gl.uniform2f(U.uHive, hive.near, hive.order);
   gl.depthFunc(gl.ALWAYS);
   gl.drawArrays(gl.TRIANGLES,0,3);
-  drawAnts(eye, fwd, right, upv, w, h);
+  drawAnts(eye, fwd, right, upv, w, h); curHue = hue; drawMotes(eye, fwd, right, upv, w, h);
   if (hive.seenHere > 8 && !hive.announced){ hive.announced = true; say(`Something is reaching in from w ≈ ${hive.w.toFixed(1)}…`); }
 
   if (frames % 10 === 0){

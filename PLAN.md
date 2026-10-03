@@ -124,3 +124,7 @@ Fly into atmosphere → descend → walk (tangent-plane movement, gravity at eye
 ## Hyperslice v11 (DONE): planet life
 Plants: lat/long grid on land below snow, density per planet; kinds golden trees (forks scale 1/φ) / crystal spires / mushrooms; glow at tips.
 Walkers: up to 10 nearby creatures land with you (golden spiral), walk with gravity; social herd, curious come to liked tones, shy scatter. Become floaters again on launch.
+
+## Hyperslice v12 (DONE): fidelity
+Eye 0.06 (trees 1.5–3× eye), thinner trunks. Planet sky (horizon→zenith, sun disk+halo, night stars), aerial fog, star field in space.
+Soft sun shadows + 4-tap AO within 3.5 units; wind sway; sea ripples; 140 drifting motes. Cost ≈25% fps on surface (A/B, same planet).
