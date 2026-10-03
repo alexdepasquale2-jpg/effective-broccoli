@@ -114,8 +114,8 @@ vec2 fam(int f, vec4 z, vec4 c){
   return vec2((length(z)-1.6)*pow(s,-7.0)/1.5, trap);
 }
 
-// The world: an endless lattice of golden cells. Each cell holds one 4D object, and distance from your eye is depth in w,
-// so what lies ahead is a later slice that becomes the present as you arrive. x: dist, y: trap, z: cell hue
+// The world: an endless lattice of golden cells. Each cell holds one 4D object, and distance from your eye moves you through w,
+// so what lies ahead is a different slice that becomes the present as you arrive. x: dist, y: trap, z: cell hue
 vec3 terrain(vec3 p){
   vec3 cid = floor(p/CELL), q = p - (cid+0.5)*CELL;
   vec3 bd = 0.5*CELL - abs(q); float wall = min(bd.x, min(bd.y,bd.z)) + 0.02; // never step past a cell wall
@@ -126,7 +126,7 @@ vec3 terrain(vec3 p){
   if(dc > 0.15) return vec3(min(max(dc, 0.3 - length(p-uEye)), wall), 1e9, 0.0); // empty space is cheap
   q.xz *= rot2(GA*(cid.x+cid.z*PHI)); q.xy *= rot2(GA*cid.y);
   vec3 r3 = q/sc;
-  float w = uW + distance(p, uEye)/(PHI*PHI*PHI);
+  float w = 0.55*sin(uW*2.2 + distance(p, uEye)/(PHI*PHI)); // distance cycles you through slices, in golden periods
   vec4 z = vec4(r3, w);
   float cr=cos(uRot.x+g2.y*6.28), sr=sin(uRot.x+g2.y*6.28); z.xw = mat2(cr,-sr,sr,cr)*z.xw;
   cr=cos(uRot.y); sr=sin(uRot.y); z.yw = mat2(cr,-sr,sr,cr)*z.yw;
@@ -202,7 +202,7 @@ void main(){
   float t = 0.0; vec4 h; bool hit=false; float glow=0.0;
   for(int i=0;i<96;i++){
     h = map(ro+rd*t);
-    glow += 0.012/(0.02+abs(h.x));
+    if(h.z < 1e8) glow += 0.012/(0.02+abs(h.x)); // only real surfaces glow, not cell walls
     if(h.x < 0.0008*t){ hit=true; break; }
     t += h.x*0.9;
     if(t>13.0) break;
