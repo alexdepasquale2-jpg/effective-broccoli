@@ -116,3 +116,7 @@ Memories decay (second law). Above chaosAt: teaching + choirs keep order (held 0
 ## Hyperslice v9 (DONE): order/chaos visuals + galaxy-style biomes
 Ordered worlds: richer, warmer (saturation measured up). Chaotic: boiling surfaces, row glitches, drained red-shifted grain, thicker fog.
 Biomes: value noise over cell coords at Fibonacci scales 5/13/34, weights 1/φ^k; sets density (voids → nebulae), family lean, size, hue; named; 64×64-cell map in panel. JS↔GPU parity 1600/1600.
+
+## Hyperslice v10 (DONE): planets
+Planet cells (4–14% of filled cells, more in dense biomes): R 1.35–1.55, golden fbm terrain (Fibonacci freqs 3/5/8/13/21, 1/φ amps), seas, ridged or rolling, snow. Generated names, white on map.
+Fly into atmosphere → descend → walk (tangent-plane movement, gravity at eye height 0.035, drag to look). L / Launch ↑ to leave. Height parity JS↔GPU ≤0.002.
