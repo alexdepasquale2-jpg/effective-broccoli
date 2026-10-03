@@ -106,15 +106,18 @@ vec2 fam(int f, vec4 z, vec4 c){
     }
     vec4 q = abs(z)-vec4(1.0); return vec2(length(max(q,0.0))*pow(3.0,-5.0)/1.4, trap);
   }
-  // 5: icosahedral golden fold (planes built from phi), w twisted by the golden angle
+  // 5: Icosa-φ body: golden icosahedral mirror folds + sphere inversion (the inversion is what gives it volume)
   vec3 n1 = normalize(vec3(-PHI, PHI-1.0, 1.0)), n2 = normalize(vec3(PHI-1.0, 1.0, -PHI));
-  float s = pow(PHI, 1.5); z *= 1.5;
-  for(int i=0;i<7;i++){
+  float k = 2.6, sc = -PHI*PHI; z *= k; vec4 z0 = z; float dr = 1.0;
+  for(int i=0;i<8;i++){
     z.xyz = abs(z.xyz); z.xyz -= 2.0*min(0.0,dot(z.xyz,n1))*n1; z.xyz -= 2.0*min(0.0,dot(z.xyz,n2))*n2;
-    z.w = abs(z.w); z.xw *= rot2(GA*0.5 + c.w); z = z*s - vec4(1.0, 1.0/PHI, 0.6+c.y*0.2, 0.5)*(s-1.0);
-    trap = min(trap, dot(z,z)*0.05);
+    z = clamp(z,-1.0,1.0)*2.0 - z;
+    z.xw *= rot2(GA*0.5 + c.w);
+    float r2 = dot(z,z);
+    if(r2<0.25){ z*=4.0; dr*=4.0; } else if(r2<1.0){ z/=r2; dr/=r2; }
+    z = z*sc + z0 + c*0.3; dr = dr*abs(sc) + 1.0; trap = min(trap, r2);
   }
-  return vec2((length(z)-1.6)*pow(s,-7.0)/1.5, trap);
+  return vec2(length(z)/abs(dr)/k, trap);
 }
 
 // one 4D form, scaled by sc, sliced at w; returns distance, trap
