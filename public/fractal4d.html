@@ -501,6 +501,8 @@ function breed(a, b){
     const motif = a.sp.motif.flatMap((d,i) => [d, b.sp.motif[i % b.sp.motif.length]]).slice(0,6).map(d => rng() < m*3 ? d+(rng()<.5?1:-1) : d);
     sp = { name, temper: rng()<.5 ? a.sp.temper : b.sp.temper, shape: Math.min(4.999, Math.max(0, (a.sp.shape+b.sp.shape)/2 + (rng()-.5)*m*10)), motif, hue: (a.sp.hue+b.sp.hue)/2,
       gen: Math.max(a.gen, b.gen)+1, ...Object.fromEntries(['social','curious','shy','drift','size','span','osc','life'].map(k => [k, mix(a.sp[k], b.sp[k])])) };
+    if (a.sp.mem && b.sp.mem && a.sp.mem.length === b.sp.mem.length){ // offspring inherit a blend of what their parents learned
+      sp.mem = a.sp.mem.map((v,i) => (v + b.sp.mem[i])/2); sp.val = a.sp.val.map((v,i) => (v + b.sp.val[i])/2); }
     hybrids.set(key, sp); say(`Hybrid born: ${sp.name} (gen ${sp.gen}, ${sp.temper})`); buzz([10,30,10]);
   }
   // replace the oldest unattuned creature
@@ -521,14 +523,17 @@ function stepEnts(dt, t){
     // wave fronts that pass an entity excite it if they agree with its pitch; player waves attune it, shy ones flee dissonance
     for (const w of waves) if (!w.hit.has(e) && Math.abs(dist4(e.p,w.p)-(clock-w.t0)*1.2) < 0.15){
       w.hit.add(e); const c = consonance(w.f, e.f);
-      if (c > 0.3){ e.excite = 1; if (w.player) e.attuned = 10; }
+      if (c > 0.3){ e.excite = 1;
+        if (w.player){ e.attuned = 10; const n = e.g.ratios.length, sp = mind(e.sp, n); sp.val[mod(snapToScale(w.f, e.g), n)] += 0.25; // it learns to value this note
+          if (clock - (e.sang||0) > 4){ e.sang = clock; sing(e); } } }
       else if (w.player && c < 0) e.flee = 3*sp.shy;
     }
     e.excite = Math.max(0, e.excite - dt*0.8); e.attuned = Math.max(0, e.attuned - dt); e.flee = Math.max(0, (e.flee||0) - dt);
     e.amp = Math.max(listen*0.6, e.excite);
     if (e.heart){ for (let a=0;a<4;a++){ const h = a<3 ? e.anc[a] : e.home; e.v[a] = (e.v[a] + dt*2*(h-e.p[a]))*(1-2*dt); e.p[a] += e.v[a]*dt; } continue; }
     const eps = 0.05, f0 = field(...e.p,t), w0 = waveAt(e.p);
-    const lure = tone && consonance(tone, e.f) > 0 ? 0.4*sp.curious : 0; // curious ones drift toward a tone they like
+    const nE = e.g.ratios.length, valued = tone && sp.val && sp.val.length === nE ? Math.min(2, sp.val[mod(snapToScale(tone, e.g), nE)]) : 0;
+    const lure = tone ? 0.4*sp.curious*((consonance(tone, e.f) > 0 ? 1 : 0) + valued) : 0; // drawn to tones they like and tones they've learned to value
     for (let a=0;a<4;a++){
       const q = e.p.slice(); q[a] += eps;
       const grad = (field(...q,t)-f0)/eps, wgrad = (waveAt(q)-w0)/eps;
@@ -622,8 +627,8 @@ function tap(x, y){
   if (best){ // take the creature's tone and sing it outward
     tone = best.f; best.attuned = 10; best.excite = 1; lastTapped = best;
     if (best.heart) say(`Heart of region ${curRegion}: its root tone is yours`);
-    note(tone, actx.currentTime, 1.2, 0.2, best.p[0]); emitWave(best.p, tone, 1, true); buzz(15);
-  } else if (tone){ note(tone, actx.currentTime, 1, 0.15, 0); emitWave(player(), tone, 1, true); buzz(8); }
+    note(tone, actx.currentTime, 1.2, 0.2, best.p[0]); emitWave(best.p, tone, 1, true); learnFromPlayer(tone); buzz(15);
+  } else if (tone){ note(tone, actx.currentTime, 1, 0.15, 0); emitWave(player(), tone, 1, true); learnFromPlayer(tone); buzz(8); }
 }
 
 // ================= 1. Hyperspace: regions along w =================
@@ -650,7 +655,7 @@ document.getElementById('seed').onclick = () => { const s = (Math.random()*4e9)>
 //   scent - given off by resonating creatures in our slice (the food)
 // Trails, swarms and the hive's order all emerge from these local rules.
 const HG = 12, HG4 = HG**4, HSTRIDE = [HG**3, HG**2, HG, 1];
-const hive = { w: 1.3, core: [0,0,0], ants: [], home: new Float32Array(HG4), trail: new Float32Array(HG4), scent: new Float32Array(HG4),
+const hive = { mind: { mem: new Float32Array(144).fill(1), last: null, hits: 0, total: 0, seen: 0 }, w: 1.3, core: [0,0,0], ants: [], home: new Float32Array(HG4), trail: new Float32Array(HG4), scent: new Float32Array(HG4),
   tmp: new Float32Array(HG4), food: 0, order: 0, near: 0, inside: false, met: false, seenHere: 0, chorus: null, filt: null, chGain: null };
 const core4 = () => [...hive.core, hive.w];
 function cellCoord(x, a){ const lo = a<3 ? -2 : hive.w-1.6, span = a<3 ? 4 : 3.2; return Math.max(0, Math.min(HG-1, Math.floor((x-lo)/span*HG))); }
@@ -663,6 +668,7 @@ function hiveReset(){
   const R = mulberry(hash2(world.seed, 777));
   hive.w = (R()<.5 ? -1 : 1)*(1.15+R()*0.35); hive.core = [0,0,0].map(() => (R()-.5)*0.8);
   for (const f of [hive.home, hive.trail, hive.scent]) f.fill(0);
+  hive.mind = { mem: new Float32Array(144).fill(1), last: null, hits: 0, total: 0, seen: 0 }; lastPlayerPc = null; // a new world's hive knows nothing of you
   hive.ants.length = 0; hive.food = 0; hive.met = false; hive.inside = false; hive.announced = false;
   for (let i=0;i<260;i++) hive.ants.push(newAnt());
 }
@@ -792,6 +798,48 @@ function drawAnts(eye, fwd, right, upv, w, h){
   gl.disable(gl.BLEND); gl.depthMask(true); gl.bindVertexArray(null);
 }
 
+
+// ================= 12. Minds: memory shaped by experience, nothing scripted =================
+// Each species keeps (a) a note-transition memory learned from what it hears, used when it answers you, and
+// (b) values for notes that have attuned it, which bias where it goes. The hive learns your sequences and predicts you.
+const mod = (a, n) => ((a % n) + n) % n;
+function mind(sp, n){
+  if (!sp.mem || sp.mem.length !== n*n){ sp.mem = new Float32Array(n*n).fill(1); sp.val = new Float32Array(n); }
+  return sp;
+}
+let lastPlayerPc = null;
+const pc12 = f => mod(Math.round(12*Math.log2(f/55)), 12); // pitch class independent of any scale, for the hive
+function learnFromPlayer(f){
+  const g = region(curRegion), n = g.ratios.length, pc = mod(snapToScale(f, g), n);
+  // every species in the slice hears you; nearer ones learn more
+  for (const e of ents){ if (e.heart || Math.abs(e.p[3]-W) >= e.span || e.g !== g) continue;
+    const sp = mind(e.sp, n), k = 1/(1 + dist3(e.p, cam.target));
+    if (lastPlayerPc !== null) sp.mem[lastPlayerPc*n + pc] += 2*k;
+    for (let i=0;i<sp.mem.length;i++) sp.mem[i] = 1 + (sp.mem[i]-1)*0.995; } // slow forgetting
+  lastPlayerPc = pc;
+  // the hive: predict, then learn
+  const h = hive.mind, p12 = pc12(f);
+  if (h.last !== null){
+    const row = h.mem.subarray(h.last*12, h.last*12+12); let best = 0; for (let i=1;i<12;i++) if (row[i] > row[best]) best = i;
+    if (h.seen > 2){ h.total++; if (best === p12) h.hits++; }
+    h.mem[h.last*12 + p12] += 1; h.seen++;
+  }
+  h.last = p12;
+  if (hive.near > 0.3 && actx){ // near the hive it hums what it expects you to play next
+    const row = h.mem.subarray(p12*12, p12*12+12); let best = 0; for (let i=1;i<12;i++) if (row[i] > row[best]) best = i;
+    if (row[best] > 1.5) note(55*2**((best+12)/12), actx.currentTime + 0.45, 0.8, 0.05*hive.near, 0);
+  }
+}
+function sing(e){ // answer with a phrase from the species' learned memory
+  if (!actx) return;
+  const g = e.g, n = g.ratios.length, sp = mind(e.sp, n);
+  let pc = mod(e.deg, n);
+  for (let k=0;k<4;k++){
+    note(pitch(g, pc+n), actx.currentTime + 0.3 + k*0.17, 0.35, 0.06, e.p[0]);
+    const row = sp.mem.subarray(pc*n, pc*n+n); let sum = 0; for (const v of row) sum += v*v;
+    let x = rng()*sum; for (let i=0;i<n;i++){ x -= row[i]*row[i]; if (x <= 0){ pc = i; break; } } // squared: learned habits dominate
+  }
+}
 // ================= 10. Smoothness + 2. Rendering loop =================
 const fpsWin = {t0: performance.now(), n: 0};
 let scale = 0.6, last = performance.now(), fpsAvg = 60, frames = 0, W = 0, humT = 0, humDeg = null, humCount = 0;
@@ -851,7 +899,7 @@ function frame(){
   if (micAn && frames % 6 === 0){ // humming: a held note becomes your tone
     const f = detectPitch();
     if (f){ const d = snapToScale(f, region(curRegion)); humCount = d === humDeg ? humCount+1 : 0; humDeg = d;
-      if (humCount >= 2 && t-humT > 0.5){ humT = t; tone = pitch(region(curRegion), d); emitWave(player(), tone, 1, true); } }
+      if (humCount >= 2 && t-humT > 0.5){ humT = t; tone = pitch(region(curRegion), d); emitWave(player(), tone, 1, true); learnFromPlayer(tone); } }
     else humCount = 0;
   }
   stepEnts(dt, t);
@@ -910,7 +958,7 @@ function frame(){
       `bestiary ${cur().seen.length}  hybrids ${hybrids.size}${lastTapped ? '  last: '+lastTapped.sp.name+' ('+lastTapped.sp.temper+(lastTapped.gen?', gen '+lastTapped.gen:'')+')' : ''}\n` +
       `tone ${tone ? tone.toFixed(0)+' Hz' : '-'}  attuned ${att}  chords ${cur().chords.length}\n` +
       `sun ${daylight > 0.5 ? 'day' : 'night'} drift ${sunDrift>=0?'+':''}${sunDrift.toFixed(2)}  hive w ${hive.w.toFixed(2)}\n` +
-      `ants ${hive.ants.length} (${hive.seenHere} in slice)  order ${hive.order.toFixed(2)}${hive.inside ? '  INSIDE THE HIVE MIND' : ''}\n` +
+      `ants ${hive.ants.length} (${hive.seenHere} in slice)  order ${hive.order.toFixed(2)}  predicts you ${hive.mind.total ? Math.round(100*hive.mind.hits/hive.mind.total)+'%' : '-'}${hive.inside ? '  INSIDE THE HIVE MIND' : ''}\n` +
       `audio: ${!actx ? 'tap to start' : micAn ? 'mic + synth' : 'synth'}  ${rapid ? 'rapid' : 'sensitive'}`;
   }
   requestAnimationFrame(frame);

@@ -101,3 +101,7 @@ Order = 1 − spatial entropy. Chorus tunes with order. Passing the core (needs 
 First-person flight through an endless lattice of golden cells (2φ²). Each cell: one of 6 4D families (any family anywhere, regions lean the odds), golden-angle rotation, own slice.
 w at a point = 0.55·sin(2.2·W + dist/φ²), so travel cycles you through slices. Shapes, scales, rhythms are continuous/generated. Fixed: fps counter (wall-clock), uniforms set on wrong program.
 Next: check on a real GPU; tune Kaleido/Menger/Icosa so they don't read as dust at low res.
+
+## Hyperslice v6 (DONE): minds
+Species learn note transitions from what they hear (answer you with learned phrases), learn to value notes that attuned them (approach them), hybrids inherit blended memory.
+Hive learns your sequence and predicts your next note (accuracy shown; hums its guess when near). Test: 4-note loop → hive 88% after 3 loops, 99% after 30; species sang the loop back.
