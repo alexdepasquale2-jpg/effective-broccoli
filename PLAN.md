@@ -76,3 +76,11 @@ Open: Shuffle runs hold ~8 min (Ascend resets the Shuffle count, so the old "Shu
   Light: Lantern Saint (all +10%), Prism Knight (neighbours +30% of its power), Dawn Herald (first foe/stage 1 HP), Mirror Oracle (pity 7), Sun Forger (Essence +20%), Radiant Judge (×2 vs Void).
   Void: Hollow King (merges into it 15% +2), Null Jester (kill gold ×3 or ×0), Rift Walker (merges any element), Ink Wraith (enemies −1% HP/s), Eclipse Widow (bosses no regen/split), Abyssal Seer (×2 vs Light).
 - Counter wheel: Fire>Earth>Air>Water>Fire; Light and Void counter each other.
+
+## Hyperslice (public/fractal4d.html): all 10 systems, DONE. Next: real-device test (phone touch, mic hum), tune rapid speed.
+1. Regions along w: one seed per region, crossfade at borders, locked past `unlocked`.
+2. Harmony: consonance(f1,f2) from simple ratios; consonant pairs attract, dissonant repel.
+3. Wave field: tap/hum emits 4D waves; entities feel gradient, waves ripple the surface (shader).
+4. Player orb + tap entity to take its tone; humming (mic pitch detect) sets tone; 2-finger pinch/4D; haptics.
+5. Chords (done): 3 attuned distinct pitch classes = chord → unlock next region. Progress + places (songs as seeds) in localStorage.
+6. Sound: region drone glides on crossing, sequencer per region, entities sing. Entity cap adapts to fps.

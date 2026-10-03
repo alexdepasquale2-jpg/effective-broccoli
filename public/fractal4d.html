@@ -10,17 +10,20 @@
   #ui{position:fixed;left:12px;top:12px;background:#0008;padding:8px 10px;border-radius:6px;max-width:300px}
   #ui button,#ui label{background:#123;color:#cfe;border:1px solid #3a6;border-radius:4px;padding:3px 8px;margin:2px 2px 2px 0;cursor:pointer;font:inherit;display:inline-block}
   #ui input[type=file]{display:none}
+  #ui select{background:#123;color:#cfe;border:1px solid #3a6;font:inherit;max-width:180px}
   #stats{white-space:pre;margin-top:4px;opacity:.85}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="ui">
-  <b>Hyperslice</b>: 4D Julia, 3D slices<br>
+  <b>Hyperslice</b>: tune the 4th dimension<br>
   <button id="mic">Mic</button><label>Audio file<input id="file" type="file" accept="audio/*"></label><button id="synth">Synth</button><button id="hide">Hide</button><br>
-  <button id="dmode">Drag: orbit</button><button id="smode">Mode: sensitive</button><button id="seed">New seed</button>
+  <button id="dmode">Drag: orbit</button><button id="smode">Mode: sensitive</button><button id="seed">New world</button><br>
+  Places <select id="places"></select>
   <div id="stats"></div>
-  <div style="opacity:.6">Shift-drag or 4D mode: horizontal rotates through w, vertical moves the slice · Wheel: zoom · WASD/QE: fly · Space: reseed</div>
+  <div id="msg" style="color:#ffd;min-height:1.4em"></div>
+  <div style="opacity:.6">Tap a creature to take its tone. Hum into the mic to sing. 3 attuned notes = a chord, which unlocks the next region of w.<br>Shift-drag / 4D mode / 2 fingers: move through w · pinch or wheel: zoom · WASD/QE fly · R/F: w</div>
 </div>
 <script>
 'use strict';
@@ -44,6 +47,7 @@ uniform float uHue;
 uniform vec4 uEnt[${MAX_ENT}];   // xyz + slice radius
 uniform vec4 uEntK[${MAX_ENT}];  // kind, hue, vib freq, vib amp
 uniform int uNEnt;
+uniform vec4 uRip[4];     // wave ripples: xyz + age (age<0 = off)
 
 vec4 qsq(vec4 a){ return vec4(a.x*a.x-dot(a.yzw,a.yzw), 2.0*a.x*a.yzw); }
 
@@ -68,6 +72,9 @@ vec2 julia(vec3 p){
   float d = 0.25*log(r2)*sqrt(r2/md2);
   // vibrational surface: standing waves driven by audio bands
   d += 0.012*uBand.y*sin(18.0*p.x+uT*6.0)*sin(18.0*p.y-uT*5.0)*sin(18.0*p.z+uT*4.0);
+  for(int i=0;i<4;i++){ float a=uRip[i].w; if(a<0.0) continue;
+    float r=length(p-uRip[i].xyz);
+    d += 0.02*exp(-a*0.6)*sin(30.0*r-a*14.0)*exp(-abs(r-a*1.2)*5.0); }
   return vec2(d, trap);
 }
 
@@ -85,7 +92,7 @@ vec3 map(vec3 p){
     vec3 q = p - e.xyz;
     float wob = k.w*sin(k.z*uT + 20.0*q.x)*sin(k.z*0.7*uT + 20.0*q.y);
     float d;
-    if(k.x<0.5) d = length(q) - e.w;
+    if(k.x<0.5||k.x>2.5) d = length(q) - e.w;
     else if(k.x<1.5){ float a=uT*k.z*0.3; q.xz=mat2(cos(a),-sin(a),sin(a),cos(a))*q.xz; d = sdBox(q, e.w*0.7)-0.01; }
     else { float a=uT*k.z*0.2; q.xy=mat2(cos(a),-sin(a),sin(a),cos(a))*q.xy; d = sdTorus(q, e.w, e.w*0.3); }
     d += wob*e.w;
@@ -123,7 +130,7 @@ void main(){
     float fres = pow(1.0-max(dot(n,-rd),0.0), 3.0);
     vec3 base;
     if(h.y<0.5) base = hsv(uHue + 0.25*sqrt(h.z) + 0.15*uBand.z, 0.75, 0.9);
-    else { int id=int(h.y)-1; base = hsv(uEntK[id].y, 0.9, 1.0) * (1.5 + 2.0*uBand.w); }
+    else { int id=int(h.y)-1; base = hsv(uEntK[id].y, uEntK[id].x>2.5?0.3:0.9, 1.0) * (uEntK[id].x>2.5 ? 5.0 : 1.5 + 2.0*uBand.w + 20.0*uEntK[id].w); }
     col = base*(0.25*amb + 0.85*dif) + fres*hsv(uHue+0.6,0.5,1.0)*(0.4+uBand.x);
     col = mix(col, bg, 1.0-exp(-0.08*t*t));
   }
@@ -140,177 +147,331 @@ gl.linkProgram(prog); gl.useProgram(prog);
 gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
 gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
-const U = {}; for (const n of ['uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
+const U = {}; for (const n of ['uRip','uRes','uT','uEye','uFwd','uRight','uUp','uC','uW','uRot','uBand','uHue','uEnt','uEntK','uNEnt']) U[n]=gl.getUniformLocation(prog,n);
 
-// ---------- audio → synesthesia bands ----------
-let analyser=null, freq=null, prevSpec=null, actx=null;
+// ================= 6. World generator: one seed per world, one genome per region of w =================
+function mulberry(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function hash2(a,b){ let h=Math.imul(a^0x9e3779b9,0x85ebca6b)^Math.imul((b|0)+0x632be5ab,0xc2b2ae35); h^=h>>>15; h=Math.imul(h,0x2c1b3c6d); return (h^h>>>13)>>>0; }
+function hashStr(s){ let h=2166136261; for (const c of s) h=Math.imul(h^c.charCodeAt(0),16777619); return h>>>0; }
+const SCALES = {pentatonic:[1,9/8,5/4,3/2,5/3], harmonic:[1,5/4,3/2,7/4,2,9/4], major:[1,9/8,5/4,4/3,3/2,5/3,15/8], minor:[1,9/8,6/5,4/3,3/2,8/5,9/5]};
+function makeGenome(seed){
+  const R = mulberry(seed), pick = a => a[Math.floor(R()*a.length)];
+  const scale = pick(Object.keys(SCALES));
+  const steps = 8+Math.floor(R()*9), hits = 3+Math.floor(R()*(steps-4));
+  const rhythm = Array.from({length:steps}, (_,i) => (i*hits)%steps < hits); // Euclidean rhythm
+  return { seed, scale, ratios: SCALES[scale], root: 55*2**(R()*2), bpm: 70+R()*80, rhythm,
+    wave: pick(['sine','triangle','sawtooth','square']),
+    wf: [0,1,2,3].map(i => 0.05+0.04*SCALES[scale][i%SCALES[scale].length]*(0.5+R())), // visual wave speeds share the musical ratios
+    ph: [0,1,2,3].map(() => R()*6.28), hue: R(), walk: 0, step: 0 };
+}
+const world = { seed: 1, name: '' }, genomes = new Map();
+function region(i){ if (!genomes.has(i)) genomes.set(i, makeGenome(hash2(world.seed, i))); return genomes.get(i); }
+const pitch = (g, deg) => { const n=g.ratios.length; return g.root * g.ratios[((deg%n)+n)%n] * 2**Math.floor(deg/n); };
+function snapToScale(f, g){ let best=0, be=1e9; for (let d=-10; d<30; d++){ const e=Math.abs(Math.log2(f/pitch(g,d))); if (e<be){be=e;best=d;} } return best; }
+
+// ================= 9. Progress: unlocked regions, chords found, saved places =================
+const SAVE = 'hyperslice.v1';
+let saveData = { worlds: {}, last: 0 };
+try { Object.assign(saveData, JSON.parse(localStorage.getItem(SAVE)) || {}); } catch {}
+const save = () => { try { localStorage.setItem(SAVE, JSON.stringify(saveData)); } catch {} };
+const cur = () => saveData.worlds[world.seed];
+const msgEl = document.getElementById('msg'); let msgT = 0;
+const say = (m) => { msgEl.textContent = m; msgT = 4; };
+const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
+
+// ================= 7. Sound: inputs, analysis, generative output =================
+let analyser=null, freq=null, prevSpec=null, actx=null, micAn=null, micBuf=null, master=null, drone=null, muted=false, nextBeat=0;
 function hookAudio(src){
   analyser = actx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.7;
   src.connect(analyser); freq = new Uint8Array(analyser.frequencyBinCount); prevSpec = new Float32Array(freq.length);
 }
-function ensureCtx(){ actx = actx || new AudioContext(); actx.resume(); }
+function ensureCtx(){
+  if (!actx){
+    actx = new AudioContext();
+    master = actx.createGain(); master.gain.value = 0.25;
+    const echo = actx.createDelay(), fb = actx.createGain(); echo.delayTime.value = 0.31; fb.gain.value = 0.35;
+    master.connect(echo); echo.connect(fb); fb.connect(echo); echo.connect(actx.destination); master.connect(actx.destination);
+    hookAudio(master);
+    // region drone: two detuned oscillators that glide to the new root when you cross into another region
+    const g = actx.createGain(); g.gain.value = 0.05; g.connect(master);
+    drone = [0,1].map(i => { const o = actx.createOscillator(); o.type='sine'; o.frequency.value = region(curRegion).root/2*(1+i*0.004); o.connect(g); o.start(); return o; });
+    nextBeat = actx.currentTime;
+  }
+  actx.resume();
+}
 document.getElementById('mic').onclick = async () => {
-  ensureCtx(); const s = await navigator.mediaDevices.getUserMedia({audio:true}); hookAudio(actx.createMediaStreamSource(s));
+  ensureCtx(); const s = await navigator.mediaDevices.getUserMedia({audio:true});
+  const src = actx.createMediaStreamSource(s); hookAudio(src);
+  micAn = actx.createAnalyser(); micAn.fftSize = 2048; src.connect(micAn); micBuf = new Float32Array(2048);
+  say('Mic on: hum a note to sing into the world');
 };
 document.getElementById('file').onchange = e => {
-  ensureCtx(); const a = new Audio(URL.createObjectURL(e.target.files[0])); a.loop = true; a.play();
+  const file = e.target.files[0]; if (!file) return;
+  ensureCtx(); const a = new Audio(URL.createObjectURL(file)); a.loop = true; a.play();
   const src = actx.createMediaElementSource(a); hookAudio(src); src.connect(actx.destination);
+  setWorld(hashStr(file.name + file.size), '♪ ' + file.name); // a song is a place: same song, same world
 };
-// ---------- procedural genome: one seed drives waves, patterns and sound ----------
-function mulberry(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
-const SCALES = {pentatonic:[1,9/8,5/4,3/2,5/3], harmonic:[1,5/4,3/2,7/4,2,9/4], whole:[1,9/8,5/4,45/32,8/5,16/9], minor:[1,9/8,6/5,4/3,3/2,8/5,9/5]};
-let G;
-function makeGenome(seed){
-  const R = mulberry(seed), pick = a => a[Math.floor(R()*a.length)];
-  const names = Object.keys(SCALES), scale = pick(names);
-  const steps = 8+Math.floor(R()*9), hits = 3+Math.floor(R()*(steps-4));
-  // Euclidean rhythm: evenly spread hits over steps
-  const rhythm = Array.from({length:steps}, (_,i) => (i*hits)%steps < hits);
-  return { seed, scale, ratios: SCALES[scale], root: 55*2**(R()*2), bpm: 70+R()*80, rhythm,
-    wave: pick(['sine','triangle','sawtooth','square']),
-    // four coupled wave frequencies + phases shape the Julia path; same ratios as the music
-    wf: [0,1,2,3].map(i => 0.05+0.04*SCALES[scale][i%SCALES[scale].length]*(0.5+R())),
-    ph: [0,1,2,3].map(() => R()*6.28), walk: 0, step: 0 };
-}
-G = makeGenome((Math.random()*1e9)|0);
-document.getElementById('seed').onclick = () => { G = makeGenome((Math.random()*1e9)|0); reseed(); };
-
-let synthOut = null, nextBeat = 0;
-document.getElementById('synth').onclick = () => {
-  ensureCtx(); if (synthOut) return;
-  synthOut = actx.createGain(); synthOut.gain.value = 0.25;
-  const verb = actx.createDelay(); verb.delayTime.value = 0.31; const fb = actx.createGain(); fb.gain.value = 0.35;
-  synthOut.connect(verb); verb.connect(fb); fb.connect(verb); verb.connect(actx.destination); synthOut.connect(actx.destination);
-  hookAudio(synthOut); synthOut.connect(verb); nextBeat = actx.currentTime;
-};
-function note(freq, when, dur, vol, pan){
-  const o = actx.createOscillator(), g = actx.createGain(), p = actx.createStereoPanner();
-  o.type = G.wave; o.frequency.value = freq; p.pan.value = pan;
-  g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(vol, when+0.01); g.gain.exponentialRampToValueAtTime(1e-4, when+dur);
-  o.connect(g); g.connect(p); p.connect(synthOut); o.start(when); o.stop(when+dur+0.05);
-}
-const pitch = deg => G.root * G.ratios[((deg%G.ratios.length)+G.ratios.length)%G.ratios.length] * 2**Math.floor(deg/G.ratios.length);
-function scheduleSynth(){
-  if (!synthOut) return;
-  const spb = 60/G.bpm/2;
-  while (nextBeat < actx.currentTime + 0.1){
-    if (G.rhythm[G.step % G.rhythm.length]){
-      G.walk += Math.round((Math.random()-0.5)*3); G.walk = Math.max(-2, Math.min(12, G.walk)); // random walk melody
-      note(pitch(G.walk+5), nextBeat, spb*1.8, 0.18, Math.sin(G.step));
-    }
-    if (G.step % G.rhythm.length === 0) note(pitch(0)/2, nextBeat, spb*6, 0.25, 0);       // bass drone on bar start
-    G.step++; nextBeat += spb;
-  }
-}
-const seen = new Set(); // entities entering the slice ring their own pitch
-
+document.getElementById('synth').onclick = e => { ensureCtx(); muted = !muted; master.gain.value = muted ? 0 : 0.25; e.target.textContent = muted ? 'Synth: off' : 'Synth: on'; };
 document.getElementById('hide').onclick = () => document.getElementById('ui').style.display='none';
 
-const band = {bass:0, mid:0, high:0, flux:0, centroid:0.3, peakBin:0};
+function note(f, when, dur, vol, pan, g = region(curRegion)){
+  if (!actx) return;
+  const o = actx.createOscillator(), gn = actx.createGain(), p = actx.createStereoPanner();
+  o.type = g.wave; o.frequency.value = f; p.pan.value = Math.max(-1, Math.min(1, pan));
+  gn.gain.setValueAtTime(0, when); gn.gain.linearRampToValueAtTime(vol, when+0.01); gn.gain.exponentialRampToValueAtTime(1e-4, when+dur);
+  o.connect(gn); gn.connect(p); p.connect(master); o.start(when); o.stop(when+dur+0.05);
+}
+function scheduleSynth(){
+  if (!actx) return;
+  const g = region(curRegion), spb = 60/g.bpm/2;
+  while (nextBeat < actx.currentTime + 0.1){
+    if (g.rhythm[g.step % g.rhythm.length]){
+      g.walk = Math.max(-2, Math.min(12, g.walk + Math.round((Math.random()-0.5)*3))); // random-walk melody
+      note(pitch(g, g.walk+5), nextBeat, spb*1.8, 0.12, Math.sin(g.step));
+    }
+    g.step++; nextBeat += spb;
+  }
+}
+// hum detection: autocorrelation on the mic signal
+function detectPitch(){
+  micAn.getFloatTimeDomainData(micBuf);
+  let rms = 0; for (let i=0;i<micBuf.length;i++) rms += micBuf[i]*micBuf[i];
+  if (Math.sqrt(rms/micBuf.length) < 0.015) return 0;
+  const sr = actx.sampleRate; let best = 0, lagB = 0;
+  for (let lag = Math.floor(sr/900); lag < Math.floor(sr/70); lag++){
+    let c = 0; for (let i=0;i<1024;i++) c += micBuf[i]*micBuf[i+lag];
+    if (c > best){ best = c; lagB = lag; }
+  }
+  return lagB ? sr/lagB : 0;
+}
+
+const band = {bass:0, mid:0, high:0, flux:0, centroid:0.3};
 function readAudio(t){
-  if (!analyser){ // internal "dream" signal when no audio is connected
+  if (!analyser){ // dream signal until the first touch starts audio
     band.bass = 0.5+0.5*Math.sin(t*1.3)**8; band.mid = 0.4+0.3*Math.sin(t*0.7); band.high = 0.3+0.3*Math.sin(t*2.9);
-    band.flux = Math.max(0, Math.sin(t*2.0))**16; band.centroid = 0.3+0.2*Math.sin(t*0.11); band.peakBin = 20+15*Math.sin(t*0.3); return;
+    band.flux = Math.max(0, Math.sin(t*2.0))**16; band.centroid = 0.3+0.2*Math.sin(t*0.11); return;
   }
   analyser.getByteFrequencyData(freq);
-  const n = freq.length; let b=0,m=0,h=0,fl=0,ws=0,s=0,pk=0,pv=0;
+  const n = freq.length; let b=0,m=0,h=0,fl=0,ws=0,s=0;
   for (let i=1;i<n;i++){ const v=freq[i]/255;
     if (i<n*0.04) b+=v; else if (i<n*0.25) m+=v; else h+=v;
-    fl += Math.max(0, v-prevSpec[i]); prevSpec[i]=v; ws+=v*i; s+=v; if(v>pv){pv=v;pk=i;} }
+    fl += Math.max(0, v-prevSpec[i]); prevSpec[i]=v; ws+=v*i; s+=v; }
   const k=0.35, lerp=(a,x)=>a+(x-a)*k;
   band.bass=lerp(band.bass,b/(n*0.04)); band.mid=lerp(band.mid,m/(n*0.21)); band.high=lerp(band.high,h/(n*0.75)*1.6);
-  band.flux=lerp(band.flux,Math.min(1,fl/12)); band.centroid=lerp(band.centroid,s?ws/s/n:0.3); band.peakBin=pk;
+  band.flux=lerp(band.flux,Math.min(1,fl/12)); band.centroid=lerp(band.centroid,s?ws/s/n:0.3);
+}
+const binOf = f => actx ? Math.min(511, Math.round(f / (actx.sampleRate/1024))) : 0;
+
+// ================= 4. Harmony: how well two pitches agree =================
+const SIMPLE = [[1,1],[6,5],[5,4],[4,3],[3,2],[8,5],[5,3],[2,1]];
+function consonance(f1, f2){
+  let r = Math.max(f1,f2)/Math.min(f1,f2); while (r >= 2.0001) r /= 2;
+  let best = -0.6; // dissonant unless it lands near a simple ratio
+  for (const [a,b] of SIMPLE) if (Math.abs(Math.log2(r*b/a))*12 < 0.35) best = Math.max(best, 1-(a+b)/14);
+  return best;
 }
 
-// ---------- emergent 4D entities ----------
-// Each lives at a 4D point with a w-span; it only appears in the 3D slice while the slice cuts its span.
-// Motion: damped oscillators (vibrational physics) + drift up a probability field shaped by the fractal + audio.
-let rng = Math.random;
-const ents = [];
-function spawn(){
-  return { p:[(rng()-.5)*2.4,(rng()-.5)*2.4,(rng()-.5)*2.4,(rng()-.5)*1.6], v:[0,0,0,0],
-    span: 0.15+rng()*0.6, size: 0.04+rng()*0.08, kind: Math.floor(rng()*3), hue: rng(),
-    f: 1+rng()*8, bin: Math.floor(rng()*60)+2, life: 0, max: 8+rng()*20, phase: rng()*6.28 };
+// ================= 3. Wave field: tones spread as 4D waves =================
+let clock = 0;
+const waves = []; // {p, f, amp, t0, player, hit:Set}
+const dist4 = (a,b) => Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2],a[3]-b[3]);
+function emitWave(p, f, amp, player){ waves.push({p:p.slice(), f, amp, t0:clock, player, hit:new Set()}); if (waves.length > 8) waves.shift(); }
+function waveAt(p){
+  let s = 0;
+  for (const w of waves){ const age = clock-w.t0, r = dist4(p,w.p);
+    s += w.amp*Math.exp(-age*0.5)*Math.exp(-((r-age*1.2)**2)*8)*Math.sin(r*12-age*8); }
+  return s;
 }
-function reseed(){ ents.length=0; for(let i=0;i<MAX_ENT;i++) ents.push(spawn()); }
-reseed();
+
+// ================= 5. Entity life: birth, resonance, following, death =================
+const ents = []; let entCap = MAX_ENT-1; const rng = Math.random;
+let tone = 0, curRegion = 0;
+const player = () => [cam.target[0], cam.target[1], cam.target[2], nav4.w];
+function spawn(){
+  const g = region(curRegion), deg = Math.floor(rng()*g.ratios.length*2), w0 = nav4.w + (rng()-.5)*1.8;
+  return { p:[(rng()-.5)*2.4,(rng()-.5)*2.4,(rng()-.5)*2.4,w0], v:[0,0,0,0], home:w0,
+    span: 0.15+rng()*0.6, size: 0.04+rng()*0.07, kind: Math.floor(rng()*3), deg, f: pitch(g, deg+g.ratios.length),
+    osc: 1+rng()*8, life: 0, max: 15+rng()*25, phase: rng()*6.28, excite: 0, attuned: 0, amp: 0, g };
+}
+function reseed(){ ents.length=0; for (let i=0;i<MAX_ENT-1;i++) ents.push(spawn()); }
 const field = (x,y,z,w,t) => Math.sin(x*2.1+t*0.3)*Math.cos(y*1.7-w*2.0)+Math.sin(z*2.3+w*1.3-t*0.2); // probability potential
-function stepEnts(dt, t, W){
+function stepEnts(dt, t){
+  const P = player();
   for (let i=0;i<ents.length;i++){
     let e = ents[i]; e.life += dt;
-    if (e.life > e.max || Math.hypot(...e.p) > 2.2){ e = ents[i] = spawn(); }
-    const amp = analyser ? freq[e.bin]/255 : 0.5+0.5*Math.sin(t*e.f*0.3+e.phase);
-    const eps=0.05, f0=field(...e.p,t);
-    for (let a=0;a<4;a++){
-      const q=e.p.slice(); q[a]+=eps;
-      const grad=(field(...q,t)-f0)/eps;
-      // spring to origin + probability gradient + audio-driven vibration kick
-      e.v[a] += dt*(-0.4*e.p[a] + 0.6*grad + 3*amp*band.flux*Math.sin(e.phase+a*1.7+t*e.f));
-      e.v[a] *= 1 - 1.2*dt; e.p[a] += e.v[a]*dt;
+    if ((e.life > e.max && e.attuned <= 0) || Math.hypot(e.p[0],e.p[1],e.p[2]) > 2.4 || Math.abs(e.p[3]-nav4.w) > 1.8) e = ents[i] = spawn();
+    const listen = analyser ? freq[binOf(e.f)]/255 : 0.5+0.5*Math.sin(t*e.osc*0.3+e.phase);
+    // wave fronts that pass an entity excite it if they agree with its pitch; player waves attune it
+    for (const w of waves) if (!w.hit.has(e) && Math.abs(dist4(e.p,w.p)-(clock-w.t0)*1.2) < 0.15){
+      w.hit.add(e); const c = consonance(w.f, e.f);
+      if (c > 0.3){ e.excite = 1; if (w.player){ e.attuned = 10; } }
+      else if (w.player && c < 0) e.flee = 2;
     }
-    // neighbours resonate: same-bin entities attract (emergent clusters / "locations")
-    for (let j=i+1;j<ents.length;j++){ const o=ents[j]; if (Math.abs(o.bin-e.bin)>4) continue;
-      for (let a=0;a<4;a++){ const d=(o.p[a]-e.p[a])*0.3*dt; e.v[a]+=d; o.v[a]-=d; } }
-    e.amp = amp;
+    e.excite = Math.max(0, e.excite - dt*0.8); e.attuned = Math.max(0, e.attuned - dt); e.flee = Math.max(0, (e.flee||0) - dt);
+    e.amp = Math.max(listen*0.6, e.excite);
+    const eps = 0.05, f0 = field(...e.p,t), w0 = waveAt(e.p);
+    for (let a=0;a<4;a++){
+      const q = e.p.slice(); q[a] += eps;
+      const grad = (field(...q,t)-f0)/eps, wgrad = (waveAt(q)-w0)/eps;
+      const spring = a<3 ? -0.4*e.p[a] : -0.4*(e.p[a]-e.home);
+      let f = spring + 0.5*grad - 0.8*wgrad + 2*listen*band.flux*Math.sin(e.phase+a*1.7+t*e.osc);
+      if (e.attuned > 0) f += 1.2*(P[a] + 0.35*Math.sin(e.phase+a*2.1+t*0.8) - e.p[a]);   // orbit the player
+      if (e.flee > 0) f -= 1.5*(P[a]-e.p[a]);
+      e.v[a] += dt*f; e.v[a] *= 1 - 1.2*dt; e.p[a] += e.v[a]*dt;
+    }
+    // harmony: consonant pairs gather into places, dissonant pairs push apart
+    for (let j=i+1;j<ents.length;j++){ const o = ents[j], d = dist4(e.p,o.p); if (d > 1.2 || d < 1e-4) continue;
+      const c = d < 0.12 ? -1 : consonance(e.f, o.f);
+      for (let a=0;a<4;a++){ const k = c*0.6*dt*(o.p[a]-e.p[a])/d; e.v[a]+=k; o.v[a]-=k; } }
   }
 }
 
-// ---------- camera ----------
+// chords: three attuned distinct pitch classes in the slice that all agree
+let chordCool = 0;
+function checkChord(W){
+  if (chordCool > 0) return;
+  const g = region(curRegion), n = g.ratios.length, by = new Map();
+  for (const e of ents) if (e.attuned > 0 && Math.abs(e.p[3]-W) < e.span) by.set(((e.deg%n)+n)%n, e);
+  const pcs = [...by.values()];
+  for (let a=0;a<pcs.length;a++) for (let b=a+1;b<pcs.length;b++) for (let c=b+1;c<pcs.length;c++){
+    const tri = [pcs[a],pcs[b],pcs[c]];
+    if (consonance(tri[0].f,tri[1].f) <= 0 || consonance(tri[0].f,tri[2].f) <= 0 || consonance(tri[1].f,tri[2].f) <= 0) continue;
+    chordCool = 3;
+    const key = curRegion + ':' + tri.map(e => ((e.deg%n)+n)%n).sort().join('-');
+    tri.forEach((e,k) => { note(e.f, actx.currentTime + k*0.12, 2.5, 0.15, e.p[0]); emitWave(e.p, e.f, 1.5, false); e.excite = 1; });
+    buzz([20,40,20]);
+    const W0 = cur();
+    if (!W0.chords.includes(key)){
+      W0.chords.push(key); W0.unlocked++; save(); refreshPlaces();
+      say(`Chord found (${W0.chords.length}). Region ±${W0.unlocked} of w is open.`);
+    } else say('Known chord. Find a new combination to open more of w.');
+    return;
+  }
+}
+
+// ================= 8. Player and input =================
 const cam = {yaw:0.6, pitch:0.3, dist:3.2, target:[0,0,0]};
-let drag=null; const keys={};
-let dragMode = 'orbit', rapid = false;
-const nav4 = {w:0, rot:0, vw:0, vr:0, tw:0, tr:0}; // user offset in w + xw rotation, velocities, smoothing targets
+const keys = {}, pts = new Map();
+let dragMode = 'orbit', rapid = false, pinch = 0, mid = null, lastMove = 0;
+const nav4 = {w:0, rot:0, vw:0, vr:0, tw:0, tr:0};
 document.getElementById('dmode').onclick = e => { dragMode = dragMode==='orbit'?'4d':'orbit'; e.target.textContent = 'Drag: '+(dragMode==='4d'?'4D':'orbit'); };
 document.getElementById('smode').onclick = e => { rapid = !rapid; e.target.textContent = 'Mode: '+(rapid?'rapid':'sensitive'); };
-let lastMove = 0;
-cv.onpointerdown = e => { drag=[e.clientX,e.clientY]; lastMove=performance.now(); cv.setPointerCapture(e.pointerId); };
-cv.onpointermove = e => { if(!drag) return;
-  if (dragMode==='4d' || e.shiftKey){
-    const dx=e.clientX-drag[0], dy=e.clientY-drag[1], now=performance.now(), dtm=Math.max(1,now-lastMove); lastMove=now;
-    if (rapid){ // speed-adaptive: fast flicks accelerate and glide on
-      const acc = 0.004*(1 + Math.hypot(dx,dy)/dtm*1.5);
-      nav4.vr += dx*acc*8; nav4.vw -= dy*acc*8;
-    } else {    // sensitive: fine steps, eased toward target, no glide
-      nav4.tr += dx*0.0012; nav4.tw -= dy*0.0008;
-    }
-    drag=[e.clientX,e.clientY]; return;
+function move4D(dx, dy){
+  const now = performance.now(), dtm = Math.max(1, now-lastMove); lastMove = now;
+  if (rapid){ const acc = 0.004*(1 + Math.hypot(dx,dy)/dtm*1.5); nav4.vr += dx*acc*8; nav4.vw -= dy*acc*8; } // speed-adaptive glide
+  else { nav4.tr += dx*0.0012; nav4.tw -= dy*0.0008; }                                                    // fine, eased, no glide
+}
+cv.onpointerdown = e => {
+  ensureCtx(); cv.setPointerCapture(e.pointerId);
+  pts.set(e.pointerId, {x:e.clientX, y:e.clientY, x0:e.clientX, y0:e.clientY, t0:performance.now()});
+  lastMove = performance.now(); pinch = 0; mid = null;
+};
+cv.onpointermove = e => {
+  const p = pts.get(e.pointerId); if (!p) return;
+  const dx = e.clientX-p.x, dy = e.clientY-p.y; p.x = e.clientX; p.y = e.clientY;
+  if (pts.size === 2){ // two fingers: pinch zooms, moving together travels through w
+    const [a,b] = [...pts.values()], d = Math.hypot(a.x-b.x, a.y-b.y), m = [(a.x+b.x)/2, (a.y+b.y)/2];
+    if (pinch) cam.dist = Math.max(0.4, Math.min(7, cam.dist*pinch/d));
+    if (mid) move4D(m[0]-mid[0], m[1]-mid[1]);
+    pinch = d; mid = m; return;
   }
-  cam.yaw -= (e.clientX-drag[0])*0.005; cam.pitch=Math.max(-1.5,Math.min(1.5,cam.pitch+(e.clientY-drag[1])*0.005)); drag=[e.clientX,e.clientY]; };
-cv.onpointerup = () => drag=null;
+  if (dragMode==='4d' || e.shiftKey) return move4D(dx, dy);
+  cam.yaw -= dx*0.005; cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch+dy*0.005));
+};
+cv.onpointerup = cv.onpointercancel = e => {
+  const p = pts.get(e.pointerId); pts.delete(e.pointerId); pinch = 0; mid = null;
+  if (p && pts.size === 0 && Math.hypot(e.clientX-p.x0, e.clientY-p.y0) < 8 && performance.now()-p.t0 < 300) tap(e.clientX, e.clientY);
+};
 cv.onwheel = e => { cam.dist = Math.max(0.4, Math.min(7, cam.dist*Math.exp(e.deltaY*0.001))); };
-onkeydown = e => { keys[e.key.toLowerCase()]=1; if(e.key===' ') reseed(); };
-onkeyup = e => keys[e.key.toLowerCase()]=0;
+onkeydown = e => { keys[e.key.toLowerCase()] = 1; if (e.key === ' ') reseed(); };
+onkeyup = e => keys[e.key.toLowerCase()] = 0;
 
-// ---------- loop with adaptive resolution to hold >= 30 fps ----------
-let scale = 0.6, last = performance.now(), fpsAvg = 60, frames = 0;
-const ent = new Float32Array(MAX_ENT*4), entK = new Float32Array(MAX_ENT*4);
+let view = null; // camera basis from the last frame, for picking
+function project(p){
+  const v = [p[0]-view.eye[0], p[1]-view.eye[1], p[2]-view.eye[2]], z = dot(v, view.fwd); if (z < 0.05) return null;
+  const ux = 1.6*dot(v, view.right)/z, uy = 1.6*dot(v, view.up)/z;
+  return [(ux*innerHeight + innerWidth)/2, (innerHeight - uy*innerHeight)/2];
+}
+function tap(x, y){
+  let best = null, bd = 45;
+  for (const e of ents){ if (Math.abs(e.p[3]-W) >= e.span) continue; const s = project(e.p); if (!s) continue;
+    const d = Math.hypot(s[0]-x, s[1]-y); if (d < bd){ bd = d; best = e; } }
+  if (best){ // take the creature's tone and sing it outward
+    tone = best.f; best.attuned = 10; best.excite = 1;
+    note(tone, actx.currentTime, 1.2, 0.2, best.p[0]); emitWave(best.p, tone, 1, true); buzz(15);
+  } else if (tone){ note(tone, actx.currentTime, 1, 0.15, 0); emitWave(player(), tone, 1, true); buzz(8); }
+}
+
+// ================= 1. Hyperspace: regions along w =================
+function setWorld(seed, name){
+  world.seed = seed >>> 0; genomes.clear();
+  saveData.worlds[world.seed] = saveData.worlds[world.seed] || { name, unlocked: 0, chords: [] };
+  saveData.last = world.seed; save();
+  Object.assign(nav4, {w:0, rot:0, vw:0, vr:0, tw:0, tr:0}); curRegion = 0; tone = 0; waves.length = 0;
+  reseed(); refreshPlaces(); say('Entered ' + cur().name);
+}
+const placesEl = document.getElementById('places');
+function refreshPlaces(){
+  placesEl.innerHTML = '';
+  for (const [s, w] of Object.entries(saveData.worlds)){ const o = document.createElement('option'); o.value = s;
+    o.textContent = `${w.name} · ${w.chords.length} chords`; o.selected = +s === world.seed; placesEl.append(o); }
+}
+placesEl.onchange = () => setWorld(+placesEl.value, saveData.worlds[placesEl.value].name);
+document.getElementById('seed').onclick = () => { const s = (Math.random()*4e9)>>>0; setWorld(s, 'World ' + s.toString(36)); };
+
+// ================= 10. Smoothness + 2. Rendering loop =================
+let scale = 0.6, last = performance.now(), fpsAvg = 60, frames = 0, W = 0, humT = 0, humDeg = null, humCount = 0;
+const ent = new Float32Array(MAX_ENT*4), entK = new Float32Array(MAX_ENT*4), rip = new Float32Array(16);
+const smooth = x => x*x*(3-2*x);
+function juliaC(g, t){
+  const cb = 0.15+0.25*band.centroid;
+  return [-0.2+0.25*Math.sin(t*g.wf[1]*2+g.ph[1])+0.15*band.bass, 0.55*Math.cos(t*g.wf[2]*1.5+g.ph[2]+band.mid), cb*Math.sin(t*g.wf[3]*2+g.ph[3]), 0.2*Math.cos(t*g.wf[0]+g.ph[0])+0.1*band.high];
+}
 function frame(now){
-  const dt = Math.min(0.05, (now-last)/1000); last = now; const t = now/1000;
+  const dt = Math.min(0.05, (now-last)/1000); last = now; const t = now/1000; clock = t;
   fpsAvg += (1/Math.max(dt,1e-3) - fpsAvg)*0.05;
-  if (++frames % 20 === 0){ if (fpsAvg < 40) scale = Math.max(0.25, scale-0.05); else if (fpsAvg > 55) scale = Math.min(1, scale+0.03); }
+  if (++frames % 20 === 0){
+    if (fpsAvg < 40) scale = Math.max(0.25, scale-0.05); else if (fpsAvg > 55) scale = Math.min(1, scale+0.03);
+    if (scale <= 0.3 && fpsAvg < 35) entCap = Math.max(6, entCap-1); else if (fpsAvg > 55) entCap = Math.min(MAX_ENT-1, entCap+1);
+  }
   const w = Math.floor(innerWidth*devicePixelRatio*scale), h = Math.floor(innerHeight*devicePixelRatio*scale);
   if (cv.width!==w || cv.height!==h){ cv.width=w; cv.height=h; gl.viewport(0,0,w,h); }
-
   readAudio(t);
-  // pattern algorithm: audio picks the Julia constant on a 4D Lissajous path
-  const cb = 0.15+0.25*band.centroid;
-  const C = [-0.2+0.25*Math.sin(t*G.wf[1]*2+G.ph[1])+0.15*band.bass, 0.55*Math.cos(t*G.wf[2]*1.5+G.ph[2]+band.mid), cb*Math.sin(t*G.wf[3]*2+G.ph[3]), 0.2*Math.cos(t*G.wf[0])+0.1*band.high];
-  if (rapid){ nav4.rot += nav4.vr*dt; nav4.w += nav4.vw*dt; const k=Math.exp(-1.5*dt); nav4.vr*=k; nav4.vw*=k; nav4.tr=nav4.rot; nav4.tw=nav4.w; }
-  else { const k=1-Math.exp(-8*dt); nav4.rot += (nav4.tr-nav4.rot)*k; nav4.w += (nav4.tw-nav4.w)*k; nav4.vr=nav4.vw=0; }
-  nav4.w = Math.max(-1.4, Math.min(1.4, nav4.w)); nav4.tw = Math.max(-1.4, Math.min(1.4, nav4.tw));
-  scheduleSynth();
-  const W = 0.6*Math.sin(t*G.wf[0]+G.ph[0]) + 0.25*band.bass + nav4.w;                // slice drifts through w; bass pushes it
-  const rot = [t*G.wf[3]*0.5 + band.mid*0.3 + nav4.rot, Math.sin(t*0.04)*0.8];
-  const hue = (t*0.01 + band.centroid*0.6) % 1;
 
-  stepEnts(dt, t, W);
-  let n=0;
-  for (const e of ents){
-    const dw = e.p[3]-W; if (Math.abs(dw) >= e.span){ seen.delete(e); continue; } // outside this 3D slice
-    if (synthOut && !seen.has(e)){ seen.add(e); note(pitch(e.bin%12)*2, actx.currentTime, 0.6, 0.08, Math.max(-1,Math.min(1,e.p[0]))); }
-    const r = e.size*Math.sqrt(1-(dw/e.span)**2) * (0.7+0.6*e.amp); // hypersphere cross-section
-    ent.set([e.p[0],e.p[1],e.p[2],r], n*4); entK.set([e.kind, (e.hue+hue)%1, e.f, 0.08*e.amp], n*4); n++;
+  // 4D navigation, limited to unlocked regions
+  const kw = (keys.r?1:0)-(keys.f?1:0); nav4.tw += kw*dt*0.6;
+  if (rapid){ nav4.rot += nav4.vr*dt; nav4.w += nav4.vw*dt; const k=Math.exp(-1.5*dt); nav4.vr*=k; nav4.vw*=k; nav4.tr=nav4.rot; nav4.tw=nav4.w; }
+  else { const k=1-Math.exp(-8*dt); nav4.rot += (nav4.tr-nav4.rot)*k; nav4.w += (nav4.tw-nav4.w)*k; }
+  const lim = cur().unlocked + 0.45;
+  if (Math.abs(nav4.w) > lim){ nav4.w = Math.sign(nav4.w)*lim; nav4.tw = nav4.w; if (Math.abs(nav4.vw) > 0.05) buzz(30); nav4.vw = 0;
+    if (msgT <= 0) say('The w-membrane hums shut. Find a chord to open it.'); }
+  W = nav4.w;
+  const reg = Math.round(W);
+  if (reg !== curRegion){
+    curRegion = reg; const g = region(reg); buzz(12);
+    if (drone) drone.forEach((o,i) => o.frequency.exponentialRampToValueAtTime(g.root/2*(1+i*0.004), actx.currentTime+1.2)); // glide
+    say(`Region ${reg}: ${g.scale}, ${g.bpm|0} bpm`);
   }
+  // crossfade the two nearest regions' shapes
+  const i0 = Math.floor(W), s = smooth(Math.min(1, Math.max(0, (W-i0-0.3)/0.4)));
+  const ga = region(i0), gb = region(i0+1), Ca = juliaC(ga,t), Cb = juliaC(gb,t);
+  const C = Ca.map((x,k) => x+(Cb[k]-x)*s);
+  const sliceW = 0.45*Math.sin(W*2.2) + 0.3*Math.sin(t*ga.wf[0]+ga.ph[0]) + 0.2*band.bass;
+  const rot = [t*ga.wf[3]*0.5 + band.mid*0.3 + nav4.rot, Math.sin(t*0.04)*0.8];
+  const baseHue = ga.hue + (((gb.hue-ga.hue+1.5)%1)-0.5)*s;
+  const hue = (baseHue + t*0.01 + band.centroid*0.4) % 1;
+
+  scheduleSynth();
+  if (micAn && frames % 6 === 0){ // humming: a held note becomes your tone
+    const f = detectPitch();
+    if (f){ const d = snapToScale(f, region(curRegion)); humCount = d === humDeg ? humCount+1 : 0; humDeg = d;
+      if (humCount >= 2 && t-humT > 0.5){ humT = t; tone = pitch(region(curRegion), d); emitWave(player(), tone, 1, true); } }
+    else humCount = 0;
+  }
+  stepEnts(dt, t);
+  if (actx) checkChord(W);
+  chordCool -= dt; msgT -= dt; if (msgT <= 0 && msgEl.textContent && msgT > -0.1) msgEl.textContent = '';
+  while (waves.length && t - waves[0].t0 > 6) waves.shift();
 
   // camera
   const fwdKey = (keys.w?1:0)-(keys.s?1:0), side=(keys.d?1:0)-(keys.a?1:0), up=(keys.e?1:0)-(keys.q?1:0);
@@ -318,22 +479,45 @@ function frame(now){
   const fwd = eye0.map(x=>-x), right = norm(cross(fwd,[0,1,0])), upv = cross(right,fwd);
   for (let a=0;a<3;a++) cam.target[a] += dt*1.2*(fwd[a]*fwdKey + right[a]*side + upv[a]*up);
   const eye = cam.target.map((x,a)=>x+eye0[a]*cam.dist);
+  view = {eye, fwd, right, up: upv};
+
+  // slot 0: the player's glowing self, coloured by its tone
+  const toneHue = tone ? (Math.log2(tone)%1) : hue;
+  ent.set([...cam.target, 0.045*(1+0.3*Math.sin(t*6))], 0); entK.set([3, toneHue, 2, 0], 0);
+  let n = 1;
+  for (const e of ents){
+    if (n > entCap) break;
+    const dw = e.p[3]-W; if (Math.abs(dw) >= e.span){ e.seen = false; continue; }   // outside this 3D slice
+    if (!e.seen){ e.seen = true; note(e.f, actx ? actx.currentTime : 0, 0.6, 0.06, e.p[0]); } // entering the slice rings its pitch
+    const r = e.size*Math.sqrt(1-(dw/e.span)**2) * (0.7+0.6*e.amp) * (e.attuned>0 ? 1.3 : 1); // hypersphere cross-section
+    const eh = (Math.log2(e.f) % 1);
+    ent.set([e.p[0],e.p[1],e.p[2],r], n*4); entK.set([e.kind, eh, e.osc, 0.04*e.amp + (e.attuned>0?0.04:0)], n*4); n++;
+  }
+  for (let i=0;i<4;i++){ const wv = waves[waves.length-1-i];
+    if (wv && Math.abs(wv.p[3]-W) < 0.8) rip.set([wv.p[0],wv.p[1],wv.p[2],t-wv.t0], i*4); else rip[i*4+3] = -1; }
 
   gl.uniform2f(U.uRes,w,h); gl.uniform1f(U.uT,t);
   gl.uniform3fv(U.uEye,eye); gl.uniform3fv(U.uFwd,fwd); gl.uniform3fv(U.uRight,right); gl.uniform3fv(U.uUp,upv);
-  gl.uniform4fv(U.uC,C); gl.uniform1f(U.uW,W); gl.uniform2fv(U.uRot,rot);
+  gl.uniform4fv(U.uC,C); gl.uniform1f(U.uW,sliceW); gl.uniform2fv(U.uRot,rot);
   gl.uniform4f(U.uBand,band.bass,band.mid,band.high,band.flux); gl.uniform1f(U.uHue,hue);
-  gl.uniform4fv(U.uEnt,ent); gl.uniform4fv(U.uEntK,entK); gl.uniform1i(U.uNEnt,n);
+  gl.uniform4fv(U.uEnt,ent); gl.uniform4fv(U.uEntK,entK); gl.uniform1i(U.uNEnt,n); gl.uniform4fv(U.uRip,rip);
   gl.drawArrays(gl.TRIANGLES,0,3);
 
-  if (frames % 10 === 0) document.getElementById('stats').textContent =
-    `fps ${fpsAvg.toFixed(0)}  res ${(scale*100)|0}%  ${w}x${h}\nslice w ${W.toFixed(2)}  entities in slice ${n}/${ents.length}\n` +
-    `bass ${band.bass.toFixed(2)} mid ${band.mid.toFixed(2)} high ${band.high.toFixed(2)} flux ${band.flux.toFixed(2)}\n` +
-    `audio: ${synthOut?'synth':analyser?'live':'internal dream signal'}  seed ${G.seed} ${G.scale} ${G.bpm|0}bpm\n4D: w ${nav4.w.toFixed(2)} xw ${nav4.rot.toFixed(2)} (${rapid?'rapid':'sensitive'})`;
+  if (frames % 10 === 0){
+    const att = ents.filter(e => e.attuned > 0).length;
+    document.getElementById('stats').textContent =
+      `fps ${fpsAvg.toFixed(0)}  res ${(scale*100)|0}%  creatures ${n-1}/${entCap}\n` +
+      `w ${W.toFixed(2)}  region ${curRegion} (${region(curRegion).scale})  open ±${cur().unlocked}\n` +
+      `tone ${tone ? tone.toFixed(0)+' Hz' : '-'}  attuned ${att}  chords ${cur().chords.length}\n` +
+      `audio: ${!actx ? 'tap to start' : micAn ? 'mic + synth' : 'synth'}  ${rapid ? 'rapid' : 'sensitive'}`;
+  }
   requestAnimationFrame(frame);
 }
+const dot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 function cross(a,b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
 function norm(a){ const l=Math.hypot(...a); return a.map(x=>x/l); }
+
+setWorld(saveData.last && saveData.worlds[saveData.last] ? saveData.last : (Math.random()*4e9)>>>0, saveData.worlds[saveData.last]?.name || 'First world');
 requestAnimationFrame(frame);
 </script>
 </body>
