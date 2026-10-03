@@ -60,7 +60,7 @@ uniform float uDose;      // 0 sober .. 1 deep: kaleidoscope, breathing, crawlin
 
 #define PHI 1.6180339887
 #define GA 2.3999632297    // golden angle
-#define CELL 5.2360679775  // 2*phi^2
+#define CELL 4.2360679775  // phi^3
 #define NFAM 6.0
 
 vec4 qsq(vec4 a){ return vec4(a.x*a.x-dot(a.yzw,a.yzw), 2.0*a.x*a.yzw); }
@@ -73,7 +73,7 @@ vec4 h4(vec3 c){ return fract(sin(vec4(dot(c,vec3(127.1,311.7,74.7)),dot(c,vec3(
 vec2 fam(int f, vec4 z, vec4 c){
   float trap = 1e9;
   if(f<=1){                                   // 0,1: quaternion Julia z^2+c, z^3+c
-    float md2 = 1.0;
+    float md2 = 1.0, cl = length(c); if(cl > 0.55) c *= 0.55/cl; // past ~0.6 a Julia set crumbles to dust
     for(int i=0;i<8;i++){
       float r2 = dot(z,z); md2 *= f==0 ? 4.0*r2 : 9.0*r2*r2;
       z = (f==0 ? qsq(z) : qcube(z)) + c;
@@ -117,34 +117,47 @@ vec2 fam(int f, vec4 z, vec4 c){
   return vec2((length(z)-1.6)*pow(s,-7.0)/1.5, trap);
 }
 
-// The world: an endless lattice of golden cells. Each cell holds one 4D object, and distance from your eye moves you through w,
-// so what lies ahead is a different slice that becomes the present as you arrive. x: dist, y: trap, z: cell hue
+// one 4D form, scaled by sc, sliced at w; returns distance, trap
+vec2 form(vec3 q, float sc, float fa, float fb, float m, vec4 c, float spin, float w){
+  vec4 z = vec4(q/sc, w);
+  float cr=cos(uRot.x+spin), sr=sin(uRot.x+spin); z.xw = mat2(cr,-sr,sr,cr)*z.xw;
+  cr=cos(uRot.y); sr=sin(uRot.y); z.yw = mat2(cr,-sr,sr,cr)*z.yw;
+  vec2 r = fam(int(fa), z, c);
+  if(m > 0.01) r = mix(r, fam(int(fb), z, c), m);
+  return vec2(r.x*sc, r.y);
+}
+
+// The world: an endless lattice of golden cells (phi^3 across). Each filled cell holds a main 4D form and often a
+// smaller satellite at a golden offset. Forms are capped at ~70% of the cell, so open space always remains between them.
+// Distance from your eye moves you through w, so what lies ahead becomes a different slice as you arrive.
+// x: dist, y: trap, z: cell hue
 vec3 terrain(vec3 p){
   p += uDose*0.09*sin(p.yzx*1.7 + uT*vec3(0.6,0.5,0.7)); // space breathes
   vec3 cid = floor(p/CELL), q = p - (cid+0.5)*CELL;
   vec3 bd = 0.5*CELL - abs(q); float wall = min(bd.x, min(bd.y,bd.z)) + 0.02; // never step past a cell wall
+  float bubble = 0.3 - length(p-uEye);                                      // the slice parts around you
   vec4 g = h4(cid), g2 = h4(cid+17.0);
-  if(g.w > uBias.z) return vec3(wall, 1e9, 0.0);                             // open cell
-  float sc = uBias.w*(0.55 + 0.6*g2.x);
-  float dc = length(q) - 1.8*sc;                                            // bounding sphere of this cell's object
-  if(dc > 0.15) return vec3(min(max(dc, 0.3 - length(p-uEye)), wall), 1e9, 0.0); // empty space is cheap
+  if(g.w > uBias.z) return vec3(min(max(wall, bubble), wall), 1e9, 0.0);    // open cell
   q.xz *= rot2(GA*(cid.x+cid.z*PHI)); q.xy *= rot2(GA*cid.y);
-  vec3 r3 = q/sc;
-  float w = 0.55*sin(uW*2.2 + distance(p, uEye)/(PHI*PHI)); // distance cycles you through slices, in golden periods
-  vec4 z = vec4(r3, w);
-  float cr=cos(uRot.x+g2.y*6.28), sr=sin(uRot.x+g2.y*6.28); z.xw = mat2(cr,-sr,sr,cr)*z.xw;
-  cr=cos(uRot.y); sr=sin(uRot.y); z.yw = mat2(cr,-sr,sr,cr)*z.yw;
+  float sc = uBias.w*(0.7 + 0.3*g2.x), sc2 = sc/(PHI*PHI);  // forms ~1.4*sc across: up to ~1.5, leaving >=1.2 between
+  bool sat = g2.w < 0.618 && length(p-uEye) < 6.0;                                                  // golden share of cells carry a satellite
+  vec3 dir = normalize(vec3(cos(g.x*6.2832), (g.y-0.5)*1.2, sin(g.x*6.2832)));
+  vec3 so = dir*min(1.8*(sc+sc2) + 0.2, 0.5*CELL - 1.8*sc2 - 0.1);
+  float dc = length(q) - 1.8*sc, ds = sat ? length(q-so) - 1.8*sc2 : 1e9;   // bounding spheres
+  vec2 r = vec2(min(dc > 0.15 ? dc : 1e9, ds > 0.15 ? ds : 1e9), 1e9);
+  if(r.x < 1e8 && min(dc, ds) > 0.15) return vec3(min(max(r.x, bubble), wall), 1e9, 0.0); // empty space is cheap
+  float w = 0.38*sin(uW*2.2 + distance(p, uEye)/(PHI*PHI)); // distance cycles you through slices, in golden periods
   vec4 c = uC + (g2.yzwx-0.5)*0.25;
   // any family can appear anywhere; the region only leans the odds. Some cells are hybrids of two.
   float fa = mod(floor(uBias.x*NFAM + (g.x-0.5)*uBias.y*NFAM), NFAM), fb = mod(fa + 1.0 + floor(g.y*(NFAM-1.0)), NFAM);
   float m = smoothstep(0.55, 1.0, g.z);
-  vec2 r = fam(int(fa), z, c);
-  if(m > 0.01) r = mix(r, fam(int(fb), z, c), m);
-  float d = r.x*sc;
+  if(dc <= 0.15){ vec2 a = form(q, sc, fa, fb, m, c, g2.y*6.2832, w); a.x = max(a.x, dc); if(a.x < r.x) r = a; }
+  if(ds <= 0.15){ vec2 a = form(q-so, sc2, fb, fa, 0.0, c.wzyx, g.z*6.2832, w); a.x = max(a.x, ds); if(a.x < r.x) r = a; }
+  float d = r.x;
   d += 0.012*uBand.y*sin(uVib.x*p.x+uT*6.0)*sin(uVib.x*p.y-uT*5.0)*sin(uVib.x*p.z+uT*4.0);
   for(int i=0;i<4;i++){ float a=uRip[i].w; if(a<0.0) continue;
     float rr=length(p-uRip[i].xyz); d += 0.02*exp(-a*0.6)*sin(30.0*rr-a*14.0)*exp(-abs(rr-a*1.2)*5.0); }
-  d = max(max(d, dc), 0.3 - length(p-uEye));   // clip to the bound; the slice parts around you
+  d = max(d, bubble);
   return vec3(min(d, wall), r.y, fract(g2.z + fa/PHI));
 }
 
@@ -221,12 +234,12 @@ void main(){
     if(c < 0.0 || (b < 0.0 && b*b > c)) gIds[gN++] = i;
   }
   float t = 0.0; vec4 h; bool hit=false; float glow=0.0, steps=0.0;
-  for(int i=0;i<96;i++){
+  for(int i=0;i<80;i++){
     h = map(ro+rd*t); steps += 1.0;
     if(h.z < 1e8) glow += 0.012/(0.02+abs(h.x)); // only real surfaces glow, not cell walls
     if(h.x < 0.0008*t){ hit=true; break; }
     t += h.x*(0.9 - 0.25*uDose);
-    if(t>13.0) break;
+    if(t>10.0) break;
   }
   vec3 col = bg;
   if(hit){
@@ -248,10 +261,10 @@ void main(){
       float lat = smoothstep(0.12, 0.0, gy);
       base += uDose*(lines*1.6*pal(uHue+0.33+h.w) + lat*1.2*pal(uHue+0.66-h.w))*(0.6+uBand.y);
     }
-    float ao = clamp(1.0 - steps/70.0, 0.15, 1.0);                       // crevices the ray had to creep into are dark
+    float ao = clamp(1.0 - steps/60.0, 0.15, 1.0);                       // crevices the ray had to creep into are dark
     float spec = pow(max(dot(reflect(rd,n), L), 0.0), 24.0);
     col = base*(0.25*amb + (0.35+0.6*uSun.w)*dif)*ao + spec*0.6*pal(uHue+hb+0.2) + fres*pal(uHue+0.6)*(0.4+uBand.x)*ao;
-    col = mix(col, bg, 1.0-exp(-uVib.y*t*t*0.35));
+    col = mix(col, bg, max(1.0-exp(-(0.008+uVib.y*0.08)*t*t), smoothstep(7.0, 10.0, t))); // clear near, fades out by the march limit
   }
   col += pal(uHue+0.1) * glow * 0.003 * (0.3 + uBand.w*2.0);
   col = pow(col/(1.0+col), vec3(0.4545));
@@ -296,7 +309,7 @@ function makeGenome(seed, depth = 0){
   const steps = pick([5,8,13]), hits = Math.max(2, Math.round(steps/(R()<.6 ? PHI : PHI*PHI)));
   const rhythm = Array.from({length:steps}, (_,i) => (i*hits)%steps < hits);
   // terrain: every family can appear in every region; the region leans the odds and depth widens them
-  const bias = [R(), Math.min(1, 0.35+0.2*depth+0.45*R()), 0.3+0.35*R(), 0.8+0.6*R()];
+  const bias = [R(), Math.min(1, 0.35+0.2*depth+0.45*R()), 0.6+0.25*R(), 0.85+0.25*R()]; // family centre, spread, fill, size (sc ≤ 1.1 keeps open space between forms)
   const family = Math.floor(bias[0]*FAMILY.length);
   const g = { seed, depth, scale, ratios, root: 55*2**(R()*2), bpm: 70+R()*80, rhythm, step: 0, mstep: 0,
     wave: pick(['sine','triangle','sawtooth','square']),

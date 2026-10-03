@@ -18,3 +18,4 @@
 - Swiftshader compiles the shader on first draw (~5–10 s); time steady-state frames, never the first draw.
 - Raymarch cost: test rays against creature bounding spheres once per pixel (gIds), and give each terrain cell a bounding sphere. Checking all 24 creatures per step was 5× the cost.
 - WebGL: gl.uniform* applies to the CURRENT program. Call useProgram(prog) before setting uniforms; the ant pass leaves pprog bound (this froze the world after frame 1 from v4 on).
+- Icosa-φ family renders as sparse lace (≈1–3% screen cover vs 7–11% for others). Changing prescale (1.5→0.7) or scale (φ^1.5→φ) barely helps; needs a different fold/offset design, not tuning.
